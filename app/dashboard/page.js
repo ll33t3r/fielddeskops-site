@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 
@@ -17,15 +17,15 @@ export default function DashboardPage() {
     { 
       id: 1, 
       name: "LoadOut", 
-      icon: "📦", 
+      icon: "??", 
       description: "Van Inventory & Tool Tracker", 
       status: "Coming Soon",
-      url: "#"
+      url: "/apps/loadout"
     },
     { 
       id: 2, 
       name: "ProfitLock", 
-      icon: "💰", 
+      icon: "??", 
       description: "Instant Bid Calculator", 
       status: "Available",
       url: "/apps/profitlock"
@@ -33,18 +33,18 @@ export default function DashboardPage() {
     { 
       id: 3, 
       name: "SiteSnap", 
-      icon: "📸", 
+      icon: "??", 
       description: "GPS Job Photos", 
       status: "Coming Soon",
-      url: "#"
+      url: "/apps/loadout"
     },
     { 
       id: 4, 
       name: "SignOff", 
-      icon: "✍️", 
+      icon: "??", 
       description: "Digital Contracts", 
       status: "Coming Soon",
-      url: "#"
+      url: "/apps/loadout"
     }
   ];
 
@@ -210,7 +210,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="flex items-center">
                         <span className="font-bold text-white">{activity.app}</span>
-                        <span className="mx-2 text-[#A3A3A3]">•</span>
+                        <span className="mx-2 text-[#A3A3A3]">�</span>
                         <span className="text-[#A3A3A3]">{activity.action}</span>
                       </div>
                       <div className="text-sm text-[#A3A3A3] mt-1">{activity.time}</div>
