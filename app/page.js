@@ -1,18 +1,14 @@
-﻿export default function Home() {
+﻿export default function HomePage() {
   return (
-    <div className="container mx-auto px-4 py-16 text-center">
-      <h1 className="text-4xl font-bold text-white mb-4">
-        FieldDeskOps is <span className="text-[#FF6700]">Back Online</span>
-      </h1>
-      <p className="text-xl text-gray-400 mb-8">
-        We're rebuilding your apps. Check back soon!
-      </p>
-      <a 
-        href="/dashboard" 
-        className="inline-block bg-[#FF6700] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#e55c00]"
-      >
-        Go to Dashboard
-      </a>
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1>FieldDeskOps - Root Page</h1>
+      <p>If you can see this, Next.js is working.</p>
+      <ul>
+        <li><a href="/auth/login">Login Page</a></li>
+        <li><a href="/auth/signup">Signup Page</a></li>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/debug">Debug Page</a></li>
+      </ul>
     </div>
-  )
+  );
 }

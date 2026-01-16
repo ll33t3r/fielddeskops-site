@@ -1,13 +1,23 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { LogOut, Settings, Bell, Menu, X, Home, BarChart, Package, Camera, FileSignature, Check, Clock, User, DollarSign, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { createClient } from '../../lib/supabase/client';
+import { signOutUser, getCurrentUser, getUserProfile } from '../../lib/supabase/utils';
 
 export default function Dashboard() {
   const [user, setUser] = useState({ name: 'Field Technician', role: 'Admin' });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [notifications, setNotifications] = useState(3);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState({ tier: 'free', credits: 10, trial_days: 0 });
+  const router = useRouter();
+
+  // Initialize Supabase client
+  const supabase = createClient();
 
   // Apps available in the platform - ALL SET TO AVAILABLE
   const apps = [
@@ -19,7 +29,9 @@ export default function Dashboard() {
       description: "Bid Calculator & Quote Manager",
       color: "from-[#FF6700]/20 to-orange-500/10",
       borderColor: "border-[#FF6700]/30",
-      stats: "$24.5K quotes"
+      stats: "$24.5K quotes",
+      requiresAuth: true,
+      creditCost: 0
     },
     { 
       name: "LoadOut", 
@@ -29,7 +41,9 @@ export default function Dashboard() {
       description: "Van Inventory Tracker",
       color: "from-blue-500/20 to-cyan-500/10",
       borderColor: "border-blue-500/30",
-      stats: "42 items"
+      stats: "42 items",
+      requiresAuth: true,
+      creditCost: 0
     },
     { 
       name: "SiteSnap", 
@@ -39,7 +53,9 @@ export default function Dashboard() {
       description: "Photo Documentation",
       color: "from-purple-500/20 to-pink-500/10",
       borderColor: "border-purple-500/30",
-      stats: "18 photos"
+      stats: "18 photos",
+      requiresAuth: true,
+      creditCost: 1
     },
     { 
       name: "SignOff", 
@@ -49,17 +65,148 @@ export default function Dashboard() {
       description: "Digital Contracts & Signatures",
       color: "from-green-500/20 to-emerald-500/10",
       borderColor: "border-green-500/30",
-      stats: "4 contracts"
+      stats: "4 contracts",
+      requiresAuth: true,
+      creditCost: 1
     }
   ];
 
-  // Update time every minute
+  // Check authentication on component mount
   useEffect(() => {
+    checkAuth();
+    
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN') {
+          await fetchUserData();
+        } else if (event === 'SIGNED_OUT') {
+          handleLogout();
+        }
+      }
+    );
+
+    // Update time every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
-    return () => clearInterval(timer);
+    
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(timer);
+    };
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      // First check Supabase auth
+      const currentUser = await getCurrentUser();
+      
+      if (currentUser) {
+        // User is authenticated with Supabase
+        setIsAuthenticated(true);
+        await fetchUserData(currentUser.id);
+      } else {
+        // Check for demo user in localStorage
+        const demoUser = localStorage.getItem('demo_user');
+        const userEmail = localStorage.getItem('user_email');
+        const userName = localStorage.getItem('user_name');
+        const userTier = localStorage.getItem('subscription_tier');
+        const userCredits = localStorage.getItem('credits_remaining');
+        const trialStart = localStorage.getItem('trial_start');
+        
+        if (demoUser === 'true' && userEmail) {
+          setIsAuthenticated(true);
+          setUser({
+            name: userName || userEmail.split('@')[0] || 'Demo User',
+            role: 'Member'
+          });
+          
+          let trialDays = 0;
+          if (trialStart && userTier === 'pro_trial') {
+            const trialEnd = new Date(new Date(trialStart).getTime() + 7 * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            trialDays = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)));
+          }
+          
+          setSubscription({
+            tier: userTier || 'free',
+            credits: parseInt(userCredits) || 10,
+            trial_days: trialDays
+          });
+        } else {
+          // Not authenticated, redirect to login
+          router.push('/auth/login');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUserData = async (userId) => {
+    try {
+      if (!userId) {
+        const currentUser = await getCurrentUser();
+        userId = currentUser?.id;
+      }
+      
+      if (userId) {
+        // Fetch user profile from Supabase
+        const profile = await getUserProfile(userId);
+        
+        if (profile) {
+          setUser({
+            name: profile.full_name || profile.email?.split('@')[0] || 'User',
+            role: 'Member',
+            email: profile.email
+          });
+          
+          let trialDays = 0;
+          if (profile.trial_start && profile.subscription_tier === 'pro_trial') {
+            const trialEnd = new Date(new Date(profile.trial_start).getTime() + 7 * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            trialDays = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)));
+          }
+          
+          setSubscription({
+            tier: profile.subscription_tier || 'free',
+            credits: profile.credits_remaining || 10,
+            trial_days: trialDays
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Try Supabase logout first
+      await signOutUser();
+    } catch (error) {
+      console.log('Supabase logout error, may not be Supabase user:', error);
+    }
+    
+    // Clear localStorage for demo users
+    localStorage.removeItem('demo_user');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_name');
+    localStorage.removeItem('subscription_tier');
+    localStorage.removeItem('credits_remaining');
+    localStorage.removeItem('trial_start');
+    localStorage.removeItem('trial_plan');
+    localStorage.removeItem('user_company');
+    localStorage.removeItem('signup_date');
+    
+    // Redirect to login
+    router.push('/auth/login');
+    router.refresh();
+  };
 
   const formatTime = (date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -73,6 +220,31 @@ export default function Dashboard() {
       day: 'numeric' 
     });
   };
+
+  const handleAppClick = (app, e) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      router.push('/auth/login');
+      return;
+    }
+    
+    if (app.creditCost && app.creditCost > 0 && subscription.credits < app.creditCost) {
+      e.preventDefault();
+      alert(`You need ${app.creditCost} credit(s) to use ${app.name}. ${subscription.tier === 'pro_trial' ? 'Enjoy your trial while it lasts!' : 'Upgrade to Pro for unlimited credits!'}`);
+      return;
+    }
+    
+    // Navigate to app
+    router.push(app.url);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white">
@@ -100,9 +272,9 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
-            <button className="p-2 hover:bg-[#404040] rounded-lg">
+            <a href="/account" className="p-2 hover:bg-[#404040] rounded-lg">
               <Settings size={20} />
-            </button>
+            </a>
           </div>
         </div>
       </header>
@@ -117,6 +289,15 @@ export default function Dashboard() {
               </div>
               <h3 className="text-center font-oswald text-xl">{user.name}</h3>
               <p className="text-center text-gray-400 text-sm">{user.role}</p>
+              {subscription && (
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-[#FF6700]/20 to-orange-500/10 border border-[#FF6700]/30 mt-2 mx-auto">
+                  <div className={`w-2 h-2 rounded-full ${subscription.tier === 'pro' || subscription.tier === 'pro_trial' ? 'bg-[#FF6700]' : 'bg-green-500'}`}></div>
+                  <span className="text-xs text-white capitalize">{subscription.tier === 'pro_trial' ? 'Pro Trial' : subscription.tier}</span>
+                  {subscription.tier === 'pro_trial' && subscription.trial_days > 0 && (
+                    <span className="text-xs text-[#FF6700] ml-1">✨ {subscription.trial_days}d</span>
+                  )}
+                </div>
+              )}
             </div>
             <nav className="p-4">
               <a href="/dashboard" className="flex items-center gap-3 p-3 hover:bg-[#404040] rounded-lg mb-2">
@@ -131,13 +312,16 @@ export default function Dashboard() {
                 <Package size={20} />
                 All Apps
               </a>
-              <a href="/settings" className="flex items-center gap-3 p-3 hover:bg-[#404040] rounded-lg">
+              <a href="/account" className="flex items-center gap-3 p-3 hover:bg-[#404040] rounded-lg">
                 <Settings size={20} />
-                Settings
+                Account
               </a>
             </nav>
             <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#404040]">
-              <button className="w-full flex items-center justify-center gap-2 p-3 bg-[#1a1a1a] hover:bg-[#404040] rounded-lg">
+              <button 
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 p-3 bg-[#1a1a1a] hover:bg-[#404040] rounded-lg"
+              >
                 <LogOut size={20} />
                 Log Out
               </button>
@@ -149,9 +333,26 @@ export default function Dashboard() {
       <main className="p-4 max-w-md mx-auto pb-24">
         {/* Welcome & Time */}
         <div className="mb-8">
-          <h2 className="font-oswald text-2xl mb-2">Welcome back, {user.name}!</h2>
-          <p className="text-gray-400">{formatDate(currentTime)}</p>
-          <div className="text-4xl font-bold mt-2 font-oswald">{formatTime(currentTime)}</div>
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="font-oswald text-2xl mb-2">Welcome back, {user.name}!</h2>
+              <p className="text-gray-400">{formatDate(currentTime)}</p>
+              <div className="text-4xl font-bold mt-2 font-oswald">{formatTime(currentTime)}</div>
+            </div>
+            {subscription && (
+              <div className="text-right">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-[#FF6700]/20 to-orange-500/10 border border-[#FF6700]/30 mb-2">
+                  <div className={`w-2 h-2 rounded-full ${subscription.tier === 'pro' || subscription.tier === 'pro_trial' ? 'bg-[#FF6700]' : 'bg-green-500'}`}></div>
+                  <span className="text-sm text-white capitalize">{subscription.tier === 'pro_trial' ? 'Pro Trial' : subscription.tier}</span>
+                </div>
+                <div className="text-lg font-bold">{subscription.credits} credits</div>
+                <div className="text-xs text-gray-400">available</div>
+                {subscription.tier === 'pro_trial' && subscription.trial_days > 0 && (
+                  <div className="text-xs text-[#FF6700] mt-1">✨ {subscription.trial_days} days trial left</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Stats */}
@@ -169,31 +370,38 @@ export default function Dashboard() {
         {/* Apps Grid */}
         <h3 className="font-oswald text-xl mb-4">Your Field Tools</h3>
         <div className="grid grid-cols-2 gap-4">
-          {apps.map((app, index) => (
-            <a
-              key={index}
-              href={app.url}
-              className={`bg-[#262626] border rounded-xl p-4 hover:border-[#FF6700] transition-colors group ${app.url === '#' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-              onClick={(e) => {
-                if (app.url === '#') {
-                  e.preventDefault();
-                  alert(`${app.name} is coming soon!`);
-                }
-              }}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="text-2xl">{app.icon}</div>
-                <div className="flex-1">
-                  <h4 className="font-oswald text-lg group-hover:text-[#FF6700]">{app.name}</h4>
-                  <div className={`text-xs px-2 py-1 rounded-full inline-block ${app.status === 'Available' ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
-                    {app.status}
+          {apps.map((app, index) => {
+            const canAccess = !app.requiresAuth || (app.requiresAuth && isAuthenticated);
+            const hasCredits = !app.creditCost || (app.creditCost && subscription.credits >= app.creditCost);
+            
+            return (
+              <a
+                key={index}
+                href={canAccess && hasCredits ? app.url : "#"}
+                onClick={(e) => handleAppClick(app, e)}
+                className={`bg-[#262626] border rounded-xl p-4 transition-colors group ${canAccess && hasCredits ? 'hover:border-[#FF6700] cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="text-2xl">{app.icon}</div>
+                  <div className="flex-1">
+                    <h4 className="font-oswald text-lg group-hover:text-[#FF6700]">{app.name}</h4>
+                    <div className={`text-xs px-2 py-1 rounded-full inline-block ${app.status === 'Available' ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
+                      {app.status}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <p className="text-gray-400 text-sm mb-2">{app.description}</p>
-              <p className="text-xs text-gray-500">{app.stats}</p>
-            </a>
-          ))}
+                <p className="text-gray-400 text-sm mb-2">{app.description}</p>
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-gray-500">{app.stats}</p>
+                  {app.creditCost > 0 && (
+                    <div className="text-xs text-[#FF6700]">
+                      {app.creditCost} credit{app.creditCost > 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
+              </a>
+            );
+          })}
         </div>
 
         {/* Recent Activity */}
@@ -255,9 +463,9 @@ export default function Dashboard() {
             <BarChart size={20} />
             <span className="text-xs mt-1">Reports</span>
           </a>
-          <a href="/settings" className="flex flex-col items-center p-2 text-gray-400 hover:text-white">
+          <a href="/account" className="flex flex-col items-center p-2 text-gray-400 hover:text-white">
             <Settings size={20} />
-            <span className="text-xs mt-1">Settings</span>
+            <span className="text-xs mt-1">Account</span>
           </a>
         </div>
       </nav>
@@ -274,3 +482,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
