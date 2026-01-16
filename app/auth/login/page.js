@@ -74,7 +74,23 @@ export default function LoginPage() {
           Try Demo Account
         </button>
         
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <button 
+  onClick={() => alert('Supabase login coming soon! For now, use Demo button above.')}
+  className="w-full mb-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:opacity-90"
+>
+  Sign in with Supabase
+</button>
+
+<div className="relative mb-6">
+  <div className="absolute inset-0 flex items-center">
+    <div className="w-full border-t border-[#404040]"></div>
+  </div>
+  <div className="relative flex justify-center text-sm">
+    <span className="px-4 bg-[#262626] text-gray-500">Or continue with email</span>
+  </div>
+</div>
+
+<form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem' }}>Email</label>
             <input
@@ -137,3 +153,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
