@@ -1,30 +1,46 @@
-﻿import Link from 'next/link'
+﻿import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const supabase = createServerComponentClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  // If no session, redirect to login
+  if (!session) {
+    redirect('/auth/login')
+  }
+
+  // Define your apps with descriptions and links
   const apps = [
     {
       name: 'ProfitLock',
       description: 'Bid Calculator & Quote Manager',
       icon: '💰',
       href: '/apps/profitlock',
+      color: 'from-orange-500 to-amber-600',
     },
     {
       name: 'LoadOut',
       description: 'Van Inventory Tracker',
       icon: '🚚',
       href: '/apps/loadout',
+      color: 'from-blue-500 to-cyan-600',
     },
     {
       name: 'SiteSnap',
       description: 'Photo Documentation System',
       icon: '📸',
       href: '/apps/sitesnap',
+      color: 'from-green-500 to-emerald-600',
     },
     {
       name: 'SignOff',
       description: 'Digital Contracts & Signatures',
       icon: '📝',
       href: '/apps/signoff',
+      color: 'from-purple-500 to-pink-600',
     },
   ]
 
@@ -38,7 +54,7 @@ export default function Dashboard() {
               Your Digital Toolbelt
             </h1>
             <p className="text-gray-400 mt-2">
-              All your field tools in one place
+              All your field tools in one place, {session.user.email}
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -48,12 +64,14 @@ export default function Dashboard() {
             >
               Account
             </Link>
-            <Link 
-              href="/auth/login"
-              className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors"
-            >
-              Sign Out
-            </Link>
+            <form action="/auth/logout" method="post">
+              <button 
+                type="submit"
+                className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors"
+              >
+                Sign Out
+              </button>
+            </form>
           </div>
         </div>
       </header>

@@ -1,11 +1,97 @@
-﻿'use client';
+﻿import Link from 'next/link'
 
 export default function Dashboard() {
+  const apps = [
+    {
+      name: 'ProfitLock',
+      description: 'Bid Calculator & Quote Manager',
+      icon: '💰',
+      href: '/apps/profitlock',
+    },
+    {
+      name: 'LoadOut',
+      description: 'Van Inventory Tracker',
+      icon: '🚚',
+      href: '/apps/loadout',
+    },
+    {
+      name: 'SiteSnap',
+      description: 'Photo Documentation System',
+      icon: '📸',
+      href: '/apps/sitesnap',
+    },
+    {
+      name: 'SignOff',
+      description: 'Digital Contracts & Signatures',
+      icon: '📝',
+      href: '/apps/signoff',
+    },
+  ]
+
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Dashboard</h1>
-      <p>Authentication setup in progress...</p>
-      <a href="/auth/login">Go to Login</a>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 p-4 md:p-8">
+      <header className="mb-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-white">Your Digital Toolbelt</h1>
+            <p className="text-gray-400 mt-2">All your field tools in one place</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <Link href="/account" className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors">Account</Link>
+            <Link href="/auth/login" className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors">Sign Out</Link>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Subscription</p>
+              <p className="text-xl font-semibold text-white">Pro Tier</p>
+            </div>
+            <div className="text-3xl">👷</div>
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Credits Remaining</p>
+              <p className="text-xl font-semibold text-white">Unlimited</p>
+            </div>
+            <div className="text-3xl">⚡</div>
+          </div>
+        </div>
+        
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-400 text-sm">Active Projects</p>
+              <p className="text-xl font-semibold text-white">3 of 10</p>
+            </div>
+            <div className="text-3xl">📊</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-white mb-6">Your Tools</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {apps.map((app) => (
+            <Link key={app.name} href={app.href} className="group relative rounded-2xl bg-gray-800/50 p-6 border border-gray-700 hover:border-primary transition-all duration-300">
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-4xl">{app.icon}</span>
+                  <span className="text-primary font-semibold">→</span>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">{app.name}</h3>
+                <p className="text-gray-400 text-sm">{app.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
     </div>
-  );
+  )
 }

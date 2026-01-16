@@ -1,6 +1,6 @@
 {
-  "name": "fielddeskops-site",
-  "version": "0.1.0",
+  "name": "fielddeskops",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,20 +9,16 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.90.1",
-    "@types/js-cookie": "^3.0.6",
-    "js-cookie": "^3.0.5",
-    "lucide-react": "^0.562.0",
-    "next": "14.2.5",
+    "next": "14.0.4",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "@supabase/supabase-js": "^2.39.7"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.19",
-    "eslint": "8.57.0",
-    "eslint-config-next": "14.2.5",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.1"
+    "tailwindcss": "^3.3.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14.0.4"
   }
 }
