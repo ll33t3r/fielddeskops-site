@@ -171,7 +171,7 @@ export default function LoadOut() {
             placeholder="e.g., Wrench Set, Drill Bits"
             style={{
               backgroundColor: '#1a1a1a',
-              border: '2px solid '#404040',
+              border: '2px solid #404040',
               color: '#f5f5f5',
               minHeight: '50px',
               padding: '12px 16px',
@@ -194,7 +194,7 @@ export default function LoadOut() {
               min="1"
               style={{
                 backgroundColor: '#1a1a1a',
-                border: '2px solid '#404040',
+                border: '2px solid #404040',
                 color: '#f5f5f5',
                 minHeight: '50px',
                 padding: '12px 16px',
@@ -213,7 +213,7 @@ export default function LoadOut() {
               onChange={(e) => setNewCategory(e.target.value)}
               style={{
                 backgroundColor: '#1a1a1a',
-                border: '2px solid '#404040',
+                border: '2px solid #404040',
                 color: '#f5f5f5',
                 minHeight: '50px',
                 padding: '12px 16px',
@@ -268,7 +268,7 @@ export default function LoadOut() {
           placeholder="Search items..."
           style={{
             backgroundColor: '#262626',
-            border: '2px solid '#404040',
+            border: '2px solid #404040',
             color: '#f5f5f5',
             minHeight: '50px',
             padding: '12px 16px',
@@ -285,7 +285,7 @@ export default function LoadOut() {
         onClick={exportCSV}
         style={{
           backgroundColor: 'transparent',
-          border: '2px solid '#404040',
+          border: '2px solid #404040',
           color: '#f5f5f5',
           fontWeight: '700',
           minHeight: '50px',
@@ -308,7 +308,7 @@ export default function LoadOut() {
         <Download className="inline mr-2" size={18} /> Export CSV
       </button>
 
-      <div style={{ backgroundColor: '#262626', border: '1px solid '#404040', borderRadius: '8px', padding: '16px' }}>
+      <div style={{ backgroundColor: '#262626', border: '1px solid #404040', borderRadius: '8px', padding: '16px' }}>
         <div style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '16px', color: '#FF6700', fontFamily: "'Oswald', sans-serif" }}>
           Inventory ({filteredItems.length})
         </div>
@@ -325,7 +325,7 @@ export default function LoadOut() {
                 key={item.id}
                 style={{
                   backgroundColor: '#1a1a1a',
-                  border: '1px solid '#404040',
+                  border: '1px solid #404040',
                   borderRadius: '8px',
                   padding: '12px',
                   marginBottom: '8px',
@@ -351,7 +351,7 @@ export default function LoadOut() {
                         min="1"
                         style={{
                           backgroundColor: '#262626',
-                          border: '1px solid '#FF6700',
+                          border: '1px solid #FF6700',
                           color: '#f5f5f5',
                           width: '60px',
                           padding: '6px 8px',

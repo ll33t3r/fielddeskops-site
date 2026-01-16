@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { FileContract, Eraser, Check, Plus } from 'lucide-react';
+import { FileText, Eraser, Check, Plus } from 'lucide-react';
 
 export default function SignOff() {
   const canvasRef = useRef(null);
@@ -192,7 +192,7 @@ export default function SignOff() {
       {/* Header */}
       <div className="mb-8 pt-4">
         <div className="flex items-center gap-2 mb-2">
-          <FileContract size={32} style={{ color: '#FF6700' }} />
+          <FileText size={32} style={{ color: '#FF6700' }} />
           <h1
             className="text-3xl md:text-4xl font-bold"
             style={{

@@ -46,7 +46,6 @@ export default function ProfitLock() {
 
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
-
     if (margin < 20) {
       return {
         color: '#ef4444',
@@ -207,7 +206,7 @@ export default function ProfitLock() {
               padding: '12px 16px',
               borderRadius: '8px',
               width: '100%',
-              fontFamily: "'Inter', sans-serif'
+              fontFamily: "'Inter', sans-serif"
             }}
             onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
             onBlur={(e) => (e.target.style.borderColor = '#404040')}
@@ -238,7 +237,7 @@ export default function ProfitLock() {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 width: '100%',
-                fontFamily: "'Inter', sans-serif'
+                fontFamily: "'Inter', sans-serif"
               }}
               onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
               onBlur={(e) => (e.target.style.borderColor = '#404040')}
@@ -266,7 +265,7 @@ export default function ProfitLock() {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 width: '100%',
-                fontFamily: "'Inter', sans-serif'
+                fontFamily: "'Inter', sans-serif"
               }}
               onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
               onBlur={(e) => (e.target.style.borderColor = '#404040')}
@@ -298,7 +297,7 @@ export default function ProfitLock() {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 width: '100%',
-                fontFamily: "'Inter', sans-serif'
+                fontFamily: "'Inter', sans-serif"
               }}
               onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
               onBlur={(e) => (e.target.style.borderColor = '#404040')}
@@ -326,7 +325,7 @@ export default function ProfitLock() {
                 padding: '12px 16px',
                 borderRadius: '8px',
                 width: '100%',
-                fontFamily: "'Inter', sans-serif'
+                fontFamily: "'Inter', sans-serif"
               }}
               onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
               onBlur={(e) => (e.target.style.borderColor = '#404040')}
