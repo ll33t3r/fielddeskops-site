@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Settings, Bell, Menu, X, Home, BarChart, Package, Camera, FileSignature, Check, Clock, User, DollarSign, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { signOutUser, getCurrentUser, getUserProfile } from '@/lib/supabase/utils';
+import { createClient } from '../../lib/supabase/client';
+import { signOutUser, getCurrentUser, getUserProfile } from '../../lib/supabase/utils';
 
 export default function Dashboard() {
   const [user, setUser] = useState({ name: 'Field Technician', role: 'Admin' });
@@ -482,3 +482,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
