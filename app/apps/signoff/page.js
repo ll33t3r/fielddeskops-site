@@ -23,10 +23,26 @@ export default function SignOff() {
       setProjectName(agreement.projectName);
       setScopeOfWork(agreement.scopeOfWork);
       setAgreementDate(agreement.agreementDate);
+      if (agreement.signatureDataUrl) {
+        setSignatureImage(agreement.signatureDataUrl);
+        setIsSignatureSaved(true);
+      }
     }
 
     setupCanvas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (!isSignatureSaved) {
+        clearSignature();
+        setupCanvas();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isSignatureSaved]);
 
   const setupCanvas = () => {
     if (!canvasRef.current) return;
@@ -44,53 +60,49 @@ export default function SignOff() {
     }
   };
 
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches && e.touches[0]) {
+      return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top
+      };
+    }
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  };
+
   const handleCanvasStart = (e) => {
     if (isSignatureSaved || !canvasRef.current) return;
+    e.preventDefault();
     setIsDrawing(true);
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-
-    let x, y;
-    if (e.touches) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-
+    const { x, y } = getPos(e, canvas);
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
 
   const handleCanvasMove = (e) => {
     if (!isDrawing || !canvasRef.current || isSignatureSaved) return;
+    e.preventDefault();
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-
-    let x, y;
-    if (e.touches) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-
+    const { x, y } = getPos(e, canvas);
     ctx.lineTo(x, y);
     ctx.stroke();
   };
 
-  const handleCanvasEnd = () => {
+  const handleCanvasEnd = (e) => {
+    if (!canvasRef.current) return;
+    e && e.preventDefault();
     setIsDrawing(false);
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      ctx.closePath();
-    }
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.closePath();
   };
 
   const clearSignature = () => {
@@ -137,28 +149,31 @@ export default function SignOff() {
     setSignatureImage(signatureDataUrl);
     setIsSignatureSaved(true);
 
-    localStorage.setItem('signoff_agreement', JSON.stringify({
-      projectName,
-      scopeOfWork,
-      agreementDate,
-      signatureDataUrl,
-      timestamp: new Date().toISOString()
-    }));
+    localStorage.setItem(
+      'signoff_agreement',
+      JSON.stringify({
+        projectName,
+        scopeOfWork,
+        agreementDate,
+        signatureDataUrl,
+        timestamp: new Date().toISOString()
+      })
+    );
 
     showToast('Agreement Signed!', 'success');
   };
 
   const newAgreement = () => {
-    if (confirm('Start a new agreement? Current agreement will be saved.')) {
-      setProjectName('');
-      setScopeOfWork('');
-      setAgreementDate(new Date().toISOString().split('T')[0]);
-      setIsSignatureSaved(false);
-      setSignatureImage(null);
-      clearSignature();
-      showToast('Ready for new agreement', 'info');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    if (!confirm('Start a new agreement? Current agreement will be saved.')) return;
+
+    setProjectName('');
+    setScopeOfWork('');
+    setAgreementDate(new Date().toISOString().split('T')[0]);
+    setIsSignatureSaved(false);
+    setSignatureImage(null);
+    clearSignature();
+    showToast('Ready for new agreement', 'info');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const showToast = (message, type) => {
@@ -166,30 +181,64 @@ export default function SignOff() {
     setTimeout(() => setToast(null), 2500);
   };
 
+  const toastBg = (type) =>
+    type === 'success' ? '#22c55e' : type === 'error' ? '#ff4444' : '#888';
+
   return (
-    <div className="min-h-screen w-full max-w-2xl mx-auto p-4" style={{ backgroundColor: '#1a1a1a' }}>
+    <div
+      className="min-h-screen w-full max-w-2xl mx-auto p-4"
+      style={{ backgroundColor: '#1a1a1a' }}
+    >
+      {/* Header */}
       <div className="mb-8 pt-4">
         <div className="flex items-center gap-2 mb-2">
           <FileContract size={32} style={{ color: '#FF6700' }} />
-          <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '0.03em', color: '#f5f5f5' }}>SIGNOFF</h1>
+          <h1
+            className="text-3xl md:text-4xl font-bold"
+            style={{
+              fontFamily: "'Oswald', sans-serif",
+              letterSpacing: '0.03em',
+              color: '#f5f5f5'
+            }}
+          >
+            SIGNOFF
+          </h1>
         </div>
         <p style={{ color: '#888' }}>Digital Agreement & Signature Pad</p>
       </div>
 
-      <div className="p-4 md:p-6 rounded-lg mb-6" style={{ backgroundColor: '#262626', border: '1px solid #404040' }}>
-        <div style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '16px', color: '#FF6700', fontFamily: "'Oswald', sans-serif" }}>
+      {/* Agreement Details */}
+      <div
+        className="p-4 md:p-6 rounded-lg mb-6"
+        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
+      >
+        <div
+          style={{
+            fontSize: '1.25rem',
+            fontWeight: '700',
+            marginBottom: '16px',
+            color: '#FF6700',
+            fontFamily: "'Oswald', sans-serif"
+          }}
+        >
           Agreement Details
         </div>
 
+        {/* Project Name */}
         <div className="mb-4">
-          <label className="block font-semibold mb-2 text-sm" style={{ color: '#f5f5f5' }}>Project Name</label>
+          <label
+            className="block font-semibold mb-2 text-sm"
+            style={{ color: '#f5f5f5' }}
+          >
+            Project Name
+          </label>
           <input
             type="text"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
             disabled={isSignatureSaved}
             placeholder="e.g., Smith Kitchen Remodel"
-            maxLength="100"
+            maxLength={100}
             style={{
               backgroundColor: '#1a1a1a',
               border: '2px solid #404040',
@@ -202,13 +251,21 @@ export default function SignOff() {
               opacity: isSignatureSaved ? 0.6 : 1,
               cursor: isSignatureSaved ? 'not-allowed' : 'text'
             }}
-            onFocus={(e) => !isSignatureSaved && (e.target.style.borderColor = '#FF6700')}
+            onFocus={(e) =>
+              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
+            }
             onBlur={(e) => (e.target.style.borderColor = '#404040')}
           />
         </div>
 
+        {/* Date */}
         <div className="mb-4">
-          <label className="block font-semibold mb-2 text-sm" style={{ color: '#f5f5f5' }}>Date</label>
+          <label
+            className="block font-semibold mb-2 text-sm"
+            style={{ color: '#f5f5f5' }}
+          >
+            Date
+          </label>
           <input
             type="date"
             value={agreementDate}
@@ -226,13 +283,21 @@ export default function SignOff() {
               opacity: isSignatureSaved ? 0.6 : 1,
               cursor: isSignatureSaved ? 'not-allowed' : 'text'
             }}
-            onFocus={(e) => !isSignatureSaved && (e.target.style.borderColor = '#FF6700')}
+            onFocus={(e) =>
+              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
+            }
             onBlur={(e) => (e.target.style.borderColor = '#404040')}
           />
         </div>
 
+        {/* Scope of Work */}
         <div className="mb-4">
-          <label className="block font-semibold mb-2 text-sm" style={{ color: '#f5f5f5' }}>Scope of Work / Change Order</label>
+          <label
+            className="block font-semibold mb-2 text-sm"
+            style={{ color: '#f5f5f5' }}
+          >
+            Scope of Work / Change Order
+          </label>
           <textarea
             value={scopeOfWork}
             onChange={(e) => setScopeOfWork(e.target.value)}
@@ -251,19 +316,47 @@ export default function SignOff() {
               cursor: isSignatureSaved ? 'not-allowed' : 'text',
               resize: 'vertical'
             }}
-            onFocus={(e) => !isSignatureSaved && (e.target.style.borderColor = '#FF6700')}
+            onFocus={(e) =>
+              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
+            }
             onBlur={(e) => (e.target.style.borderColor = '#404040')}
           />
         </div>
       </div>
 
-      <div className="p-4 md:p-6 rounded-lg" style={{ backgroundColor: '#262626', border: '1px solid #404040' }}>
-        <div style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '16px', color: '#FF6700', fontFamily: "'Oswald', sans-serif" }}>
+      {/* Signature Section */}
+      <div
+        className="p-4 md:p-6 rounded-lg"
+        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
+      >
+        <div
+          style={{
+            fontSize: '1.25rem',
+            fontWeight: '700',
+            marginBottom: '16px',
+            color: '#FF6700',
+            fontFamily: "'Oswald', sans-serif"
+          }}
+        >
           Digital Signature
         </div>
 
-        <div style={{ backgroundColor: '#1a1a1a', border: '2px solid #404040', borderRadius: '12px', padding: '12px', marginBottom: '16px' }}>
-          <label className="block font-semibold mb-2 text-sm" style={{ color: '#f5f5f5' }}>Sign Below</label>
+        {/* Pad */}
+        <div
+          style={{
+            backgroundColor: '#1a1a1a',
+            border: '2px solid #404040',
+            borderRadius: '12px',
+            padding: '12px',
+            marginBottom: '16px'
+          }}
+        >
+          <label
+            className="block font-semibold mb-2 text-sm"
+            style={{ color: '#f5f5f5' }}
+          >
+            Sign Below
+          </label>
           {!isSignatureSaved ? (
             <canvas
               ref={canvasRef}
@@ -284,18 +377,21 @@ export default function SignOff() {
               }}
             />
           ) : (
-            <img
-              src={signatureImage}
-              alt="Signature"
-              style={{
-                width: '100%',
-                borderRadius: '8px',
-                display: 'block'
-              }}
-            />
+            signatureImage && (
+              <img
+                src={signatureImage}
+                alt="Signature"
+                style={{
+                  width: '100%',
+                  borderRadius: '8px',
+                  display: 'block'
+                }}
+              />
+            )
           )}
         </div>
 
+        {/* Buttons / Locked state */}
         {!isSignatureSaved ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             <button
@@ -338,7 +434,8 @@ export default function SignOff() {
               onMouseEnter={(e) => {
                 e.target.style.backgroundColor = '#e55c00';
                 e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 4px 12px rgba(255, 103, 0, 0.3)';
+                e.target.style.boxShadow =
+                  '0 4px 12px rgba(255, 103, 0, 0.3)';
               }}
               onMouseLeave={(e) => {
                 e.target.style.backgroundColor = '#FF6700';
@@ -350,23 +447,51 @@ export default function SignOff() {
             </button>
           </div>
         ) : (
-          <div style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '2px solid #22c55e', borderRadius: '8px', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
-            <p style={{ color: '#22c55e', fontWeight: '700', marginBottom: '8px' }}>Agreement Signed & Locked</p>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '48px',
-              height: '48px',
-              backgroundColor: '#22c55e',
-              color: '#1a1a1a',
-              borderRadius: '50%',
-              fontSize: '1.5rem',
-              margin: '8px 0'
-            }}>
+          <div
+            style={{
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              border: '2px solid #22c55e',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}
+          >
+            <p
+              style={{
+                color: '#22c55e',
+                fontWeight: '700',
+                marginBottom: '8px'
+              }}
+            >
+              Agreement Signed & Locked
+            </p>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '48px',
+                height: '48px',
+                backgroundColor: '#22c55e',
+                color: '#1a1a1a',
+                borderRadius: '50%',
+                fontSize: '1.5rem',
+                margin: '8px 0'
+              }}
+            >
               ✓
             </div>
-            <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '8px', marginBottom: '12px' }}>This agreement is now digitally signed.</p>
+            <p
+              style={{
+                color: '#888',
+                fontSize: '0.9rem',
+                marginTop: '8px',
+                marginBottom: '12px'
+              }}
+            >
+              This agreement is now digitally signed.
+            </p>
             <button
               onClick={newAgreement}
               style={{
@@ -396,13 +521,14 @@ export default function SignOff() {
         )}
       </div>
 
+      {/* Toast */}
       {toast && (
         <div
           style={{
             position: 'fixed',
             bottom: '20px',
             right: '20px',
-            backgroundColor: toast.type === 'success' ? '#22c55e' : toast.type === 'error' ? '#ff4444' : '#888',
+            backgroundColor: toastBg(toast.type),
             color: '#1a1a1a',
             padding: '16px 24px',
             borderRadius: '8px',
