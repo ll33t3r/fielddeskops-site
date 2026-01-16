@@ -1,4 +1,6 @@
-﻿export default function Page() {
+﻿"use client";
+
+export default function Page() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 flex items-center justify-center p-4">
       <div className="bg-gray-800/50 rounded-2xl p-8 border border-gray-700 max-w-md w-full">
