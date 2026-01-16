@@ -1,0 +1,586 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProfitLock V3 - FieldDeskOps</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        h1, h2, h3, h4, h5, h6, .oswald {
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        body {
+            background-color: #1a1a1a;
+            color: #f5f5f5;
+        }
+        .card {
+            background-color: #262626;
+            border: 1px solid #404040;
+        }
+        .input-field {
+            background-color: #1a1a1a;
+            border: 2px solid #404040;
+            color: #f5f5f5;
+            min-height: 50px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #FF6700;
+            box-shadow: 0 0 0 3px rgba(255, 103, 0, 0.1);
+        }
+        .input-field::placeholder {
+            color: #888;
+        }
+        .btn-primary {
+            background-color: #FF6700;
+            color: #1a1a1a;
+            font-weight: 700;
+            min-height: 50px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.05em;
+        }
+        .btn-primary:hover {
+            background-color: #e55c00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 103, 0, 0.3);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        .btn-delete {
+            background-color: transparent;
+            border: none;
+            color: #ff4444;
+            cursor: pointer;
+            font-size: 1.25rem;
+            transition: all 0.3s ease;
+            padding: 8px;
+        }
+        .btn-delete:hover {
+            color: #ff6666;
+            transform: scale(1.1);
+        }
+        .bid-price {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #22c55e;
+            text-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.02em;
+        }
+        .profit-meter-container {
+            margin-top: 20px;
+            margin-bottom: 24px;
+        }
+        .profit-meter-bar {
+            width: 100%;
+            height: 32px;
+            background-color: #1a1a1a;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #404040;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .profit-meter-fill {
+            height: 100%;
+            border-radius: 14px;
+            transition: width 0.4s ease, background-color 0.4s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.02em;
+        }
+        .profit-meter-label {
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 8px 0;
+            text-align: center;
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.03em;
+            margin-top: 8px;
+        }
+        .profit-meter-label.red {
+            color: #ff4444;
+        }
+        .profit-meter-label.yellow {
+            color: #ffaa00;
+        }
+        .profit-meter-label.green {
+            color: #22c55e;
+        }
+        .profit-meter-label.orange {
+            color: #FF6700;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #22c55e;
+            color: #1a1a1a;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-weight: 700;
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        .toast.removing {
+            animation: slideOut 0.3s ease-out forwards;
+        }
+        .bid-card {
+            background-color: #262626;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .bid-card:hover {
+            border-color: #FF6700;
+            background-color: #2d2d2d;
+            transform: translateX(-4px);
+        }
+        .bid-card-info {
+            flex: 1;
+        }
+        .bid-card-price {
+            color: #22c55e;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+        .bid-card-date {
+            color: #888;
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        .label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #f5f5f5;
+            font-size: 0.95rem;
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 640px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #FF6700;
+            font-family: 'Oswald', system-ui, -apple-system, sans-serif;
+            letter-spacing: 0.03em;
+        }
+        .margin-badge {
+            display: inline-block;
+            background-color: rgba(255, 103, 0, 0.15);
+            color: #FF6700;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen p-4 pb-20">
+        <!-- Header -->
+        <div class="mb-8 pt-4">
+            <div class="flex items-center gap-2 mb-2">
+                <i class="fas fa-calculator text-2xl" style="color: #FF6700;"></i>
+                <h1 class="text-4xl font-bold oswald">PROFITLOCK</h1>
+                <span class="text-sm" style="color: #888; margin-left: 8px;">V3</span>
+            </div>
+            <p style="color: #888;">Real-time Bid Calculator</p>
+        </div>
+
+        <!-- Calculator Section -->
+        <div class="card p-6 rounded-lg mb-6">
+            <div class="section-title">Calculate Your Bid</div>
+
+            <!-- Job Name -->
+            <div class="input-group">
+                <label class="label">Job Name</label>
+                <input type="text" id="jobName" class="input-field w-full" placeholder="e.g., Kitchen Sink Repair" maxlength="50">
+            </div>
+
+            <!-- Materials & Labor Hours (2 Col) -->
+            <div class="two-col">
+                <div class="input-group">
+                    <label class="label">Materials Cost ($)</label>
+                    <input type="number" id="materialsCost" class="input-field w-full" placeholder="0.00" min="0" step="0.01">
+                </div>
+                <div class="input-group">
+                    <label class="label">Labor Hours</label>
+                    <input type="number" id="laborHours" class="input-field w-full" placeholder="0" min="0" step="0.5">
+                </div>
+            </div>
+
+            <!-- Hourly Rate & Markup % (2 Col) -->
+            <div class="two-col">
+                <div class="input-group">
+                    <label class="label">Hourly Rate ($)</label>
+                    <input type="number" id="hourlyRate" class="input-field w-full" placeholder="75" min="0" step="5" value="75">
+                </div>
+                <div class="input-group">
+                    <label class="label">Markup (%)</label>
+                    <input type="number" id="markupPercent" class="input-field w-full" placeholder="20" min="0" step="5" value="20">
+                </div>
+            </div>
+
+            <!-- Breakdown Display -->
+            <div class="mt-6 p-4 rounded-lg" style="background-color: #1a1a1a; border: 1px solid #404040;">
+                <div class="flex justify-between mb-3" style="color: #888; font-size: 0.9rem;">
+                    <span>Materials</span>
+                    <span id="displayMaterials">$0.00</span>
+                </div>
+                <div class="flex justify-between mb-3" style="color: #888; font-size: 0.9rem;">
+                    <span>Labor (Hours × Rate)</span>
+                    <span id="displayLabor">$0.00</span>
+                </div>
+                <div class="flex justify-between mb-3" style="color: #888; font-size: 0.9rem;">
+                    <span>Subtotal</span>
+                    <span id="displaySubtotal">$0.00</span>
+                </div>
+                <div class="flex justify-between" style="color: #FF6700; font-size: 0.9rem; font-weight: 700;">
+                    <span>Markup</span>
+                    <span id="displayMarkup">$0.00</span>
+                </div>
+            </div>
+
+            <!-- Final Bid Price -->
+            <div class="mt-6 text-center">
+                <p style="color: #888; font-size: 0.9rem; margin-bottom: 8px;">FINAL BID PRICE</p>
+                <div class="bid-price" id="finalPrice">$0.00</div>
+            </div>
+
+            <!-- PROFIT METER - DYNAMIC COLOR BAR -->
+            <div class="profit-meter-container">
+                <div class="profit-meter-bar">
+                    <div class="profit-meter-fill" id="profitMeterFill" style="width: 0%;"></div>
+                </div>
+                <div class="profit-meter-label" id="profitMeterLabel"></div>
+            </div>
+
+            <!-- Save Button -->
+            <button class="btn-primary w-full" id="saveBidBtn">
+                <i class="fas fa-save mr-2"></i>SAVE BID TO HISTORY
+            </button>
+        </div>
+
+        <!-- Bid History Section -->
+        <div class="card p-6 rounded-lg">
+            <div class="section-title">Recent Bids</div>
+            <div id="bidHistory"></div>
+            <div id="emptyState" class="text-center py-8">
+                <i class="fas fa-inbox text-4xl mb-3" style="color: #404040;"></i>
+                <p style="color: #888;">No bids saved yet. Create one above!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============ STATE MANAGEMENT ============
+        const state = {
+            jobName: '',
+            materialsCost: 0,
+            laborHours: 0,
+            hourlyRate: 75,
+            markupPercent: 20,
+            bidHistory: []
+        };
+
+        // ============ DOM ELEMENTS ============
+        const els = {
+            jobName: document.getElementById('jobName'),
+            materialsCost: document.getElementById('materialsCost'),
+            laborHours: document.getElementById('laborHours'),
+            hourlyRate: document.getElementById('hourlyRate'),
+            markupPercent: document.getElementById('markupPercent'),
+            displayMaterials: document.getElementById('displayMaterials'),
+            displayLabor: document.getElementById('displayLabor'),
+            displaySubtotal: document.getElementById('displaySubtotal'),
+            displayMarkup: document.getElementById('displayMarkup'),
+            finalPrice: document.getElementById('finalPrice'),
+            profitMeterFill: document.getElementById('profitMeterFill'),
+            profitMeterLabel: document.getElementById('profitMeterLabel'),
+            saveBidBtn: document.getElementById('saveBidBtn'),
+            bidHistory: document.getElementById('bidHistory'),
+            emptyState: document.getElementById('emptyState')
+        };
+
+        // ============ LOCAL STORAGE ============
+        function loadFromStorage() {
+            const stored = localStorage.getItem('profitlock_data');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                state.bidHistory = parsed.bidHistory || [];
+                state.hourlyRate = parsed.hourlyRate || 75;
+                state.markupPercent = parsed.markupPercent || 20;
+                els.hourlyRate.value = state.hourlyRate;
+                els.markupPercent.value = state.markupPercent;
+            }
+        }
+
+        function saveToStorage() {
+            const toSave = {
+                bidHistory: state.bidHistory,
+                hourlyRate: state.hourlyRate,
+                markupPercent: state.markupPercent
+            };
+            localStorage.setItem('profitlock_data', JSON.stringify(toSave));
+        }
+
+        // ============ PROFIT METER LOGIC ============
+        function getProfitMeterInfo(grossMargin) {
+            if (grossMargin < 15) {
+                return {
+                    color: '#ff4444',
+                    label: '⚠️ Low Profit (High Risk)',
+                    className: 'red'
+                };
+            } else if (grossMargin < 30) {
+                return {
+                    color: '#ffaa00',
+                    label: '📊 Standard Bid',
+                    className: 'yellow'
+                };
+            } else if (grossMargin < 50) {
+                return {
+                    color: '#22c55e',
+                    label: '✅ Healthy Profit',
+                    className: 'green'
+                };
+            } else {
+                return {
+                    color: '#FF6700',
+                    label: '💰 High Bid (Risk of Rejection)',
+                    className: 'orange'
+                };
+            }
+        }
+
+        // ============ CALCULATIONS ============
+        function calculateBid() {
+            const materials = parseFloat(els.materialsCost.value) || 0;
+            const hours = parseFloat(els.laborHours.value) || 0;
+            const rate = parseFloat(els.hourlyRate.value) || 75;
+            const markup = parseFloat(els.markupPercent.value) || 20;
+
+            const labor = hours * rate;
+            const cost = materials + labor;
+            const markupAmount = cost * (markup / 100);
+            const finalBid = cost + markupAmount;
+
+            // Gross Margin = ((Price - Cost) / Price) * 100
+            const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
+
+            // Update display
+            els.displayMaterials.textContent = `$${materials.toFixed(2)}`;
+            els.displayLabor.textContent = `$${labor.toFixed(2)}`;
+            els.displaySubtotal.textContent = `$${cost.toFixed(2)}`;
+            els.displayMarkup.textContent = `$${markupAmount.toFixed(2)}`;
+            els.finalPrice.textContent = `$${finalBid.toFixed(2)}`;
+
+            // Update Profit Meter - Dynamic Color Bar
+            const meterInfo = getProfitMeterInfo(grossMargin);
+            const fillWidth = Math.min(Math.max(grossMargin, 0), 100);
+            els.profitMeterFill.style.width = fillWidth + '%';
+            els.profitMeterFill.style.backgroundColor = meterInfo.color;
+            els.profitMeterFill.textContent = Math.round(grossMargin) + '%';
+            els.profitMeterLabel.textContent = meterInfo.label;
+            els.profitMeterLabel.className = `profit-meter-label ${meterInfo.className}`;
+
+            return { finalBid, grossMargin, cost };
+        }
+
+        // ============ BID HISTORY ============
+        function renderBidHistory() {
+            els.bidHistory.innerHTML = '';
+            
+            if (state.bidHistory.length === 0) {
+                els.emptyState.style.display = 'block';
+                return;
+            }
+
+            els.emptyState.style.display = 'none';
+
+            state.bidHistory.forEach((bid, index) => {
+                const card = document.createElement('div');
+                card.className = 'bid-card mb-3';
+                card.innerHTML = `
+                    <div class="bid-card-info">
+                        <div style="font-weight: 700; color: #f5f5f5; font-size: 1.1rem;">
+                            ${bid.jobName || 'Unnamed Job'}
+                            <span class="margin-badge">${Math.round(bid.grossMargin)}% Margin</span>
+                        </div>
+                        <div class="bid-card-date">${bid.date}</div>
+                    </div>
+                    <div style="text-align: right; margin-right: 16px;">
+                        <div class="bid-card-price">${bid.finalPrice}</div>
+                    </div>
+                    <button class="btn-delete" onclick="deleteBid(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                card.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-delete')) return;
+                    loadBidIntoCalculator(bid);
+                });
+                els.bidHistory.appendChild(card);
+            });
+        }
+
+        function loadBidIntoCalculator(bid) {
+            els.jobName.value = bid.jobName || '';
+            els.materialsCost.value = bid.materials || 0;
+            els.laborHours.value = bid.hours || 0;
+            els.hourlyRate.value = bid.hourlyRate || 75;
+            els.markupPercent.value = bid.markup || 20;
+            calculateBid();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function deleteBid(index) {
+            state.bidHistory.splice(index, 1);
+            saveToStorage();
+            renderBidHistory();
+        }
+
+        // ============ SAVE BID ============
+        function saveBid() {
+            const jobName = els.jobName.value.trim();
+            const materials = parseFloat(els.materialsCost.value) || 0;
+            const hours = parseFloat(els.laborHours.value) || 0;
+            const rate = parseFloat(els.hourlyRate.value) || 75;
+            const markup = parseFloat(els.markupPercent.value) || 20;
+            
+            const result = calculateBid();
+            const { finalBid, grossMargin, cost } = result;
+
+            if (!jobName) {
+                showToast('❌ Please enter a job name', '#ff4444', 3000);
+                return;
+            }
+
+            if (materials === 0 && hours === 0) {
+                showToast('⚠️ Add materials or labor hours', '#ff9999', 3000);
+                return;
+            }
+
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+            const bid = {
+                jobName,
+                materials,
+                hours,
+                hourlyRate: rate,
+                markup,
+                cost,
+                finalPrice: `$${finalBid.toFixed(2)}`,
+                grossMargin: Math.round(grossMargin),
+                date: `${dateStr} at ${timeStr}`
+            };
+
+            state.bidHistory.unshift(bid);
+            saveToStorage();
+            renderBidHistory();
+            showToast('✅ Bid Saved!', '#22c55e', 2000);
+
+            // Reset form
+            els.jobName.value = '';
+            els.materialsCost.value = '';
+            els.laborHours.value = '';
+            calculateBid();
+        }
+
+        function showToast(message, bgColor, duration) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            toast.style.backgroundColor = bgColor;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        // ============ EVENT LISTENERS ============
+        els.materialsCost.addEventListener('input', calculateBid);
+        els.laborHours.addEventListener('input', calculateBid);
+        els.hourlyRate.addEventListener('input', () => {
+            state.hourlyRate = parseFloat(els.hourlyRate.value) || 75;
+            saveToStorage();
+            calculateBid();
+        });
+        els.markupPercent.addEventListener('input', () => {
+            state.markupPercent = parseFloat(els.markupPercent.value) || 20;
+            saveToStorage();
+            calculateBid();
+        });
+        els.saveBidBtn.addEventListener('click', saveBid);
+
+        // ============ INITIALIZE ============
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromStorage();
+            calculateBid();
+            renderBidHistory();
+        });
+    </script>
+</body>
+</html>
