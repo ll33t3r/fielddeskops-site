@@ -13,31 +13,17 @@ export default function SiteSnapApp() {
   // Current photo session
   const [currentSession, setCurrentSession] = useState({
     id: Date.now(),
-    project: '',
-    location: '',
+    project: 'Smith Residence Remodel',
+    location: 'Job Site',
     date: new Date().toISOString().split('T')[0],
     notes: '',
     tags: []
   });
   
-  // New photo data
-  const [newPhoto, setNewPhoto] = useState({
-    title: '',
-    description: '',
-    tag: ''
-  });
-  
   // Camera state
   const [showCamera, setShowCamera] = useState(false);
-  const [stream, setStream] = useState(null);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  
-  // UI state
-  const [editingId, setEditingId] = useState(null);
-  const [selectedPhotos, setSelectedPhotos] = useState([]);
-  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const fileInputRef = useRef(null);
   
   // Stats
   const [stats, setStats] = useState({
@@ -55,15 +41,6 @@ export default function SiteSnapApp() {
     { id: 'completed', name: 'Completed', icon: <Check size={16} />, color: 'bg-green-600' },
     { id: 'materials', name: 'Materials', icon: <Building size={16} />, color: 'bg-orange-600' },
     { id: 'safety', name: 'Safety', icon: <Check size={16} />, color: 'bg-yellow-600' }
-  ];
-
-  // Sample projects
-  const projects = [
-    'Smith Residence Remodel',
-    'Johnson Office Build',
-    'Downtown Plaza',
-    'River View Apartments',
-    'Main Street Retail'
   ];
 
   // Load photos from localStorage
@@ -112,130 +89,6 @@ export default function SiteSnapApp() {
       localStorage.setItem('sitesnap_photos', JSON.stringify(samplePhotos));
     }
   }, []);
-
-  // Camera setup and cleanup
-  useEffect(() => {
-    if (showCamera) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-    
-    return () => {
-      stopCamera();
-    };
-  }, [showCamera]);
-
-  // Start camera
-  const startCamera = async () => {
-    try {
-      const constraints = {
-        video: {
-          facingMode: 'environment', // Use rear camera on mobile
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-      
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(mediaStream);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      alert('Unable to access camera. Please check permissions.');
-      setShowCamera(false);
-    }
-  };
-
-  // Stop camera
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCapturedImage(null);
-  };
-
-  // Capture photo
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Draw video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Convert to data URL
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    setCapturedImage(imageDataUrl);
-    
-    // Haptic feedback on mobile
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-  };
-
-  // Retake photo
-  const retakePhoto = () => {
-    setCapturedImage(null);
-  };
-
-  // Save captured photo
-  const savePhoto = () => {
-    if (!currentSession.project) {
-      alert('Please select a project first');
-      setShowSessionForm(true);
-      return;
-    }
-    
-    if (!capturedImage) {
-      alert('Please capture a photo first');
-      return;
-    }
-    
-    const photo = {
-      id: Date.now(),
-      sessionId: currentSession.id,
-      title: newPhoto.title || `Photo ${photos.length + 1}`,
-      description: newPhoto.description,
-      project: currentSession.project,
-      location: currentSession.location,
-      date: currentSession.date,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      tags: [...currentSession.tags, newPhoto.tag].filter(Boolean),
-      category: newPhoto.tag || 'progress',
-      imageUrl: capturedImage, // Store the actual captured image
-      notes: currentSession.notes
-    };
-    
-    const updatedPhotos = [...photos, photo];
-    setPhotos(updatedPhotos);
-    localStorage.setItem('sitesnap_photos', JSON.stringify(updatedPhotos));
-    updateStats(updatedPhotos);
-    filterPhotos(updatedPhotos, filter, searchTerm);
-    
-    // Reset
-    setCapturedImage(null);
-    setNewPhoto({
-      title: '',
-      description: '',
-      tag: ''
-    });
-    
-    alert('Photo saved! 📸');
-  };
 
   // Update stats
   const updateStats = (photosArray) => {
@@ -292,47 +145,60 @@ export default function SiteSnapApp() {
     filterPhotos(photos, categoryId, searchTerm);
   };
 
-  // Start new session
-  const startNewSession = () => {
-    const newSession = {
-      id: Date.now(),
-      project: '',
-      location: '',
-      date: new Date().toISOString().split('T')[0],
-      notes: '',
-      tags: []
-    };
-    setCurrentSession(newSession);
-    setShowSessionForm(true);
+  // Take photo using device camera
+  const openCamera = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
 
-  // Save session
-  const saveSession = () => {
-    if (!currentSession.project) {
-      alert('Please select a project');
+  // Handle photo capture
+  const handlePhotoCapture = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
       return;
     }
     
-    setShowSessionForm(false);
-    alert(`Session started for ${currentSession.project} 🎬`);
-  };
-
-  // Add tag to session
-  const addTag = (tag) => {
-    if (tag && !currentSession.tags.includes(tag)) {
-      setCurrentSession({
-        ...currentSession,
-        tags: [...currentSession.tags, tag]
-      });
-    }
-  };
-
-  // Remove tag
-  const removeTag = (tagToRemove) => {
-    setCurrentSession({
-      ...currentSession,
-      tags: currentSession.tags.filter(tag => tag !== tagToRemove)
-    });
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageUrl = e.target.result;
+      
+      // Create new photo object
+      const photo = {
+        id: Date.now(),
+        sessionId: currentSession.id,
+        title: `Photo ${photos.length + 1}`,
+        description: 'Captured from camera',
+        project: currentSession.project,
+        location: currentSession.location,
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        tags: [...currentSession.tags],
+        category: 'progress',
+        imageUrl: imageUrl,
+        notes: currentSession.notes
+      };
+      
+      const updatedPhotos = [...photos, photo];
+      setPhotos(updatedPhotos);
+      localStorage.setItem('sitesnap_photos', JSON.stringify(updatedPhotos));
+      updateStats(updatedPhotos);
+      filterPhotos(updatedPhotos, filter, searchTerm);
+      
+      // Haptic feedback on mobile
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      
+      alert('Photo saved! 📸');
+      setShowCamera(false);
+    };
+    
+    reader.readAsDataURL(file);
   };
 
   // Delete photo
@@ -348,13 +214,7 @@ export default function SiteSnapApp() {
 
   // Export photos
   const exportPhotos = () => {
-    if (selectedPhotos.length === 0) {
-      alert('Select photos to export first');
-      return;
-    }
-    
-    const selected = photos.filter(photo => selectedPhotos.includes(photo.id));
-    const dataStr = JSON.stringify(selected, null, 2);
+    const dataStr = JSON.stringify(photos, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     
     const exportFileDefaultName = `sitesnap-export-${new Date().toISOString().split('T')[0]}.json`;
@@ -364,7 +224,7 @@ export default function SiteSnapApp() {
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
     
-    alert(`Exported ${selectedPhotos.length} photos 📤`);
+    alert(`Exported ${photos.length} photos 📤`);
   };
 
   // Format date
@@ -389,15 +249,8 @@ export default function SiteSnapApp() {
           </div>
           <div className="flex gap-2">
             <button 
-              onClick={startNewSession}
-              className="p-2 bg-[#1a1a1a] border border-[#404040] rounded-lg text-gray-400 hover:text-white"
-            >
-              <FolderOpen size={18} />
-            </button>
-            <button 
               onClick={exportPhotos}
-              disabled={selectedPhotos.length === 0}
-              className="p-2 bg-[#1a1a1a] border border-[#404040] rounded-lg text-gray-400 hover:text-white disabled:opacity-50"
+              className="p-2 bg-[#1a1a1a] border border-[#404040] rounded-lg text-gray-400 hover:text-white"
             >
               <Download size={18} />
             </button>
@@ -425,203 +278,58 @@ export default function SiteSnapApp() {
         </div>
 
         {/* Current Session Bar */}
-        {currentSession.project && !showSessionForm && (
-          <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-700/50 rounded-xl p-3 mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Building size={14} className="text-purple-400" />
-                  <span className="text-white font-semibold">{currentSession.project}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-300">
-                  <MapPin size={12} />
-                  {currentSession.location}
-                  <Clock size={12} className="ml-2" />
-                  {currentSession.date}
-                </div>
+        <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 border border-purple-700/50 rounded-xl p-3 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Building size={14} className="text-purple-400" />
+                <span className="text-white font-semibold">{currentSession.project}</span>
               </div>
-              <button
-                onClick={() => setShowSessionForm(true)}
-                className="p-2 bg-white/10 rounded-lg text-white"
-              >
-                <Edit size={14} />
-              </button>
+              <div className="flex items-center gap-2 text-sm text-gray-300">
+                <MapPin size={12} />
+                {currentSession.location}
+                <Clock size={12} className="ml-2" />
+                {currentSession.date}
+              </div>
             </div>
-            {currentSession.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3">
-                {currentSession.tags.map(tag => (
-                  <span key={tag} className="px-2 py-1 bg-purple-800/50 text-purple-200 rounded text-xs">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
-        )}
+        </div>
 
-        {/* Session Form */}
-        {showSessionForm && (
-          <div className="bg-[#262626] border border-[#333] rounded-xl p-4 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-oswald text-lg text-white">New Photo Session</h3>
-              <button 
-                onClick={() => setShowSessionForm(false)}
-                className="p-1 text-gray-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="text-gray-400 text-sm block mb-2">Project</label>
-                <select
-                  value={currentSession.project}
-                  onChange={(e) => setCurrentSession({...currentSession, project: e.target.value})}
-                  className="w-full bg-[#1a1a1a] border border-[#404040] text-white rounded-lg p-3 focus:outline-none focus:border-purple-600"
-                >
-                  <option value="">Select a project</option>
-                  {projects.map(project => (
-                    <option key={project} value={project}>{project}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="text-gray-400 text-sm block mb-2">Location</label>
-                <input
-                  type="text"
-                  value={currentSession.location}
-                  onChange={(e) => setCurrentSession({...currentSession, location: e.target.value})}
-                  placeholder="e.g., Kitchen, 2nd Floor, Exterior"
-                  className="w-full bg-[#1a1a1a] border border-[#404040] text-white rounded-lg p-3 focus:outline-none focus:border-purple-600"
-                />
-              </div>
-              
-              <button
-                onClick={saveSession}
-                disabled={!currentSession.project}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Start Session
-              </button>
+        {/* Camera Section - SIMPLIFIED */}
+        <div className="bg-[#262626] border border-[#333] rounded-xl p-4 mb-6">
+          <h3 className="font-oswald text-lg text-white mb-4">Take Photo</h3>
+          
+          <div className="aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center mb-4">
+            <div className="text-center text-gray-400">
+              <Camera size={48} className="mx-auto mb-2 opacity-50" />
+              <p>Ready to capture photos</p>
             </div>
           </div>
-        )}
+          
+          <button
+            onClick={openCamera}
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2"
+          >
+            <Camera size={18} />
+            Take Photo
+          </button>
+          
+          <p className="text-gray-400 text-sm text-center mt-3">
+            Uses your device's camera or gallery
+          </p>
+          
+          {/* Hidden file input for camera */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoCapture}
+            className="hidden"
+          />
+        </div>
 
-        {/* Camera Section */}
-        {!showCamera ? (
-          <div className="bg-[#262626] border border-[#333] rounded-xl p-4 mb-6">
-            <h3 className="font-oswald text-lg text-white mb-4">Take Photo</h3>
-            
-            <div className="aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center mb-4">
-              <div className="text-center text-gray-400">
-                <Camera size={48} className="mx-auto mb-2 opacity-50" />
-                <p>Camera Preview</p>
-              </div>
-            </div>
-            
-            <button
-              onClick={() => setShowCamera(true)}
-              disabled={!currentSession.project}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Camera size={18} />
-              Open Camera
-            </button>
-          </div>
-        ) : (
-          <div className="bg-[#262626] border border-[#333] rounded-xl p-4 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-oswald text-lg text-white">Camera Active</h3>
-              <button 
-                onClick={() => setShowCamera(false)}
-                className="p-1 text-gray-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            {/* Camera Preview */}
-            <div className="relative mb-4">
-              {capturedImage ? (
-                <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                  <img 
-                    src={capturedImage} 
-                    alt="Captured" 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="aspect-video bg-black rounded-lg overflow-hidden relative">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                    <button
-                      onClick={capturePhoto}
-                      className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg"
-                    >
-                      <div className="w-14 h-14 bg-white border-4 border-black rounded-full"></div>
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Hidden canvas for capturing */}
-              <canvas ref={canvasRef} className="hidden" />
-            </div>
-            
-            {/* Photo Controls */}
-            <div className="space-y-3">
-              {capturedImage ? (
-                <>
-                  <input
-                    type="text"
-                    value={newPhoto.title}
-                    onChange={(e) => setNewPhoto({...newPhoto, title: e.target.value})}
-                    placeholder="Photo title (optional)"
-                    className="w-full bg-[#1a1a1a] border border-[#404040] text-white rounded-lg p-3 focus:outline-none focus:border-purple-600"
-                  />
-                  
-                  <textarea
-                    value={newPhoto.description}
-                    onChange={(e) => setNewPhoto({...newPhoto, description: e.target.value})}
-                    placeholder="Add description..."
-                    rows="2"
-                    className="w-full bg-[#1a1a1a] border border-[#404040] text-white rounded-lg p-3 focus:outline-none focus:border-purple-600"
-                  />
-                  
-                  <div className="flex gap-3">
-                    <button
-                      onClick={retakePhoto}
-                      className="flex-1 bg-[#1a1a1a] border border-[#404040] text-gray-400 hover:text-white font-bold py-3 rounded-lg"
-                    >
-                      Retake
-                    </button>
-                    <button
-                      onClick={savePhoto}
-                      className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg"
-                    >
-                      Save Photo
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center text-gray-400 text-sm">
-                  <p>Point camera and tap the white circle to capture</p>
-                  <p className="mt-1">Make sure you have camera permissions enabled</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Search & Filters */}
+        {/* Search */}
         <div className="flex gap-2 mb-6">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -659,7 +367,7 @@ export default function SiteSnapApp() {
             <div className="text-center py-8 text-gray-400">
               <Camera size={48} className="mx-auto mb-4 opacity-50" />
               <p>No photos yet</p>
-              <p className="text-sm mt-2">Start a session and take your first photo!</p>
+              <p className="text-sm mt-2">Tap "Take Photo" to get started!</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -677,6 +385,7 @@ export default function SiteSnapApp() {
                         src={photo.imageUrl} 
                         alt={photo.title}
                         className="w-full h-full object-cover"
+                        loading="lazy"
                       />
                       <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs ${categoryInfo.color} text-white`}>
                         {categoryInfo.name}
@@ -719,18 +428,18 @@ export default function SiteSnapApp() {
             <span className="text-xs mt-1">All</span>
           </button>
           <button 
-            onClick={startNewSession}
-            className="flex flex-col items-center p-2 text-gray-400 hover:text-white"
-          >
-            <FolderOpen size={20} />
-            <span className="text-xs mt-1">Session</span>
-          </button>
-          <button 
-            onClick={() => setShowCamera(true)}
+            onClick={openCamera}
             className="flex flex-col items-center p-2 text-gray-400 hover:text-white"
           >
             <Camera size={20} />
             <span className="text-xs mt-1">Camera</span>
+          </button>
+          <button 
+            onClick={exportPhotos}
+            className="flex flex-col items-center p-2 text-gray-400 hover:text-white"
+          >
+            <Download size={20} />
+            <span className="text-xs mt-1">Export</span>
           </button>
           <button 
             onClick={() => window.location.href = '/dashboard'}
@@ -757,11 +466,6 @@ export default function SiteSnapApp() {
         
         body {
           font-family: 'Inter', sans-serif;
-        }
-        
-        /* Ensure video fills container */
-        video {
-          transform: scaleX(-1); /* Mirror for selfie view, remove for rear camera */
         }
       `}</style>
     </div>

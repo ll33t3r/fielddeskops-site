@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
-import { LogOut, Settings, Bell, Menu, X, Home, BarChart, Package, Camera, FileSignature, Check, Clock, User } from 'lucide-react';
+import { LogOut, Settings, Bell, Menu, X, Home, BarChart, Package, Camera, FileSignature, Check, Clock, User, DollarSign, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const [user, setUser] = useState({ name: 'Field Technician', role: 'Admin' });
@@ -9,7 +9,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Apps available in the platform
+  // Apps available in the platform - ALL SET TO AVAILABLE
   const apps = [
     { 
       name: "ProfitLock", 
@@ -18,7 +18,8 @@ export default function Dashboard() {
       url: "/apps/profitlock", 
       description: "Bid Calculator & Quote Manager",
       color: "from-[#FF6700]/20 to-orange-500/10",
-      borderColor: "border-[#FF6700]/30"
+      borderColor: "border-[#FF6700]/30",
+      stats: "$24.5K quotes"
     },
     { 
       name: "LoadOut", 
@@ -27,7 +28,8 @@ export default function Dashboard() {
       url: "/apps/loadout", 
       description: "Van Inventory Tracker",
       color: "from-blue-500/20 to-cyan-500/10",
-      borderColor: "border-blue-500/30"
+      borderColor: "border-blue-500/30",
+      stats: "42 items"
     },
     { 
       name: "SiteSnap", 
@@ -36,50 +38,18 @@ export default function Dashboard() {
       url: "/apps/sitesnap", 
       description: "Photo Documentation",
       color: "from-purple-500/20 to-pink-500/10",
-      borderColor: "border-purple-500/30"
+      borderColor: "border-purple-500/30",
+      stats: "18 photos"
     },
     { 
       name: "SignOff", 
       icon: "📝", 
-      status: "Coming Soon", 
-      url: "#", 
+      status: "Available", 
+      url: "/apps/signoff", 
       description: "Digital Contracts & Signatures",
-      color: "from-gray-500/20 to-gray-700/10",
-      borderColor: "border-gray-500/30"
-    }
-  ];
-
-  // Recent activity
-  const recentActivity = [
-    { 
-      type: "quote", 
-      action: "Accepted", 
-      project: "Smith Residence Remodel", 
-      amount: "$24,500", 
-      time: "10 min ago",
-      icon: Check,
-      color: "bg-green-900/30",
-      iconColor: "text-green-400"
-    },
-    { 
-      type: "photo", 
-      action: "Added", 
-      project: "Johnson Office", 
-      description: "Progress photos", 
-      time: "25 min ago",
-      icon: Camera,
-      color: "bg-blue-900/30",
-      iconColor: "text-blue-400"
-    },
-    { 
-      type: "inventory", 
-      action: "Updated", 
-      project: "Van A", 
-      description: "Restocked safety gear", 
-      time: "1 hour ago",
-      icon: Package,
-      color: "bg-orange-900/30",
-      iconColor: "text-orange-400"
+      color: "from-green-500/20 to-emerald-500/10",
+      borderColor: "border-green-500/30",
+      stats: "4 contracts"
     }
   ];
 
@@ -187,8 +157,8 @@ export default function Dashboard() {
         {/* Quick Stats */}
         <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="bg-gradient-to-br from-[#FF6700]/20 to-orange-500/10 border border-[#FF6700]/30 rounded-xl p-4">
-            <div className="text-2xl font-bold">4</div>
-            <div className="text-gray-400 text-sm">Active Apps</div>
+            <div className="text-2xl font-bold">4/4</div>
+            <div className="text-gray-400 text-sm">Apps Active</div>
           </div>
           <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/30 rounded-xl p-4">
             <div className="text-2xl font-bold">23</div>
@@ -220,7 +190,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              <p className="text-gray-400 text-sm">{app.description}</p>
+              <p className="text-gray-400 text-sm mb-2">{app.description}</p>
+              <p className="text-xs text-gray-500">{app.stats}</p>
             </a>
           ))}
         </div>
@@ -229,29 +200,42 @@ export default function Dashboard() {
         <div className="mt-8">
           <h3 className="font-oswald text-xl mb-4">Recent Activity</h3>
           <div className="space-y-3">
-            {recentActivity.map((activity, index) => {
-              const Icon = activity.icon;
-              return (
-                <div key={index} className="bg-[#262626] border border-[#404040] rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 ${activity.color} rounded-full flex items-center justify-center`}>
-                        <Icon size={16} className={activity.iconColor} />
-                      </div>
-                      <span className="font-semibold">{activity.action}</span>
-                    </div>
-                    <span className="text-gray-400 text-sm">{activity.time}</span>
+            <div className="bg-[#262626] border border-[#404040] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-green-900/30 rounded-full flex items-center justify-center">
+                    <CheckCircle size={16} className="text-green-400" />
                   </div>
-                  <p className="text-gray-400 text-sm">{activity.project}</p>
-                  {activity.description && (
-                    <p className="text-gray-500 text-xs mt-1">{activity.description}</p>
-                  )}
-                  {activity.amount && (
-                    <p className="text-green-400 text-sm mt-1 font-semibold">{activity.amount}</p>
-                  )}
+                  <span className="font-semibold">Contract Signed</span>
                 </div>
-              );
-            })}
+                <span className="text-gray-400 text-sm">10 min ago</span>
+              </div>
+              <p className="text-gray-400 text-sm">Smith Residence Remodel - $24,500</p>
+            </div>
+            <div className="bg-[#262626] border border-[#404040] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-blue-900/30 rounded-full flex items-center justify-center">
+                    <Camera size={16} className="text-blue-400" />
+                  </div>
+                  <span className="font-semibold">Photo Added</span>
+                </div>
+                <span className="text-gray-400 text-sm">25 min ago</span>
+              </div>
+              <p className="text-gray-400 text-sm">Johnson Office - Progress photos</p>
+            </div>
+            <div className="bg-[#262626] border border-[#404040] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-orange-900/30 rounded-full flex items-center justify-center">
+                    <Package size={16} className="text-orange-400" />
+                  </div>
+                  <span className="font-semibold">Inventory Updated</span>
+                </div>
+                <span className="text-gray-400 text-sm">1 hour ago</span>
+              </div>
+              <p className="text-gray-400 text-sm">Van A - Restocked safety gear</p>
+            </div>
           </div>
         </div>
       </main>
@@ -290,5 +274,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-
