@@ -154,9 +154,13 @@ export default function LoginPage() {
             <button
               onClick={() => {
                 // Auto-fill demo credentials
-                document.getElementById('email').value = 'demo@fielddeskops.com'
-                document.getElementById('password').value = 'demo12345'
-                setError('Demo mode: Click "ACCESS TOOLBELT" to continue')
+                const emailInput = document.getElementById('email')
+                const passwordInput = document.getElementById('password')
+                if (emailInput && passwordInput) {
+                  emailInput.value = 'demo@fielddeskops.com'
+                  passwordInput.value = 'demo12345'
+                  setError('Demo mode: Click "ACCESS TOOLBELT" to continue')
+                }
               }}
               className="w-full bg-[#1a1a1a] border border-[#333333] hover:border-[#555555] text-gray-300 hover:text-white font-medium py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center"
             >
