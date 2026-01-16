@@ -1,97 +1,122 @@
-﻿import Link from 'next/link'
+﻿"use client";
+
+import Link from 'next/link';
+import { Calculator, ClipboardCheck, Camera, PenTool, Clock, ShieldAlert } from 'lucide-react';
 
 export default function Home() {
-  const features = [
-    { icon: '💰', title: 'ProfitLock', desc: 'Accurate bid calculations & quote management' },
-    { icon: '🚚', title: 'LoadOut', desc: 'Track van inventory & materials on the go' },
-    { icon: '📸', title: 'SiteSnap', desc: 'Photo documentation with timestamps & GPS' },
-    { icon: '📝', title: 'SignOff', desc: 'Digital contracts & e-signatures on site' },
-  ]
+  
+  // THE APP GRID CONFIGURATION
+  const apps = [
+    {
+      name: "ProfitLock",
+      desc: "Bid Calculator & Margin Protection",
+      icon: <Calculator size={32} color="#FF6700" />,
+      href: "/apps/profitlock", 
+      status: "Active"
+    },
+    {
+      name: "LoadOut",
+      desc: "Inventory & Tool Checklists",
+      icon: <ClipboardCheck size={32} color="#FF6700" />,
+      href: "/apps/loadout",
+      status: "Active"
+    },
+    {
+      name: "SiteSnap",
+      desc: "Photo Documentation",
+      icon: <Camera size={32} color="#FF6700" />,
+      href: "/apps/sitesnap",
+      status: "Active"
+    },
+    {
+      name: "SignOff",
+      desc: "Digital Contracts",
+      icon: <PenTool size={32} color="#FF6700" />,
+      href: "/apps/signoff",
+      status: "Beta"
+    },
+    {
+      name: "CrewClock",
+      desc: "Time Tracking",
+      icon: <Clock size={32} color="#404040" />,
+      href: "/apps/crewclock",
+      status: "Coming Soon" 
+    },
+    {
+      name: "SafetyBrief",
+      desc: "OSHA Logs",
+      icon: <ShieldAlert size={32} color="#404040" />,
+      href: "/apps/safetybrief",
+      status: "Coming Soon"
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-32 text-center relative">
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6">
-            Your Digital{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500">
-              Toolbelt
-            </span>
+    <main className="min-h-screen p-4 md:p-8" style={{ backgroundColor: '#1a1a1a', fontFamily: "'Inter', sans-serif" }}>
+      
+      {/* HEADER SECTION */}
+      <div className="max-w-4xl mx-auto mb-10 pt-4 flex justify-between items-end border-b border-[#333] pb-6">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2" style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: '1px' }}>
+            FIELD<span style={{ color: '#FF6700' }}>DESK</span>OPS
           </h1>
-          <p className="text-xl text-gray-300 mb-10 max-w-3xl mx-auto">
-            All the field tools you need in one place. Built for tradesmen who value efficiency, accuracy, and simplicity.
+          <p className="text-gray-400 text-sm md:text-base">
+            The Operating System for the Trades.
           </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              href="/auth/signup"
-              className="px-8 py-4 bg-gradient-to-r from-primary to-orange-600 rounded-xl font-bold text-lg hover:shadow-2xl hover:shadow-primary/30 transition-all duration-300"
-            >
-              Start Free Trial
-            </Link>
-            <Link 
-              href="/dashboard"
-              className="px-8 py-4 bg-gray-800 hover:bg-gray-700 rounded-xl font-bold text-lg border border-gray-700 transition-colors"
-            >
-              Try Demo
-            </Link>
-          </div>
         </div>
-      </section>
+        <div className="text-right hidden md:block">
+          <div className="text-[#FF6700] font-bold font-mono">V2.0 LIVE</div>
+        </div>
+      </div>
 
-      {/* Features Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center mb-16">
-            Your Complete{' '}
-            <span className="text-primary">Field Operations Suite</span>
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features.map((feature, index) => (
-              <div 
-                key={index}
-                className="group bg-gradient-to-br from-gray-800/50 to-gray-900/50 p-8 rounded-2xl border border-gray-700 hover:border-primary transition-all duration-300 hover:scale-105"
-              >
-                <div className="text-5xl mb-6 group-hover:scale-110 transition-transform duration-300">
-                  {feature.icon}
-                </div>
-                <h3 className="text-2xl font-bold mb-3">{feature.title}</h3>
-                <p className="text-gray-400">{feature.desc}</p>
+      {/* APP GRID */}
+      <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+        {apps.map((app, index) => (
+          <Link key={index} href={app.status === "Active" || app.status === "Beta" ? app.href : "#"} 
+            className={`group relative p-6 rounded-xl border transition-all duration-300 ${
+              app.status === "Coming Soon" 
+                ? "border-[#333] bg-[#222] opacity-50 cursor-not-allowed" 
+                : "border-[#404040] bg-[#262626] hover:border-[#FF6700] hover:shadow-[0_0_20px_rgba(255,103,0,0.1)] cursor-pointer"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 rounded-lg bg-[#1a1a1a] border border-[#333] group-hover:border-[#FF6700] transition-colors">
+                {app.icon}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-3xl p-12 border border-gray-700">
-            <h2 className="text-4xl font-bold mb-6">
-              Ready to Transform Your Field Operations?
-            </h2>
-            <p className="text-xl text-gray-300 mb-10">
-              Join hundreds of tradesmen who have streamlined their business with FieldDeskOps.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-              <Link 
-                href="/auth/signup"
-                className="px-10 py-4 bg-gradient-to-r from-primary to-orange-600 rounded-xl font-bold text-lg hover:shadow-2xl hover:shadow-primary/30 transition-all duration-300"
-              >
-                Get Started Free
-              </Link>
-              <p className="text-gray-400">
-                No credit card required • 7-day Pro trial
-              </p>
+              {app.status === "Beta" && (
+                <span className="px-2 py-1 rounded bg-blue-900/30 text-blue-400 text-xs font-bold uppercase border border-blue-800">
+                  Beta
+                </span>
+              )}
             </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
+            
+            <h2 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "'Oswald', sans-serif" }}>
+              {app.name}
+            </h2>
+            <p className="text-gray-400 text-sm">
+              {app.desc}
+            </p>
+
+            {/* Hover Arrow (Desktop) */}
+            {app.status !== "Coming Soon" && (
+              <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6700]">
+                ➜
+              </div>
+            )}
+          </Link>
+        ))}
+      </div>
+
+      {/* FOOTER */}
+      <div className="max-w-4xl mx-auto mt-12 text-center text-gray-500 text-xs border-t border-[#333] pt-8">
+        <p>&copy; 2026 FieldDeskOps. Built for speed.</p>
+      </div>
+
+      {/* GLOBAL FONT LOADER */}
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+      `}</style>
+
+    </main>
+  );
 }
