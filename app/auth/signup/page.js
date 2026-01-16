@@ -1,13 +1,12 @@
 ﻿'use client';
 
-import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { UserPlus, Mail, Lock, Eye, EyeOff, ArrowLeft, User, Building } from 'lucide-react';
 import { signUpNewUser } from '../../../lib/supabase/utils';
 
 export default function SignUpPage() {
-  const searchParams = useSearchParams();
-  const planFromUrl = searchParams.get('plan');
+  const router = useRouter();
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -19,8 +18,18 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState(planFromUrl || 'free');
-  const router = useRouter();
+  const [selectedPlan, setSelectedPlan] = useState('free');
+
+  // Get plan from URL without useSearchParams (to avoid build errors)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const planFromUrl = urlParams.get('plan');
+      if (planFromUrl) {
+        setSelectedPlan(planFromUrl);
+      }
+    }
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -96,7 +105,31 @@ export default function SignUpPage() {
       }
     } catch (err) {
       console.error('Signup error:', err);
-      setError(err.message || 'Error creating account. Please try again.');
+      
+      // Fallback to localStorage if Supabase fails
+      if (err.message.includes('User already registered')) {
+        setError('This email is already registered. Please try logging in.');
+      } else {
+        setError(err.message || 'Error creating account. Please try again.');
+        
+        // Fallback to localStorage demo account
+        localStorage.setItem('demo_user', 'true');
+        localStorage.setItem('user_email', formData.email);
+        localStorage.setItem('user_name', formData.fullName || 'New User');
+        localStorage.setItem('signup_date', new Date().toISOString());
+        
+        if (selectedPlan === 'pro_trial') {
+          localStorage.setItem('subscription_tier', 'pro_trial');
+          localStorage.setItem('trial_start', new Date().toISOString());
+          localStorage.setItem('credits_remaining', '9999');
+        } else {
+          localStorage.setItem('subscription_tier', 'free');
+          localStorage.setItem('credits_remaining', '10');
+        }
+        
+        alert('⚠️ Using fallback demo account (Supabase had an issue).');
+        window.location.href = '/dashboard';
+      }
     } finally {
       setLoading(false);
     }
@@ -134,13 +167,21 @@ export default function SignUpPage() {
           <div className="mb-6">
             <h3 className="text-white font-semibold mb-4">Choose your plan:</h3>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setSelectedPlan('free')} className={`p-4 rounded-xl text-left ${selectedPlan === 'free' ? 'bg-[#1a1a1a] border-2 border-green-500' : 'bg-[#1a1a1a] border border-[#404040]'}`}>
+              <button 
+                type="button" 
+                onClick={() => setSelectedPlan('free')} 
+                className={`p-4 rounded-xl text-left ${selectedPlan === 'free' ? 'bg-[#1a1a1a] border-2 border-green-500' : 'bg-[#1a1a1a] border border-[#404040]'}`}
+              >
                 <div className="text-green-400 font-bold text-lg">Free</div>
                 <div className="text-gray-400 text-sm mt-2">• 10 free credits/month<br/>• 1 active project<br/>• Basic features</div>
                 <div className="text-white font-bold mt-2">$0/month</div>
               </button>
               
-              <button type="button" onClick={() => setSelectedPlan('pro_trial')} className={`p-4 rounded-xl text-left ${selectedPlan === 'pro_trial' ? 'bg-[#1a1a1a] border-2 border-[#FF6700]' : 'bg-[#1a1a1a] border border-[#404040]'}`}>
+              <button 
+                type="button" 
+                onClick={() => setSelectedPlan('pro_trial')} 
+                className={`p-4 rounded-xl text-left ${selectedPlan === 'pro_trial' ? 'bg-[#1a1a1a] border-2 border-[#FF6700]' : 'bg-[#1a1a1a] border border-[#404040]'}`}
+              >
                 <div className="text-[#FF6700] font-bold text-lg">Pro Suite</div>
                 <div className="text-gray-400 text-sm mt-2">• Unlimited credits<br/>• 10 active projects<br/>• All premium features</div>
                 <div className="text-white font-bold mt-2"><span className="line-through text-gray-500 text-sm">$19.99</span> $9.99/month</div>
