@@ -30,7 +30,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 p-4 md:p-8">
-      {/* Header */}
       <header className="mb-8">
         <div className="flex justify-between items-center">
           <div>
@@ -58,7 +57,6 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Stats/Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
           <div className="flex items-center justify-between">
@@ -91,7 +89,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Apps Grid */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-white mb-6">Your Tools</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -101,8 +98,6 @@ export default function Dashboard() {
               href={app.href}
               className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-6 border border-gray-700 hover:border-primary transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/20"
             >
-              <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${app.color}"></div>
-              
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-4xl">{app.icon}</span>
@@ -122,7 +117,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Activity */}
       <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl p-6 border border-gray-700">
         <h2 className="text-2xl font-bold text-white mb-6">Recent Activity</h2>
         <div className="space-y-4">

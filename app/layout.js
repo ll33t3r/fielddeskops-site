@@ -1,62 +1,29 @@
-﻿import { Inter } from 'next/font/google'
-import './globals.css'
+﻿import { Inter, Oswald } from "next/font/google";
+import "./globals.css";
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const oswald = Oswald({ 
+  subsets: ["latin"],
+  variable: "--font-oswald", 
+  display: "swap",
+});
 
 export const metadata = {
-  title: 'FieldDeskOps - Digital Toolbelt for Tradesmen',
-  description: 'Your all-in-one digital toolbelt for field service operations.',
-}
+  title: "FieldDeskOps",
+  description: "The Digital Toolbelt",
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-gray-900 text-white`}>
-        {/* Simple header */}
-        <nav className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-md border-b border-gray-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <span className="font-bold text-white">F</span>
-                </div>
-                <span className="font-bold text-xl text-white">FieldDeskOps</span>
-              </div>
-              <div className="flex items-center space-x-8">
-                <a href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
-                  Dashboard
-                </a>
-                <a href="/auth/login" className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors">
-                  Login
-                </a>
-              </div>
-            </div>
-          </div>
-        </nav>
-        
-        <main>{children}</main>
-        
-        <footer className="bg-gray-900 border-t border-gray-800 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="flex flex-col md:flex-row justify-between items-center">
-              <div className="mb-4 md:mb-0">
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
-                    <span className="font-bold text-white text-sm">F</span>
-                  </div>
-                  <span className="font-bold text-white">FieldDeskOps</span>
-                </div>
-                <p className="text-gray-400 text-sm mt-2">
-                  Built for tradesmen, by tradesmen.
-                </p>
-              </div>
-              <div className="text-gray-400 text-sm">
-                © {new Date().getFullYear()} FieldDeskOps. All rights reserved.
-              </div>
-            </div>
-          </div>
-        </footer>
+    <html lang="en">
+      <body className={`${inter.variable} ${oswald.variable} bg-[#1a1a1a] text-white antialiased`}>
+        {children}
       </body>
     </html>
-  )
+  );
 }
