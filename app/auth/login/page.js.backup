@@ -1,54 +1,55 @@
-﻿import Link from 'next/link'
+﻿"use client";
 
-export default function Login() {
+import { Mail, Lock } from "lucide-react";
+
+export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 flex items-center justify-center p-4">
-      <div className="bg-gray-800/50 rounded-2xl p-8 border border-gray-700 max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-            <span className="font-bold text-white text-xl">F</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white">Welcome Back</h1>
-          <p className="text-gray-400 mt-2">Sign in to your FieldDeskOps account</p>
-        </div>
-        
+    <main className="min-h-screen bg-[#1a1a1a] flex items-center justify-center px-6 font-inter">
+      {/* Card */}
+      <div className="w-full max-w-md bg-[#262626] border border-[#404040] rounded-xl p-8 shadow-lg">
+        {/* Header */}
+        <h1 className="text-4xl font-oswald font-bold text-white text-center mb-8 uppercase tracking-wide">
+          Field Desk Ops
+        </h1>
+
+        {/* Form */}
         <form className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
-            <input 
-              type="email" 
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary focus:outline-none"
-              placeholder="you@example.com"
+          {/* Email */}
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="email"
+              placeholder="Email"
+              className="w-full h-12 pl-10 pr-4 bg-[#1a1a1a] text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#FF6700]"
             />
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
-            <input 
-              type="password" 
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary focus:outline-none"
-              placeholder="••••••••"
+
+          {/* Password */}
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="password"
+              placeholder="Password"
+              className="w-full h-12 pl-10 pr-4 bg-[#1a1a1a] text-white rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#FF6700]"
             />
           </div>
-          
-          <button 
-            type="button"
-            onClick={() => window.location.href = '/dashboard'}
-            className="w-full bg-primary hover:bg-orange-600 text-white font-medium py-3 rounded-lg transition-colors"
+
+          {/* Submit */}
+          <button
+            type="submit"
+            className="w-full h-12 bg-[#FF6700] text-white font-bold uppercase rounded-lg hover:bg-[#e65c00] transition-colors"
           >
-            Sign In
+            Access Toolbelt
           </button>
         </form>
-        
-        <div className="mt-6 text-center">
-          <p className="text-gray-400">
-            Don't have an account?{' '}
-            <Link href="/auth/signup" className="text-primary hover:text-orange-400">
-              Sign up
-            </Link>
-          </p>
-        </div>
       </div>
-    </div>
-  )
+
+      {/* Font loader */}
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@700&display=swap');
+        .font-inter { font-family: 'Inter', sans-serif; }
+        .font-oswald { font-family: 'Oswald', sans-serif; }
+      `}</style>
+    </main>
+  );
 }
