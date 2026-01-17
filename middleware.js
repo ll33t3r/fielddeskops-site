@@ -1,17 +1,49 @@
-﻿import { NextResponse } from 'next/server'
+﻿import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
 
-export function middleware(request) {
-  // THE RED WALL: Redirect EVERYONE to the login page immediately.
-  // We are not checking Supabase. We are just checking if the file works.
+export async function middleware(request) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  // 1. Setup Supabase Client (Just to keep session alive)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // 2. Refresh the Session (Vital for keeping you logged in)
+  await supabase.auth.getUser()
+
+  // 3. NO BLOCKING. 
+  // We removed the "if (!user) redirect" code. 
+  // The door is wide open.
   
-  if (request.nextUrl.pathname === '/') {
-    console.log("⛔ RED WALL HIT: Blocking access to Dashboard")
-    return NextResponse.redirect(new URL('/auth/login', request.url))
-  }
-
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|auth/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
