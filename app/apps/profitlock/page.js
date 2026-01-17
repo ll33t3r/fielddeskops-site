@@ -1,11 +1,16 @@
 ﻿"use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "../../../utils/supabase/client"; // Cloud Connection
+import { createClient } from "../../../utils/supabase/client";
 import { Trash2, Save, Calculator, Loader2 } from "lucide-react";
+import Link from "next/link"; // Added for navigation
 
 export default function ProfitLock() {
   const supabase = createClient();
+  
+  // =====================
+  // 1. THE ENGINE (Logic)
+  // =====================
   
   // STATE
   const [jobName, setJobName] = useState("");
@@ -15,43 +20,37 @@ export default function ProfitLock() {
   const [markupPercent, setMarkupPercent] = useState(20);
   const [bidHistory, setBidHistory] = useState([]);
   const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(false); // New loading state
+  const [loading, setLoading] = useState(false);
 
-  // LOAD BIDS FROM SUPABASE (Replaces localStorage)
+  // LOAD BIDS
   useEffect(() => {
     fetchBids();
   }, []);
 
   const fetchBids = async () => {
-    // 1. Get User
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 2. Fetch Data
     const { data, error } = await supabase
       .from("bids")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching bids:", error);
+      console.error("Error:", error);
       return;
     }
 
-    // 3. Map Database columns back to your App structure
     const mappedBids = data.map(bid => {
-      // Re-calculate derived values for display
       const cost = Number(bid.materials) + (Number(bid.hours) * Number(bid.rate));
       const finalBid = Number(bid.sale_price);
       const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
       
-      // Format Date
       const dateObj = new Date(bid.created_at);
-      const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      const timeStr = dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
       return {
-        id: bid.id, // We need the ID to delete it later
+        id: bid.id,
         jobName: bid.project_name,
         materials: Number(bid.materials),
         hours: Number(bid.hours),
@@ -60,14 +59,14 @@ export default function ProfitLock() {
         cost: cost,
         finalPrice: `$${finalBid.toFixed(2)}`,
         grossMargin: Math.round(grossMargin),
-        date: `${dateStr} at ${timeStr}`
+        date: dateStr
       };
     });
 
     setBidHistory(mappedBids);
   };
 
-  // MATH (Your original logic)
+  // MATH CALCULATIONS
   const materials = parseFloat(materialsCost) || 0;
   const hours = parseFloat(laborHours) || 0;
   const rate = parseFloat(hourlyRate) || 75;
@@ -79,50 +78,28 @@ export default function ProfitLock() {
   const finalBid = cost + markupAmount;
   const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
 
-  // PROFIT METER (Your original logic)
+  // METER LOGIC
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
-    if (margin < 20) {
-      return { color: "#ef4444", label: "🚨 CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
-    } else if (margin < 40) {
-      return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
-    } else if (margin < 60) {
-      return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
-    } else {
-      return { color: "#f97316", label: "💰 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
-    }
+    if (margin < 20) return { color: "#ef4444", label: "🚨 CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
+    else if (margin < 40) return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
+    else if (margin < 60) return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
+    else return { color: "#f97316", label: "💰 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
   };
-
   const meterInfo = getProfitMeterInfo(grossMargin);
 
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  // SAVE TO SUPABASE (Replaces localStorage)
+  // SAVE LOGIC
   const saveBid = async () => {
-    if (!jobName.trim()) {
-      showToast("Please enter a job name", "error");
-      return;
-    }
-    if (materials === 0 && hours === 0) {
-      showToast("Add materials or labor hours", "error");
-      return;
-    }
-
+    if (!jobName.trim()) { setToast({message: "Enter job name", type: "error"}); setTimeout(()=>setToast(null), 2000); return; }
+    
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      showToast("You must be logged in to save", "error");
       setLoading(false);
       return;
     }
 
-    const profit = finalBid - cost;
-
-    // INSERT into Database
     const { error } = await supabase.from("bids").insert({
       user_id: user.id,
       project_name: jobName,
@@ -131,19 +108,18 @@ export default function ProfitLock() {
       rate: rate,
       margin: markup,
       sale_price: finalBid,
-      profit: profit
+      profit: finalBid - cost
     });
 
     if (error) {
-      showToast(error.message, "error");
+       setToast({message: "Error saving", type: "error"});
     } else {
-      await fetchBids(); // Reload list from cloud
+      fetchBids();
       setJobName("");
-      setMaterialsCost(0);
-      setLaborHours(0);
-      showToast("✅ Bid Saved to Cloud!", "success");
+      setToast({message: "✅ Bid Saved to Cloud", type: "success"});
     }
     setLoading(false);
+    setTimeout(()=>setToast(null), 2000);
   };
 
   const loadBidIntoCalculator = (bid) => {
@@ -155,243 +131,205 @@ export default function ProfitLock() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // DELETE FROM SUPABASE
   const deleteBid = async (id, index) => {
-    if(!confirm("Delete this bid permanently?")) return;
-
-    // Optimistic Update (remove from UI immediately)
+    if(!confirm("Delete this bid?")) return;
+    
+    // Optimistic UI update
     const newHistory = [...bidHistory];
     newHistory.splice(index, 1);
     setBidHistory(newHistory);
 
-    // Delete from Cloud
-    const { error } = await supabase.from("bids").delete().eq("id", id);
-    
-    if (error) {
-      showToast("Error deleting bid", "error");
-      fetchBids(); // Revert if failed
-    } else {
-      showToast("Bid deleted", "success");
-    }
+    await supabase.from("bids").delete().eq("id", id);
   };
 
+
+  // =====================
+  // 2. THE SKIN (UI)
+  // =====================
   return (
-    <div className="min-h-screen w-full max-w-2xl mx-auto p-4" style={{ backgroundColor: "#1a1a1a" }}>
-      
-      {/* Header */}
-      <div className="mb-8 pt-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Calculator size={32} style={{ color: "#FF6700" }} />
-          <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em", color: "#f5f5f5" }}>
-            PROFITLOCK
-          </h1>
-          <span className="text-xs md:text-sm" style={{ color: "#888", marginLeft: "8px" }}>V5 CLOUD</span>
-        </div>
-        <p style={{ color: "#888" }}>Real-time Bid Calculator</p>
-      </div>
+    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+        .font-oswald { font-family: 'Oswald', sans-serif; }
+      `}</style>
 
-      {/* Calculator */}
-      <div className="p-4 md:p-6 rounded-lg mb-6" style={{ backgroundColor: "#262626", border: "1px solid #404040" }}>
-        <div style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "16px", color: "#FF6700", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em" }}>
-          Calculate Your Bid
-        </div>
+      {/* ===== HEADER ===== */}
+      <header className="max-w-5xl mx-auto px-6 pt-8 pb-4 flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Calculator className="w-8 h-8 text-[#FF6700]" />
+            <h1 className="text-3xl md:text-4xl font-oswald font-bold tracking-wide">
+            PROFIT<span className="text-[#FF6700]">LOCK</span>
+            </h1>
+        </Link>
+        <span className="self-end text-xs text-gray-400 ml-2">V6 PRO</span>
+      </header>
 
-        {/* Job Name */}
-        <div className="mb-4">
-          <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Job Name</label>
+      <main className="max-w-5xl mx-auto px-6 pb-12 grid gap-6 md:grid-cols-3">
+        {/* ===== LEFT COLUMN : CALCULATOR ===== */}
+        <section className="md:col-span-2 bg-[#262626] border border-[#404040] rounded-xl p-6 shadow-lg">
+          <h2 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">WORK ORDER</h2>
+
+          {/* Job Name */}
+          <label className="block text-sm font-semibold mb-1">Job Name</label>
           <input
             type="text"
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
-            placeholder="e.g., Kitchen Sink Repair"
+            placeholder="e.g. Kitchen Sink Repair"
             maxLength={50}
-            style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
-            onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
-            onBlur={(e) => (e.target.style.borderColor = "#404040")}
+            className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition"
           />
-        </div>
 
-        {/* Materials & Labor */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Materials Cost ($)</label>
-            <input
-              type="number"
-              value={materialsCost}
-              onChange={(e) => setMaterialsCost(e.target.value)}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
-              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
-              onBlur={(e) => (e.target.style.borderColor = "#404040")}
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Labor Hours</label>
-            <input
-              type="number"
-              value={laborHours}
-              onChange={(e) => setLaborHours(e.target.value)}
-              placeholder="0"
-              min="0"
-              step="0.5"
-              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
-              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
-              onBlur={(e) => (e.target.style.borderColor = "#404040")}
-            />
-          </div>
-        </div>
-
-        {/* Rate & Markup */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          <div>
-            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Hourly Rate ($)</label>
-            <input
-              type="number"
-              value={hourlyRate}
-              onChange={(e) => setHourlyRate(e.target.value)}
-              placeholder="75"
-              min="0"
-              step="5"
-              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
-              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
-              onBlur={(e) => (e.target.style.borderColor = "#404040")}
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Markup (%)</label>
-            <input
-              type="number"
-              value={markupPercent}
-              onChange={(e) => setMarkupPercent(e.target.value)}
-              placeholder="20"
-              min="0"
-              step="5"
-              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
-              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
-              onBlur={(e) => (e.target.style.borderColor = "#404040")}
-            />
-          </div>
-        </div>
-
-        {/* Breakdown */}
-        <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: "#1a1a1a", border: "1px solid #404040" }}>
-          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
-            <span>Materials</span>
-            <span>${materials.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
-            <span>Labor (Hours × Rate)</span>
-            <span>${labor.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
-            <span>Subtotal (Cost)</span>
-            <span>${cost.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm" style={{ color: "#FF6700", fontWeight: "700" }}>
-            <span>Markup</span>
-            <span>${markupAmount.toFixed(2)}</span>
-          </div>
-        </div>
-
-        {/* Final Price */}
-        <div className="text-center mb-6">
-          <p className="text-xs md:text-sm" style={{ color: "#888", marginBottom: "8px" }}>FINAL BID PRICE</p>
-          <div style={{ fontSize: "2rem", fontWeight: "700", color: "#22c55e", textShadow: "0 0 20px rgba(34, 197, 94, 0.3)", fontFamily: "'Oswald', sans-serif" }}>
-            ${finalBid.toFixed(2)}
-          </div>
-        </div>
-
-        {/* Profit Meter */}
-        <div className="mb-6">
-          <div style={{ width: "100%", height: "40px", backgroundColor: "#1a1a1a", borderRadius: "20px", overflow: "hidden", border: "2px solid #404040", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)" }}>
-            <div style={{ height: "100%", borderRadius: "18px", width: `${meterInfo.visualWidth}%`, backgroundColor: meterInfo.color, transition: "width 0.4s ease, background-color 0.4s ease", display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: "12px", fontWeight: "700", fontSize: "0.85rem", color: "#fff", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.02em" }}>
-              {meterInfo.visualWidth > 15 ? `${Math.round(grossMargin)}%` : ""}
+          {/* Inputs Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">Materials Cost</label>
+              <input
+                type="number"
+                value={materialsCost}
+                onChange={(e) => setMaterialsCost(e.target.value)}
+                min="0"
+                step="0.01"
+                className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Labor Hours</label>
+              <input
+                type="number"
+                value={laborHours}
+                onChange={(e) => setLaborHours(e.target.value)}
+                min="0"
+                step="0.5"
+                className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Hourly Rate</label>
+              <input
+                type="number"
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                min="0"
+                step="5"
+                className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">Markup %</label>
+              <input
+                type="number"
+                value={markupPercent}
+                onChange={(e) => setMarkupPercent(e.target.value)}
+                min="0"
+                step="5"
+                className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition"
+              />
             </div>
           </div>
-          <div style={{ fontWeight: "700", fontSize: "1rem", padding: "12px 0 4px 0", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em", color: meterInfo.color }}>
-            {meterInfo.label}
-          </div>
-          <div style={{ fontSize: "0.85rem", color: "#888", marginTop: "4px" }}>
-            {meterInfo.sublabel}
-          </div>
-        </div>
 
-        {/* Save Button */}
-        <button
-          onClick={saveBid}
-          disabled={loading}
-          style={{ backgroundColor: "#FF6700", color: "#1a1a1a", fontWeight: "700", minHeight: "50px", border: "none", borderRadius: "8px", width: "100%", cursor: "pointer", transition: "all 0.3s ease", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.05em", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#e55c00"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(255, 103, 0, 0.3)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#FF6700"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-        >
-          {loading ? <Loader2 className="animate-spin" size={20} /> : <><Save size={18} /> SAVE BID TO CLOUD</>}
-        </button>
-      </div>
-
-      {/* History */}
-      <div className="p-4 md:p-6 rounded-lg" style={{ backgroundColor: "#262626", border: "1px solid #404040" }}>
-        <div style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "16px", color: "#FF6700", fontFamily: "'Oswald', sans-serif" }}>
-          Recent Bids (Cloud)
-        </div>
-
-        {bidHistory.length === 0 ? (
-          <div className="text-center py-8">
-            <p style={{ color: "#888" }}>No bids saved yet. Create one above!</p>
+          {/* Cost Breakdown Panel */}
+          <div className="mt-6 bg-[#1a1a1a] border border-[#404040] rounded-lg p-4 grid grid-cols-2 gap-2 text-sm">
+            <span className="text-gray-400">Materials</span>
+            <span className="text-right">${materials.toFixed(2)}</span>
+            <span className="text-gray-400">Labor</span>
+            <span className="text-right">${labor.toFixed(2)}</span>
+            <span className="text-gray-400">Subtotal</span>
+            <span className="text-right">${cost.toFixed(2)}</span>
+            <span className="text-[#FF6700] font-semibold">Markup</span>
+            <span className="text-right text-[#FF6700] font-semibold">${markupAmount.toFixed(2)}</span>
           </div>
-        ) : (
-          <div>
-            {bidHistory.map((bid, index) => (
+
+          {/* Final Price Spotlight */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-400">FINAL BID PRICE</p>
+            <p className="text-5xl font-oswald font-bold text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.4)]">
+              ${finalBid.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Profit Meter */}
+          <div className="mt-6">
+            <div className="h-10 bg-[#1a1a1a] border-2 border-[#404040] rounded-full overflow-hidden">
               <div
-                key={bid.id} // Uses Database ID
-                onClick={() => loadBidIntoCalculator(bid)}
-                style={{ backgroundColor: "#262626", border: "1px solid #404040", borderRadius: "8px", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", cursor: "pointer", transition: "all 0.3s ease" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#FF6700"; e.currentTarget.style.backgroundColor = "#2d2d2d"; e.currentTarget.style.transform = "translateX(-4px)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#404040"; e.currentTarget.style.backgroundColor = "#262626"; e.currentTarget.style.transform = "translateX(0)"; }}
+                className="h-full flex items-center px-4 text-sm font-oswald tracking-wide transition-all duration-500"
+                style={{ width: `${Math.min(meterInfo.visualWidth, 100)}%`, backgroundColor: meterInfo.color }}
               >
-                <div className="flex-1">
-                  <div style={{ fontWeight: "700", color: "#f5f5f5", fontSize: "1.05rem" }}>
-                    {bid.jobName || "Unnamed Job"}
-                    <span style={{ display: "inline-block", backgroundColor: "rgba(255, 103, 0, 0.15)", color: "#FF6700", padding: "4px 12px", borderRadius: "6px", fontSize: "0.8rem", fontWeight: "600", marginLeft: "8px" }}>
-                      {Math.round(bid.grossMargin)}% Margin
-                    </span>
-                  </div>
-                  <div style={{ color: "#888", fontSize: "0.875rem", marginTop: "4px" }}>
-                    {bid.date}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right", marginRight: "16px" }}>
-                  <div style={{ color: "#22c55e", fontWeight: "700", fontSize: "1.25rem" }}>
-                    {bid.finalPrice}
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, index); }}
-                  style={{ backgroundColor: "transparent", border: "none", color: "#ff4444", cursor: "pointer", fontSize: "1.25rem", padding: "8px", transition: "all 0.3s ease" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#ff6666"; e.currentTarget.style.transform = "scale(1.1)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "#ff4444"; e.currentTarget.style.transform = "scale(1)"; }}
-                >
-                  <Trash2 size={20} />
-                </button>
+                {meterInfo.visualWidth > 15 && `${grossMargin.toFixed(0)}%`}
               </div>
-            ))}
+            </div>
+            <div className="mt-2 text-center">
+              <p className="text-lg font-oswald" style={{ color: meterInfo.color }}>{meterInfo.label}</p>
+              <p className="text-sm text-gray-400">{meterInfo.sublabel}</p>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Save Button */}
+          <button
+            onClick={saveBid}
+            disabled={loading}
+            className="mt-6 w-full h-12 bg-[#FF6700] text-[#1a1a1a] font-oswald font-bold uppercase rounded-lg hover:bg-[#e65c00] transition flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={18} />}
+            Save Bid to Cloud
+          </button>
+        </section>
+
+        {/* ===== RIGHT COLUMN : HISTORY ===== */}
+        <aside className="bg-[#262626] border border-[#404040] rounded-xl p-6 shadow-lg max-h-[75vh] overflow-y-auto">
+          <h3 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">Recent Bids</h3>
+          {bidHistory.length === 0 ? (
+            <p className="text-gray-400 text-sm">No bids saved yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {bidHistory.map((bid, idx) => (
+                <li
+                  key={bid.id}
+                  onClick={() => loadBidIntoCalculator(bid)}
+                  className="bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 cursor-pointer hover:border-[#FF6700] hover:scale-[1.02] transition"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-white">{bid.jobName || "Unnamed Job"}</p>
+                      <p className="text-xs text-gray-400">{bid.date}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-green-400 font-bold">{bid.finalPrice}</p>
+                      <p className="text-xs text-blue-400">{bid.grossMargin}% margin</p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteBid(bid.id, idx);
+                      }}
+                      className="ml-2 text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+      </main>
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: "20px", right: "20px", backgroundColor: toast.type === "success" ? "#22c55e" : toast.type === "error" ? "#ff4444" : "#888", color: "#1a1a1a", padding: "16px 24px", borderRadius: "8px", fontWeight: "700", zIndex: 9999, animation: "slideIn 0.3s ease-out" }}>
+        <div
+          className="fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-semibold animate-slide-in"
+          style={{ backgroundColor: toast.type === "success" ? "#22c55e" : "#ef4444" }}
+        >
           {toast.message}
         </div>
       )}
 
       <style jsx>{`
-        @keyframes slideIn {
-          from { transform: translateX(400px); opacity: 0; }
+        @keyframes slide-in {
+          from { transform: translateX(100%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
         }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
   );
