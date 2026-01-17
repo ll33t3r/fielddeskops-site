@@ -1,8 +1,8 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { login } from './actions'
-import { useRouter } from 'next/navigation' // We need the router
+import { createClient } from '../../../utils/supabase/client' // Use the Client SDK
+import { useRouter } from 'next/navigation'
 import { Loader2, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 
@@ -10,22 +10,35 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const router = useRouter()
+  const supabase = createClient() // Initialize Supabase in the browser
 
-  const handleSubmit = async (formData) => {
+  const handleSubmit = async (e) => {
+    e.preventDefault() // Stop form submission
     setLoading(true)
     setError(null)
     
-    // Call the server
-    const result = await login(formData)
-    
-    if (result?.error) {
-      // If error, stop loading and show message
-      setError(result.error)
+    // Get values directly from form
+    const formData = new FormData(e.currentTarget)
+    const email = formData.get('email')
+    const password = formData.get('password')
+
+    console.log("Attempting login for:", email)
+
+    // Talk to Supabase directly from the browser
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error("Login failed:", error.message)
+      setError(error.message)
       setLoading(false)
-    } else if (result?.success) {
-      // If success, FORCE the navigation here
-      router.refresh() // Refresh to update middleware cache
-      router.push('/') // Go to Dashboard
+    } else {
+      console.log("Login success!", data)
+      // Force a hard refresh to update Middleware cookies
+      router.refresh()
+      router.push('/') 
     }
   }
 
@@ -35,7 +48,7 @@ export default function LoginPage() {
         <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
           FIELD<span className="text-[#FF6700]">DESK</span>OPS
         </h1>
-        <p className="text-gray-500 text-sm mt-2">SECURE LOGIN</p>
+        <p className="text-gray-500 text-sm mt-2">SECURE LOGIN (CLIENT MODE)</p>
       </div>
 
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
@@ -45,7 +58,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <form action={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email Address</label>
             <input 
