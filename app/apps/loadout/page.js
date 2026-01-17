@@ -4,9 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   Package, Plus, Minus, Search, Trash2, X, Loader2, 
-  Truck, Copy, ClipboardList, ChevronDown 
+  Truck, ClipboardList, ChevronDown 
 } from "lucide-react";
 import Link from "next/link";
+
+// UX IMPROVEMENT: Brighter Orange
+const THEME_ORANGE = "#FF7A22"; 
 
 export default function LoadOut() {
   const supabase = createClient();
@@ -17,7 +20,6 @@ export default function LoadOut() {
   const [items, setItems] = useState([]);
   
   const [newItem, setNewItem] = useState("");
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   
@@ -25,17 +27,17 @@ export default function LoadOut() {
   const [editingItem, setEditingItem] = useState(null);
   const timerRef = useRef(null);
 
-  // THE "ESSENTIALS" LIST (Auto-fill)
+  // THE "ESSENTIALS" LIST (Auto-fill) - Updated with Brighter Orange
   const defaultLoadout = [
-    { name: "Wax Ring", category: "parts", color: "#c2410c" },
-    { name: "Angle Stop", category: "parts", color: "#c2410c" },
-    { name: "Teflon Tape", category: "supplies", color: "#c2410c" },
-    { name: "PVC Glue", category: "supplies", color: "#c2410c" },
-    { name: "P-Trap", category: "parts", color: "#c2410c" },
-    { name: "Coupling", category: "parts", color: "#c2410c" },
-    { name: "Supply Line", category: "parts", color: "#c2410c" },
-    { name: "Flapper", category: "parts", color: "#c2410c" },
-    { name: "Ball Valve", category: "parts", color: "#c2410c" },
+    { name: "Wax Ring", category: "parts", color: THEME_ORANGE },
+    { name: "Angle Stop", category: "parts", color: THEME_ORANGE },
+    { name: "Teflon Tape", category: "supplies", color: THEME_ORANGE },
+    { name: "PVC Glue", category: "supplies", color: THEME_ORANGE },
+    { name: "P-Trap", category: "parts", color: THEME_ORANGE },
+    { name: "Coupling", category: "parts", color: THEME_ORANGE },
+    { name: "Supply Line", category: "parts", color: THEME_ORANGE },
+    { name: "Flapper", category: "parts", color: THEME_ORANGE },
+    { name: "Ball Valve", category: "parts", color: THEME_ORANGE },
     { name: "Drain Snake", category: "tools", color: "#262626" }
   ];
 
@@ -65,18 +67,17 @@ export default function LoadOut() {
     fetchInventory(userVans[0].id);
   };
 
-  // 2. FETCH INVENTORY FOR SPECIFIC VAN
+  // 2. FETCH INVENTORY
   const fetchInventory = async (vanId) => {
     setLoading(true);
     const { data } = await supabase
       .from("inventory")
       .select("*")
-      .eq("van_id", vanId) // Filter by Van
+      .eq("van_id", vanId)
       .order("created_at", { ascending: false });
     
     // C. AUTO-FILL CHECK
     if (!data || data.length === 0) {
-        // Seeding logic
         await seedEssentials(vanId);
     } else {
         setItems(data);
@@ -86,13 +87,12 @@ export default function LoadOut() {
 
   const seedEssentials = async (vanId) => {
     const { data: { user } } = await supabase.auth.getUser();
-    // Prepare batch insert
     const rows = defaultLoadout.map(item => ({
         user_id: user.id,
         van_id: vanId,
         name: item.name,
         category: item.category,
-        quantity: 1, // Default to 1 so they see it
+        quantity: 1,
         color: item.color
     }));
 
@@ -108,11 +108,8 @@ export default function LoadOut() {
     if (!name) return;
 
     const { data: { user } } = await supabase.auth.getUser();
-    
-    // PAYWALL CHECK (Placeholder)
-    // if (vans.length >= 1 && !user.isPro) return alert("Upgrade to Pro for multiple vans!");
 
-    const { data: newVan, error } = await supabase.from("vans").insert({
+    const { data: newVan } = await supabase.from("vans").insert({
         user_id: user.id,
         name: name
     }).select().single();
@@ -120,7 +117,7 @@ export default function LoadOut() {
     if (newVan) {
         setVans([...vans, newVan]);
         setCurrentVan(newVan);
-        fetchInventory(newVan.id); // This will trigger auto-fill for the new van!
+        fetchInventory(newVan.id);
         showToast(`Created ${name}`, "success");
     }
   };
@@ -134,7 +131,6 @@ export default function LoadOut() {
 
   // 5. COPY SHOPPING LIST
   const copyShoppingList = () => {
-    // Logic: Copy items with quantity 0 or 1 (Low stock)
     const toBuy = items.filter(i => i.quantity < 2);
     
     if (toBuy.length === 0) {
@@ -149,8 +145,7 @@ export default function LoadOut() {
     showToast("📋 Shopping List Copied!", "success");
   };
 
-  // ... (STANDARD ADD/UPDATE/DELETE/LONGPRESS LOGIC - Same as V2 but with van_id) ...
-
+  // 6. ADD ITEM
   const addItem = async (e) => {
     e.preventDefault();
     if (!newItem.trim()) return;
@@ -162,7 +157,7 @@ export default function LoadOut() {
 
     const { data } = await supabase.from("inventory").insert({
         user_id: user.id,
-        van_id: currentVan.id, // Link to current Van
+        van_id: currentVan.id,
         name: temp.name,
         quantity: 1,
         color: "#262626"
@@ -194,14 +189,31 @@ export default function LoadOut() {
     setEditingItem(null);
   };
 
-  const startPress = (item) => { timerRef.current = setTimeout(() => setEditingItem(item), 600); };
-  const endPress = () => { clearTimeout(timerRef.current); };
+  // ===========================
+  // UX FIX: SMOOTH SCROLLING
+  // ===========================
+  const startPress = (item) => { 
+    // Increased to 900ms for less accidental clicks
+    timerRef.current = setTimeout(() => {
+        setEditingItem(item);
+        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback
+    }, 900); 
+  };
+  
+  const endPress = () => { 
+    // Clears timer immediately on release OR scroll
+    if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+    } 
+  };
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
   
+  // Updated Colors
   const colors = [
     { hex: "#262626", name: "Charcoal" },
-    { hex: "#c2410c", name: "Orange" }, // Matched to your image
+    { hex: THEME_ORANGE, name: "Bright Orange" }, 
     { hex: "#7f1d1d", name: "Red" },
     { hex: "#14532d", name: "Green" },
     { hex: "#1e3a8a", name: "Blue" },
@@ -212,21 +224,21 @@ export default function LoadOut() {
        <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
         .font-oswald { font-family: 'Oswald', sans-serif; }
-        .no-select { user-select: none; -webkit-user-select: none; }
+        .no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
       `}</style>
 
       {/* HEADER WITH VAN SWITCHER */}
       <header className="max-w-5xl mx-auto px-6 pt-8 pb-6">
         <div className="flex justify-between items-start">
             <Link href="/" className="flex items-center gap-2 hover:opacity-80">
-                <Package className="w-8 h-8 text-[#FF6700]" />
-                <h1 className="text-3xl font-oswald font-bold tracking-wide">LOAD<span className="text-[#FF6700]">OUT</span></h1>
+                <Package className="w-8 h-8" style={{color: THEME_ORANGE}} />
+                <h1 className="text-3xl font-oswald font-bold tracking-wide">LOAD<span style={{color: THEME_ORANGE}}>OUT</span></h1>
             </Link>
 
             {/* VAN SELECTOR */}
             <div className="relative group z-20">
-                <button className="flex items-center gap-2 bg-[#262626] border border-[#404040] px-4 py-2 rounded-lg font-bold text-sm uppercase hover:border-[#FF6700] transition">
-                    <Truck size={16} className="text-[#FF6700]" />
+                <button className="flex items-center gap-2 bg-[#262626] border border-[#404040] px-4 py-2 rounded-lg font-bold text-sm uppercase transition" style={{borderColor: '#404040'}}>
+                    <Truck size={16} style={{color: THEME_ORANGE}} />
                     {currentVan ? currentVan.name : "Loading..."}
                     <ChevronDown size={14} />
                 </button>
@@ -244,7 +256,8 @@ export default function LoadOut() {
                     ))}
                     <button 
                         onClick={createVan}
-                        className="w-full text-left px-4 py-3 bg-[#FF6700] text-black font-bold text-sm hover:bg-[#cc5200] flex items-center gap-2"
+                        className="w-full text-left px-4 py-3 text-black font-bold text-sm hover:opacity-90 flex items-center gap-2"
+                        style={{backgroundColor: THEME_ORANGE}}
                     >
                         <Plus size={14} /> ADD NEW VAN
                     </button>
@@ -264,24 +277,29 @@ export default function LoadOut() {
                     value={newItem}
                     onChange={(e)=>setNewItem(e.target.value)}
                     placeholder="Add item..."
-                    className="w-full bg-[#262626] border border-[#404040] rounded-xl pl-10 pr-4 py-3 focus:border-[#FF6700] outline-none transition"
+                    className="w-full bg-[#262626] border border-[#404040] rounded-xl pl-10 pr-4 py-3 outline-none transition"
+                    style={{borderColor: '#404040'}}
                 />
             </div>
-            <button type="submit" className="bg-[#FF6700] text-black rounded-xl w-12 flex items-center justify-center font-bold hover:bg-[#cc5200]">
+            <button type="submit" className="text-black rounded-xl w-12 flex items-center justify-center font-bold hover:opacity-90" style={{backgroundColor: THEME_ORANGE}}>
                 <Plus />
             </button>
         </form>
 
         {/* GRID */}
-        {loading ? <div className="text-center py-10"><Loader2 className="animate-spin inline text-[#FF6700]"/></div> : (
+        {loading ? <div className="text-center py-10"><Loader2 className="animate-spin inline" style={{color: THEME_ORANGE}}/></div> : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 no-select">
                 {items.map(item => (
                     <div 
                         key={item.id}
+                        // === THE SCROLL FIX ===
                         onMouseDown={() => startPress(item)}
                         onMouseUp={endPress}
+                        onMouseLeave={endPress}
                         onTouchStart={() => startPress(item)}
                         onTouchEnd={endPress}
+                        onTouchMove={endPress} // This cancels edit on scroll!
+                        // ======================
                         style={{ backgroundColor: item.color }}
                         className="relative h-32 rounded-xl p-4 flex flex-col justify-between shadow-lg active:scale-95 transition-transform"
                     >
@@ -325,7 +343,7 @@ export default function LoadOut() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 backdrop-blur-sm">
             <div className="bg-[#262626] border border-[#404040] w-full max-w-sm rounded-xl p-6 shadow-2xl relative">
                 <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
-                <h2 className="text-[#FF6700] font-oswald font-bold text-xl mb-6">EDIT ITEM</h2>
+                <h2 className="font-oswald font-bold text-xl mb-6" style={{color: THEME_ORANGE}}>EDIT ITEM</h2>
                 <input type="text" value={editingItem.name} onChange={(e)=>setEditingItem({...editingItem, name: e.target.value})} className="w-full bg-[#1a1a1a] border border-[#404040] rounded p-3 text-white mb-4" />
                 
                 <div className="grid grid-cols-5 gap-2 mb-6">
@@ -336,7 +354,7 @@ export default function LoadOut() {
 
                 <div className="flex gap-2">
                     <button onClick={()=>deleteItem(editingItem.id)} className="flex-1 bg-red-900/30 text-red-500 border border-red-900 py-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Delete</button>
-                    <button onClick={saveEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded font-bold">SAVE</button>
+                    <button onClick={saveEdit} className="flex-[2] text-black py-3 rounded font-bold" style={{backgroundColor: THEME_ORANGE}}>SAVE</button>
                 </div>
             </div>
         </div>
