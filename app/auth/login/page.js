@@ -1,44 +1,58 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { createClient } from '../../../utils/supabase/client' // Use the Client SDK
+import { createBrowserClient } from '@supabase/ssr' // Import directly
 import { useRouter } from 'next/navigation'
-import { Loader2, ShieldCheck } from 'lucide-react'
+import { Loader2, ShieldCheck, Bug } from 'lucide-react'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [debugLog, setDebugLog] = useState([]) // Log to screen
   const router = useRouter()
-  const supabase = createClient() // Initialize Supabase in the browser
+
+  // HARDCODED CLIENT - NO VARIABLES NEEDED
+  const supabase = createBrowserClient(
+    'https://itfjpyzywllsjipjtfrk.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZmpweXp5d2xsc2ppcGp0ZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MjQ4OTgsImV4cCI6MjA4NDEwMDg5OH0.1K8LEPwpQnXPd1AIsshvada-vg37SoHOxfw5DIkYcA8'
+  )
+
+  const addLog = (msg) => {
+    console.log(msg)
+    setDebugLog(prev => [...prev, msg])
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault() // Stop form submission
+    e.preventDefault()
     setLoading(true)
-    setError(null)
+    setDebugLog(['Starting Login Process...'])
     
-    // Get values directly from form
     const formData = new FormData(e.currentTarget)
     const email = formData.get('email')
     const password = formData.get('password')
 
-    console.log("Attempting login for:", email)
+    addLog(`Target: ${email}`)
 
-    // Talk to Supabase directly from the browser
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      addLog('Sending request to Supabase...')
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      console.error("Login failed:", error.message)
-      setError(error.message)
+      if (error) {
+        addLog(`❌ ERROR: ${error.message}`)
+        setLoading(false)
+      } else {
+        addLog('✅ SUCCESS! Session created.')
+        addLog('Redirecting to Dashboard...')
+        // Force browser redirect (Brute force)
+        window.location.href = '/'
+      }
+    } catch (err) {
+      addLog(`❌ CRASH: ${err.message}`)
       setLoading(false)
-    } else {
-      console.log("Login success!", data)
-      // Force a hard refresh to update Middleware cookies
-      router.refresh()
-      router.push('/') 
     }
   }
 
@@ -48,13 +62,13 @@ export default function LoginPage() {
         <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
           FIELD<span className="text-[#FF6700]">DESK</span>OPS
         </h1>
-        <p className="text-gray-500 text-sm mt-2">SECURE LOGIN (CLIENT MODE)</p>
+        <p className="text-gray-500 text-sm mt-2">DEBUG LOGIN MODE</p>
       </div>
 
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
         <div className="flex justify-center mb-6">
           <div className="p-3 bg-[#1a1a1a] rounded-full border border-[#333]">
-            <ShieldCheck className="text-[#FF6700]" size={32} />
+            <Bug className="text-red-500" size={32} />
           </div>
         </div>
 
@@ -81,28 +95,26 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm text-center">
-              {error}
-            </div>
-          )}
+          {/* ON-SCREEN DEBUG LOG */}
+          <div className="bg-black/50 p-3 rounded text-xs font-mono text-green-400 min-h-[60px] border border-gray-800">
+            {debugLog.length === 0 ? 'Waiting for input...' : debugLog.map((log, i) => (
+              <div key={i}>{log}</div>
+            ))}
+          </div>
 
           <button 
             type="submit" 
             disabled={loading}
             className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : 'ACCESS DASHBOARD'}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : 'TRY LOGIN'}
           </button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-gray-500 text-sm">
-            Don't have an account?{' '}
-            <Link href="/auth/signup" className="text-[#FF6700] hover:underline">
-              Create one
-            </Link>
-          </p>
+          <Link href="/auth/signup" className="text-gray-500 hover:text-white text-sm">
+             Back to Signup
+          </Link>
         </div>
       </div>
        <style jsx global>{`
