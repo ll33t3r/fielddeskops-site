@@ -1,558 +1,361 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { FileText, Eraser, Check, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from "react";
+import { createClient } from "../../../utils/supabase/client";
+import { 
+  FileText, Eraser, Check, Plus, ArrowLeft, 
+  Download, FileSignature, ShieldAlert, BadgeDollarSign, Import
+} from "lucide-react";
+import Link from "next/link";
 
 export default function SignOff() {
+  const supabase = createClient();
   const canvasRef = useRef(null);
-  const [projectName, setProjectName] = useState('');
-  const [scopeOfWork, setScopeOfWork] = useState('');
-  const [agreementDate, setAgreementDate] = useState('');
+  
+  // STATE
+  const [bids, setBids] = useState([]); // From ProfitLock
+  const [projectName, setProjectName] = useState("");
+  const [scopeOfWork, setScopeOfWork] = useState("");
+  const [agreementDate, setAgreementDate] = useState("");
+  const [contractType, setContractType] = useState("STANDARD"); // STANDARD or CHANGE_ORDER
+  
   const [isSignatureSaved, setIsSignatureSaved] = useState(false);
   const [signatureImage, setSignatureImage] = useState(null);
-  const [toast, setToast] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [showStamp, setShowStamp] = useState(false); // For Animation
 
+  // 1. INIT & LOAD DATA
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     setAgreementDate(today);
+    loadBids();
+    setupCanvas();
 
-    const saved = localStorage.getItem('signoff_agreement');
+    // Load Draft from LocalStorage
+    const saved = localStorage.getItem("signoff_agreement");
     if (saved) {
       const agreement = JSON.parse(saved);
-      setProjectName(agreement.projectName);
-      setScopeOfWork(agreement.scopeOfWork);
-      setAgreementDate(agreement.agreementDate);
+      setProjectName(agreement.projectName || "");
+      setScopeOfWork(agreement.scopeOfWork || "");
+      setAgreementDate(agreement.agreementDate || today);
       if (agreement.signatureDataUrl) {
         setSignatureImage(agreement.signatureDataUrl);
         setIsSignatureSaved(true);
+        setTimeout(() => setShowStamp(true), 100); // Trigger anim if loaded
       }
     }
-
-    setupCanvas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (!isSignatureSaved) {
-        clearSignature();
-        setupCanvas();
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [isSignatureSaved]);
+  // Fetch Bids from ProfitLock DB
+  const loadBids = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase.from("bids").select("id, project_name, sale_price, materials").order("created_at", { ascending: false });
+    if (data) setBids(data);
+  };
 
+  // 2. CANVAS LOGIC (Graph Paper & Blue Ink)
   const setupCanvas = () => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    canvas.width = rect.width - 24;
-    canvas.height = 200;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#FF6700';
-    }
+    // Delay slightly to ensure parent div has width
+    setTimeout(() => {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = 200;
+        
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = "#00008b"; // Blue Ballpoint Ink
+        }
+    }, 100);
   };
 
-  const getPos = (e, canvas) => {
-    const rect = canvas.getBoundingClientRect();
-    if (e.touches && e.touches[0]) {
-      return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
-      };
-    }
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+  // Handle Resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (!isSignatureSaved) setupCanvas();
     };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isSignatureSaved]);
+
+  // Drawing Handlers
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
   };
 
-  const handleCanvasStart = (e) => {
-    if (isSignatureSaved || !canvasRef.current) return;
-    e.preventDefault();
+  const startDraw = (e) => {
+    if (isSignatureSaved) return;
+    e.preventDefault(); // Prevent scrolling on touch
     setIsDrawing(true);
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const { x, y } = getPos(e, canvas);
+    const ctx = canvasRef.current.getContext("2d");
+    const { x, y } = getPos(e);
     ctx.beginPath();
     ctx.moveTo(x, y);
   };
 
-  const handleCanvasMove = (e) => {
-    if (!isDrawing || !canvasRef.current || isSignatureSaved) return;
+  const moveDraw = (e) => {
+    if (!isDrawing || isSignatureSaved) return;
     e.preventDefault();
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const { x, y } = getPos(e, canvas);
+    const ctx = canvasRef.current.getContext("2d");
+    const { x, y } = getPos(e);
     ctx.lineTo(x, y);
     ctx.stroke();
   };
 
-  const handleCanvasEnd = (e) => {
-    if (!canvasRef.current) return;
-    e && e.preventDefault();
+  const endDraw = () => {
     setIsDrawing(false);
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.closePath();
+    canvasRef.current?.getContext("2d").closePath();
   };
 
-  const clearSignature = () => {
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
-  };
-
-  const saveSignature = () => {
-    if (!projectName.trim()) {
-      showToast('Please enter project name', 'error');
-      return;
-    }
-    if (!scopeOfWork.trim()) {
-      showToast('Please enter scope of work', 'error');
-      return;
-    }
-    if (!agreementDate) {
-      showToast('Please select a date', 'error');
-      return;
-    }
-
-    if (!canvasRef.current) return;
+  const clearPad = () => {
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    let hasDrawing = false;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    setIsSignatureSaved(false);
+    setSignatureImage(null);
+    setShowStamp(false);
+  };
 
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] > 128) {
-        hasDrawing = true;
-        break;
-      }
+  // 3. ACTIONS & TEMPLATES
+  const handleImportBid = (e) => {
+    const bidId = e.target.value;
+    if (!bidId) return;
+    const bid = bids.find(b => b.id.toString() === bidId);
+    if (bid) {
+        setProjectName(bid.project_name);
+        // Smart Scope Generation
+        const text = `Contract for ${bid.project_name}.\n\nTotal Estimate: $${bid.sale_price}\nIncludes materials listed in estimate.\n`;
+        setScopeOfWork(text);
     }
+  };
 
-    if (!hasDrawing) {
-      showToast('Please draw your signature', 'error');
-      return;
+  const addTemplate = (type) => {
+    let text = "";
+    if (type === "LIABILITY") text = "\n[LIABILITY WAIVER]\nContractor is not responsible for pre-existing damage to plumbing, electrical, or structural elements discovered during work.\n";
+    if (type === "PAYMENT") text = "\n[PAYMENT TERMS]\n50% Deposit required to schedule. Balance due immediately upon substantial completion.\n";
+    if (type === "CHANGE") {
+        setContractType("CHANGE_ORDER");
+        text = "\n[CHANGE ORDER]\nThis agreement modifies the original contract. All additional costs listed above are due immediately.\n";
     }
+    setScopeOfWork(prev => prev + text);
+  };
 
-    const signatureDataUrl = canvas.toDataURL('image/png');
-    setSignatureImage(signatureDataUrl);
+  const saveAgreement = () => {
+    if (!projectName || !scopeOfWork) return alert("Please fill out the contract details.");
+    
+    // Capture Signature
+    const canvas = canvasRef.current;
+    const dataUrl = canvas.toDataURL("image/png");
+    
+    // Check if empty (basic check)
+    const blank = document.createElement("canvas");
+    blank.width = canvas.width; blank.height = canvas.height;
+    if (dataUrl === blank.toDataURL()) return alert("Please sign the document.");
+
+    setSignatureImage(dataUrl);
     setIsSignatureSaved(true);
-
-    localStorage.setItem(
-      'signoff_agreement',
-      JSON.stringify({
-        projectName,
-        scopeOfWork,
-        agreementDate,
-        signatureDataUrl,
-        timestamp: new Date().toISOString()
-      })
-    );
-
-    showToast('Agreement Signed!', 'success');
+    
+    // Save to LocalStorage
+    const payload = { projectName, scopeOfWork, agreementDate, signatureDataUrl: dataUrl };
+    localStorage.setItem("signoff_agreement", JSON.stringify(payload));
+    
+    // Trigger Animation
+    setTimeout(() => setShowStamp(true), 100);
   };
 
   const newAgreement = () => {
-    if (!confirm('Start a new agreement? Current agreement will be saved.')) return;
-
-    setProjectName('');
-    setScopeOfWork('');
-    setAgreementDate(new Date().toISOString().split('T')[0]);
-    setIsSignatureSaved(false);
-    setSignatureImage(null);
-    clearSignature();
-    showToast('Ready for new agreement', 'info');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if(!confirm("Clear current agreement?")) return;
+    setProjectName(""); setScopeOfWork(""); setIsSignatureSaved(false); setShowStamp(false); setSignatureImage(null);
+    setTimeout(setupCanvas, 100);
   };
-
-  const showToast = (message, type) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  const toastBg = (type) =>
-    type === 'success' ? '#22c55e' : type === 'error' ? '#ff4444' : '#888';
 
   return (
-    <div
-      className="min-h-screen w-full max-w-2xl mx-auto p-4"
-      style={{ backgroundColor: '#1a1a1a' }}
-    >
-      {/* Header */}
-      <div className="mb-8 pt-4">
-        <div className="flex items-center gap-2 mb-2">
-          <FileText size={32} style={{ color: '#FF6700' }} />
-          <h1
-            className="text-3xl md:text-4xl font-bold"
-            style={{
-              fontFamily: "'Oswald', sans-serif",
-              letterSpacing: '0.03em',
-              color: '#f5f5f5'
-            }}
-          >
-            SIGNOFF
-          </h1>
-        </div>
-        <p style={{ color: '#888' }}>Digital Agreement & Signature Pad</p>
-      </div>
-
-      {/* Agreement Details */}
-      <div
-        className="p-4 md:p-6 rounded-lg mb-6"
-        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
-      >
-        <div
-          style={{
-            fontSize: '1.25rem',
-            fontWeight: '700',
-            marginBottom: '16px',
-            color: '#FF6700',
-            fontFamily: "'Oswald', sans-serif"
-          }}
-        >
-          Agreement Details
-        </div>
-
-        {/* Project Name */}
-        <div className="mb-4">
-          <label
-            className="block font-semibold mb-2 text-sm"
-            style={{ color: '#f5f5f5' }}
-          >
-            Project Name
-          </label>
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            disabled={isSignatureSaved}
-            placeholder="e.g., Smith Kitchen Remodel"
-            maxLength={100}
-            style={{
-              backgroundColor: '#1a1a1a',
-              border: '2px solid #404040',
-              color: '#f5f5f5',
-              minHeight: '50px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              width: '100%',
-              fontFamily: "'Inter', sans-serif",
-              opacity: isSignatureSaved ? 0.6 : 1,
-              cursor: isSignatureSaved ? 'not-allowed' : 'text'
-            }}
-            onFocus={(e) =>
-              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
-            }
-            onBlur={(e) => (e.target.style.borderColor = '#404040')}
-          />
-        </div>
-
-        {/* Date */}
-        <div className="mb-4">
-          <label
-            className="block font-semibold mb-2 text-sm"
-            style={{ color: '#f5f5f5' }}
-          >
-            Date
-          </label>
-          <input
-            type="date"
-            value={agreementDate}
-            onChange={(e) => setAgreementDate(e.target.value)}
-            disabled={isSignatureSaved}
-            style={{
-              backgroundColor: '#1a1a1a',
-              border: '2px solid #404040',
-              color: '#f5f5f5',
-              minHeight: '50px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              width: '100%',
-              fontFamily: "'Inter', sans-serif",
-              opacity: isSignatureSaved ? 0.6 : 1,
-              cursor: isSignatureSaved ? 'not-allowed' : 'text'
-            }}
-            onFocus={(e) =>
-              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
-            }
-            onBlur={(e) => (e.target.style.borderColor = '#404040')}
-          />
-        </div>
-
-        {/* Scope of Work */}
-        <div className="mb-4">
-          <label
-            className="block font-semibold mb-2 text-sm"
-            style={{ color: '#f5f5f5' }}
-          >
-            Scope of Work / Change Order
-          </label>
-          <textarea
-            value={scopeOfWork}
-            onChange={(e) => setScopeOfWork(e.target.value)}
-            disabled={isSignatureSaved}
-            placeholder="e.g., Customer agrees to additional $500 for wood rot repair..."
-            style={{
-              backgroundColor: '#1a1a1a',
-              border: '2px solid #404040',
-              color: '#f5f5f5',
-              minHeight: '100px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              width: '100%',
-              fontFamily: "'Inter', sans-serif",
-              opacity: isSignatureSaved ? 0.6 : 1,
-              cursor: isSignatureSaved ? 'not-allowed' : 'text',
-              resize: 'vertical'
-            }}
-            onFocus={(e) =>
-              !isSignatureSaved && (e.target.style.borderColor = '#FF6700')
-            }
-            onBlur={(e) => (e.target.style.borderColor = '#404040')}
-          />
-        </div>
-      </div>
-
-      {/* Signature Section */}
-      <div
-        className="p-4 md:p-6 rounded-lg"
-        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
-      >
-        <div
-          style={{
-            fontSize: '1.25rem',
-            fontWeight: '700',
-            marginBottom: '16px',
-            color: '#FF6700',
-            fontFamily: "'Oswald', sans-serif"
-          }}
-        >
-          Digital Signature
-        </div>
-
-        {/* Pad */}
-        <div
-          style={{
-            backgroundColor: '#1a1a1a',
-            border: '2px solid #404040',
-            borderRadius: '12px',
-            padding: '12px',
-            marginBottom: '16px'
-          }}
-        >
-          <label
-            className="block font-semibold mb-2 text-sm"
-            style={{ color: '#f5f5f5' }}
-          >
-            Sign Below
-          </label>
-          {!isSignatureSaved ? (
-            <canvas
-              ref={canvasRef}
-              onMouseDown={handleCanvasStart}
-              onMouseMove={handleCanvasMove}
-              onMouseUp={handleCanvasEnd}
-              onMouseLeave={handleCanvasEnd}
-              onTouchStart={handleCanvasStart}
-              onTouchMove={handleCanvasMove}
-              onTouchEnd={handleCanvasEnd}
-              style={{
-                backgroundColor: '#0d0d0d',
-                borderRadius: '8px',
-                cursor: 'crosshair',
-                display: 'block',
-                width: '100%',
-                touchAction: 'none'
-              }}
-            />
-          ) : (
-            signatureImage && (
-              <img
-                src={signatureImage}
-                alt="Signature"
-                style={{
-                  width: '100%',
-                  borderRadius: '8px',
-                  display: 'block'
-                }}
-              />
-            )
-          )}
-        </div>
-
-        {/* Buttons / Locked state */}
-        {!isSignatureSaved ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-            <button
-              onClick={clearSignature}
-              style={{
-                backgroundColor: 'transparent',
-                border: '2px solid #404040',
-                color: '#f5f5f5',
-                fontWeight: '700',
-                minHeight: '50px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                fontFamily: "'Oswald', sans-serif"
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.borderColor = '#FF6700';
-                e.target.style.color = '#FF6700';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.borderColor = '#404040';
-                e.target.style.color = '#f5f5f5';
-              }}
-            >
-              <Eraser className="inline mr-2" size={18} /> Clear Pad
-            </button>
-            <button
-              onClick={saveSignature}
-              style={{
-                backgroundColor: '#FF6700',
-                color: '#1a1a1a',
-                fontWeight: '700',
-                minHeight: '50px',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                fontFamily: "'Oswald', sans-serif"
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#e55c00';
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow =
-                  '0 4px 12px rgba(255, 103, 0, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#FF6700';
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              <Check className="inline mr-2" size={18} /> Save Signature
-            </button>
-          </div>
-        ) : (
-          <div
-            style={{
-              backgroundColor: 'rgba(34, 197, 94, 0.1)',
-              border: '2px solid #22c55e',
-              borderRadius: '8px',
-              padding: '16px',
-              marginBottom: '16px',
-              textAlign: 'center'
-            }}
-          >
-            <p
-              style={{
-                color: '#22c55e',
-                fontWeight: '700',
-                marginBottom: '8px'
-              }}
-            >
-              Agreement Signed & Locked
-            </p>
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '48px',
-                height: '48px',
-                backgroundColor: '#22c55e',
-                color: '#1a1a1a',
-                borderRadius: '50%',
-                fontSize: '1.5rem',
-                margin: '8px 0'
-              }}
-            >
-              ✓
-            </div>
-            <p
-              style={{
-                color: '#888',
-                fontSize: '0.9rem',
-                marginTop: '8px',
-                marginBottom: '12px'
-              }}
-            >
-              This agreement is now digitally signed.
-            </p>
-            <button
-              onClick={newAgreement}
-              style={{
-                backgroundColor: '#FF6700',
-                color: '#1a1a1a',
-                fontWeight: '700',
-                minHeight: '50px',
-                border: 'none',
-                borderRadius: '8px',
-                width: '100%',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                fontFamily: "'Oswald', sans-serif"
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#e55c00';
-                e.target.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#FF6700';
-                e.target.style.transform = 'translateY(0)';
-              }}
-            >
-              <Plus className="inline mr-2" size={18} /> Create New Agreement
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Toast */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            backgroundColor: toastBg(toast.type),
-            color: '#1a1a1a',
-            padding: '16px 24px',
-            borderRadius: '8px',
-            fontWeight: '700',
-            zIndex: 9999,
-            animation: 'slideIn 0.3s ease-out'
-          }}
-        >
-          {toast.message}
-        </div>
-      )}
-
-      <style jsx>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(400px);
+    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-20">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+        .font-oswald { font-family: 'Oswald', sans-serif; }
+        
+        .paper-bg {
+            background-color: #f5f5f5;
+            background-image: radial-gradient(#ccc 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: #1a1a1a;
+        }
+        .stamp-enter {
+            animation: stamp-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
             opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+            transform: scale(2) rotate(-15deg);
+        }
+        @keyframes stamp-bounce {
+            0% { opacity: 0; transform: scale(3) rotate(-15deg); }
+            50% { opacity: 1; transform: scale(0.8) rotate(-15deg); }
+            100% { opacity: 1; transform: scale(1) rotate(-15deg); }
         }
       `}</style>
+
+      {/* HEADER */}
+      <header className="max-w-2xl mx-auto px-6 pt-8 pb-4 flex items-center gap-3">
+        <Link href="/" className="text-gray-400 hover:text-white"><ArrowLeft /></Link>
+        <div>
+            <h1 className="text-3xl font-oswald font-bold tracking-wide flex items-center gap-2">
+                SIGN<span className="text-[#FF6700]">OFF</span> <FileSignature size={24} className="text-[#FF6700]"/>
+            </h1>
+            <p className="text-xs text-gray-500">Digital Contracts & Change Orders</p>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-6 space-y-6">
+        
+        {/* SECTION 1: CONTRACT DETAILS */}
+        <div className="bg-[#262626] border border-[#404040] rounded-xl p-5 shadow-xl">
+            <div className="flex justify-between items-center mb-4 border-b border-[#404040] pb-2">
+                <h2 className="font-oswald text-lg text-gray-200">CONTRACT DETAILS</h2>
+                <div className="flex gap-2">
+                    {/* PROFITLOCK INTEGRATION */}
+                    <div className="relative">
+                        <select 
+                            onChange={handleImportBid}
+                            className="bg-[#1a1a1a] text-xs border border-[#404040] rounded px-2 py-1 text-gray-300 focus:border-[#FF6700] outline-none appearance-none pr-6"
+                        >
+                            <option value="">Import Bid...</option>
+                            {bids.map(b => <option key={b.id} value={b.id}>{b.project_name} (${b.sale_price})</option>)}
+                        </select>
+                        <Import size={12} className="absolute right-2 top-1.5 text-gray-500 pointer-events-none"/>
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Project Name</label>
+                    <input 
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        disabled={isSignatureSaved}
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none disabled:opacity-50"
+                        placeholder="e.g. Smith Kitchen Remodel"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Agreement Date</label>
+                        <input 
+                            type="date"
+                            value={agreementDate}
+                            onChange={(e) => setAgreementDate(e.target.value)}
+                            disabled={isSignatureSaved}
+                            className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none disabled:opacity-50"
+                        />
+                    </div>
+                    <div>
+                         <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Type</label>
+                         <div className="flex bg-[#1a1a1a] rounded-lg p-1 border border-[#404040]">
+                             <button onClick={() => setContractType("STANDARD")} className={`flex-1 text-xs font-bold rounded py-2 ${contractType === "STANDARD" ? "bg-[#FF6700] text-black" : "text-gray-500"}`}>STD</button>
+                             <button onClick={() => addTemplate("CHANGE")} className={`flex-1 text-xs font-bold rounded py-2 ${contractType === "CHANGE_ORDER" ? "bg-red-600 text-white" : "text-gray-500"}`}>CHANGE</button>
+                         </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-end mb-1">
+                        <label className="text-xs font-bold text-gray-500 uppercase block">Scope of Work</label>
+                        {/* SMART TEMPLATES */}
+                        {!isSignatureSaved && (
+                            <div className="flex gap-2">
+                                <button onClick={() => addTemplate("PAYMENT")} title="Add Payment Terms" className="text-[10px] bg-[#333] hover:bg-[#FF6700] hover:text-black px-2 py-1 rounded text-gray-300 transition flex items-center gap-1"><BadgeDollarSign size={10}/> TERMS</button>
+                                <button onClick={() => addTemplate("LIABILITY")} title="Add Liability Waiver" className="text-[10px] bg-[#333] hover:bg-red-600 hover:text-white px-2 py-1 rounded text-gray-300 transition flex items-center gap-1"><ShieldAlert size={10}/> WAIVER</button>
+                            </div>
+                        )}
+                    </div>
+                    <textarea 
+                        value={scopeOfWork}
+                        onChange={(e) => setScopeOfWork(e.target.value)}
+                        disabled={isSignatureSaved}
+                        rows={6}
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none disabled:opacity-50 font-mono text-sm"
+                        placeholder="Describe work, materials, and costs..."
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* SECTION 2: THE PAPER CONTRACT & SIGNATURE */}
+        <div className="relative">
+            <div className="paper-bg rounded-xl p-6 shadow-2xl overflow-hidden min-h-[300px] border-t-8 border-gray-300 relative">
+                {/* Paper Header */}
+                <div className="flex justify-between border-b-2 border-gray-300 pb-2 mb-4">
+                    <span className="font-oswald text-xl font-bold uppercase text-gray-800">{contractType.replace("_", " ")}</span>
+                    <span className="font-mono text-sm text-gray-600">{agreementDate}</span>
+                </div>
+                
+                <div className="mb-6 font-serif text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                    {scopeOfWork || "(Scope of work will appear here...)"}
+                </div>
+
+                {/* SIGNATURE AREA */}
+                <div className="mt-8">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">ACCEPTED BY (SIGN BELOW):</p>
+                    
+                    {/* CANVAS CONTAINER */}
+                    <div className="relative border-2 border-dashed border-gray-400 rounded bg-white h-48 w-full touch-none">
+                        {!isSignatureSaved ? (
+                            <canvas 
+                                ref={canvasRef}
+                                onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                                onTouchStart={startDraw} onTouchMove={moveDraw} onTouchEnd={endDraw}
+                                className="w-full h-full cursor-crosshair"
+                            />
+                        ) : (
+                            <img src={signatureImage} className="w-full h-full object-contain" />
+                        )}
+
+                        {/* STAMP ANIMATION */}
+                        {showStamp && (
+                            
+                            <div className="stamp-enter absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-4 border-green-600 text-green-600 font-black text-4xl p-2 rounded transform -rotate-12 opacity-80 pointer-events-none whitespace-nowrap">
+                                SIGNED & LOCKED
+                            </div>
+                        )}
+                    </div>
+                    
+                    {!isSignatureSaved && <p className="text-[10px] text-gray-400 mt-1 text-center">Use finger or mouse to sign.</p>}
+                </div>
+            </div>
+        </div>
+
+        {/* ACTION BUTTONS */}
+        <div className="grid grid-cols-2 gap-4 pb-12">
+            {!isSignatureSaved ? (
+                <>
+                    <button onClick={clearPad} className="border border-[#404040] text-gray-400 font-bold py-4 rounded-xl hover:bg-[#262626] transition flex justify-center items-center gap-2">
+                        <Eraser size={20}/> CLEAR
+                    </button>
+                    <button onClick={saveAgreement} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl hover:bg-[#e55c00] transition flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(255,103,0,0.3)]">
+                        <Check size={20}/> SIGN & LOCK
+                    </button>
+                </>
+            ) : (
+                <>
+                    <button onClick={newAgreement} className="border border-[#404040] text-gray-400 font-bold py-4 rounded-xl hover:bg-[#262626] transition flex justify-center items-center gap-2">
+                        <Plus size={20}/> NEW AGREEMENT
+                    </button>
+                    <button onClick={() => window.print()} className="bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition flex justify-center items-center gap-2">
+                        <Download size={20}/> PRINT / PDF
+                    </button>
+                </>
+            )}
+        </div>
+
+      </main>
     </div>
   );
 }
