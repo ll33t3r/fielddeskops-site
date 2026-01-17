@@ -1,405 +1,324 @@
-﻿'use client';
+﻿"use client";
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from "react";
+import { createClient } from "../../../utils/supabase/client";
+import { 
+  Camera, Trash2, FileText, Printer, ArrowLeft, 
+  AlertTriangle, CheckCircle, File, Loader2, Image as ImageIcon
+} from "lucide-react";
+import Link from "next/link";
 
-export default function SiteSnapPage() {
+export default function SiteSnap() {
+  const supabase = createClient();
+  
+  // STATE
   const [photos, setPhotos] = useState([]);
-  const [currentImageBase64, setCurrentImageBase64] = useState(null);
-  const [jobName, setJobName] = useState('');
-  const [photoTag, setPhotoTag] = useState('BEFORE WORK');
-  const [photoNotes, setPhotoNotes] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  
+  // FORM STATE
+  const [jobs, setJobs] = useState([]); // From ProfitLock
+  const [selectedJob, setSelectedJob] = useState("");
+  const [customJob, setCustomJob] = useState("");
+  const [tag, setTag] = useState("BEFORE"); // BEFORE, AFTER, DOCS
+  const [notes, setNotes] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [fileToUpload, setFileToUpload] = useState(null);
+  
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // Load from localStorage
+  // 1. LOAD DATA
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('fdo_sitesnap_v2');
-      if (stored) setPhotos(JSON.parse(stored));
-    } catch (e) {
-      console.error('Error loading photos', e);
-    }
+    loadData();
   }, []);
 
-  // Handle camera input
-  const handleCamera = (e) => {
+  const loadData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // A. Load Jobs from ProfitLock (Smart Integration)
+    const { data: bids } = await supabase.from("bids").select("project_name").order("created_at", { ascending: false });
+    if (bids) setJobs(bids.map(b => b.project_name));
+
+    // B. Load Photos
+    const { data: savedPhotos } = await supabase
+      .from("site_photos")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (savedPhotos) setPhotos(savedPhotos);
+    setLoading(false);
+  };
+
+  // 2. HANDLE CAMERA
+  const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setFileToUpload(file);
+      
+      // Create Preview
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        setCurrentImageBase64(ev.target?.result);
-      };
-      reader.readAsDataURL(e.target.files[0]);
+      reader.onload = (ev) => setPreview(ev.target.result);
+      reader.readAsDataURL(file);
     }
   };
 
-  // Save entry
-  const saveEntry = () => {
-    if (!jobName || !currentImageBase64) {
-      alert('Please enter a Job Name and take a photo.');
+  // 3. UPLOAD TO SUPABASE
+  const savePhoto = async () => {
+    const finalJobName = customJob || selectedJob;
+    if (!finalJobName) return alert("Select or enter a Job Name");
+    if (!fileToUpload) return alert("Take a photo first");
+
+    setUploading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // A. Upload Image to Storage Bucket
+    // Path: user_id/job_name/timestamp.jpg
+    const fileName = `${user.id}/${finalJobName.replace(/\s/g, "_")}/${Date.now()}.jpg`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from("sitesnap")
+      .upload(fileName, fileToUpload);
+
+    if (uploadError) {
+      alert("Upload Failed: " + uploadError.message);
+      setUploading(false);
       return;
     }
 
-    const newEntry = {
-      id: Date.now(),
-      job: jobName,
-      tag: photoTag,
-      note: photoNotes,
-      img: currentImageBase64,
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+    // B. Get Public URL
+    const { data: { publicUrl } } = supabase.storage.from("sitesnap").getPublicUrl(fileName);
 
-    const updated = [newEntry, ...photos];
-    if (updated.length > 10) updated.pop();
+    // C. Save Metadata to DB
+    const { data: newEntry, error: dbError } = await supabase.from("site_photos").insert({
+      user_id: user.id,
+      job_name: finalJobName,
+      tag: tag,
+      notes: notes,
+      image_url: publicUrl
+    }).select().single();
 
-    setPhotos(updated);
-    localStorage.setItem('fdo_sitesnap_v2', JSON.stringify(updated));
-
-    setPhotoNotes('');
-    setJobName('');
-    setPhotoTag('BEFORE WORK');
-    setCurrentImageBase64(null);
+    if (newEntry) {
+      setPhotos([newEntry, ...photos]);
+      // Reset Form
+      setPreview(null);
+      setFileToUpload(null);
+      setNotes("");
+    }
+    
+    setUploading(false);
   };
 
-  const deletePhoto = (id) => {
-    if (!confirm('Delete this photo log?')) return;
-    const updated = photos.filter((p) => p.id !== id);
-    setPhotos(updated);
-    localStorage.setItem('fdo_sitesnap_v2', JSON.stringify(updated));
+  // 4. DELETE
+  const deletePhoto = async (id, path) => {
+    if(!confirm("Delete this photo?")) return;
+    // We only delete the DB entry for safety, or we could delete storage too.
+    // Let's delete DB entry for now.
+    const { error } = await supabase.from("site_photos").delete().eq("id", id);
+    if (!error) {
+      setPhotos(photos.filter(p => p.id !== id));
+    }
   };
 
-  const getTagColor = (tag) => {
-    if (tag.includes('DAMAGE')) return 'text-red-500';
-    if (tag.includes('SAFETY')) return 'text-orange-500';
-    return 'text-white';
+  // HELPER: TAG COLORS
+  const getTagStyle = (t) => {
+    if (t === "BEFORE") return "bg-red-900/40 text-red-500 border-red-900";
+    if (t === "AFTER") return "bg-green-900/40 text-green-500 border-green-900";
+    return "bg-yellow-900/40 text-yellow-500 border-yellow-900";
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-20">
       <style jsx global>{`
-        :root {
-          --bg-dark: #1a1a1a;
-          --surface: #262626;
-          --accent: #ff6700;
-          --border: #404040;
-          --text-main: #ffffff;
-          --text-muted: #a3a3a3;
-        }
-
-        .sitesnap-card {
-          background-color: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-        }
-
-        .sitesnap-input {
-          background-color: var(--bg-dark);
-          border: 1px solid var(--border);
-          color: #ffffff;
-          border-radius: 6px;
-          padding: 12px;
-          width: 100%;
-          font-size: 16px;
-          transition: border-color 0.2s;
-        }
-
-        .sitesnap-input:focus {
-          outline: none;
-          border-color: var(--accent);
-        }
-
-        .sitesnap-btn-primary {
-          background-color: var(--accent);
-          color: white;
-          font-weight: 700;
-          padding: 16px;
-          border-radius: 6px;
-          transition: transform 0.1s;
-          width: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 8px;
-          border: none;
-          cursor: pointer;
-        }
-
-        .sitesnap-btn-primary:active {
-          transform: scale(0.98);
-        }
-
-        .photo-wrapper {
-          position: relative;
-          border-radius: 8px;
-          overflow: hidden;
-          border: 1px solid var(--border);
-        }
-
-        .watermark-overlay {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
-          padding: 15px;
-          color: white;
-        }
-
-        .sitesnap-print-modal {
-          display: none;
-          position: fixed;
-          inset: 0;
-          background: white;
-          color: black;
-          z-index: 50;
-          overflow-y: auto;
-          padding: 20px;
-        }
-
-        .sitesnap-print-modal.active {
-          display: block;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+        .font-oswald { font-family: 'Oswald', sans-serif; }
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          .sitesnap-print-modal,
-          .sitesnap-print-modal * {
-            visibility: visible;
-          }
-          .sitesnap-print-modal {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 0;
-            overflow: visible;
-          }
-          .no-print {
-            display: none !important;
-          }
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; color: black; }
+            .no-print { display: none !important; }
         }
       `}</style>
 
-      <div className="pb-20 bg-[#1a1a1a] min-h-screen">
-        <div className="sticky top-0 z-40 bg-[#1a1a1a] border-b border-[#333] p-4 shadow-lg">
-          <div className="flex justify-between items-center max-w-md mx-auto">
-            <h1 className="text-2xl font-bold tracking-wide">
-              <i className="fa-solid fa-camera text-[#ff6700] mr-2" />
-              SiteSnap
-            </h1>
-            <span className="text-xs text-neutral-500 font-mono">V2.0</span>
-          </div>
-        </div>
+      {/* HEADER */}
+      <header className="max-w-xl mx-auto px-6 pt-8 pb-4 flex items-center gap-3 no-print">
+        <Link href="/" className="text-gray-400 hover:text-white"><ArrowLeft /></Link>
+        <h1 className="text-3xl font-oswald font-bold tracking-wide">
+           SITE<span className="text-[#FF6700]">SNAP</span>
+        </h1>
+      </header>
 
-        <div className="max-w-md mx-auto p-4 space-y-6">
-          <div className="sitesnap-card p-4 shadow-xl">
-            <h2 className="text-lg mb-4 text-[#ff6700] border-b border-[#333] pb-2">New Entry</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-[#a3a3a3] uppercase font-bold mb-1 block">
-                  Job Name / Location
-                </label>
-                <input
-                  className="sitesnap-input"
-                  type="text"
-                  placeholder="e.g. Smith Residence - Master Bath"
-                  value={jobName}
-                  onChange={(e) => setJobName(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-[#a3a3a3] uppercase font-bold mb-1 block">
-                  Tag
-                </label>
-                <select
-                  className="sitesnap-input"
-                  value={photoTag}
-                  onChange={(e) => setPhotoTag(e.target.value)}
+      <main className="max-w-xl mx-auto px-6">
+        
+        {/* === UPLOAD CARD === */}
+        <div className="bg-[#262626] border border-[#404040] rounded-xl p-4 shadow-xl mb-8 no-print">
+            
+            {/* 1. JOB SELECTOR */}
+            <div className="mb-4">
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Select Job</label>
+                <select 
+                    value={selectedJob} 
+                    onChange={(e)=>setSelectedJob(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none mb-2"
                 >
-                  <option value="BEFORE WORK">Before Work</option>
-                  <option value="AFTER WORK">After Work</option>
-                  <option value="EXISTING DAMAGE">Existing Damage</option>
-                  <option value="SAFETY HAZARD">Safety Hazard</option>
-                  <option value="MATERIAL DROP">Material Drop</option>
+                    <option value="">-- Select Active Job --</option>
+                    {jobs.map(j => <option key={j} value={j}>{j}</option>)}
+                    <option value="custom">Other / New Job</option>
                 </select>
-              </div>
+                {(selectedJob === "custom" || selectedJob === "") && (
+                    <input 
+                        type="text" 
+                        placeholder="Or type Job Name..." 
+                        value={customJob}
+                        onChange={(e)=>setCustomJob(e.target.value)}
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none"
+                    />
+                )}
+            </div>
 
-              <div>
-                <label className="text-xs text-[#a3a3a3] uppercase font-bold mb-1 block">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  className="sitesnap-input"
-                  rows={2}
-                  placeholder="Describe the issue..."
-                  value={photoNotes}
-                  onChange={(e) => setPhotoNotes(e.target.value)}
-                />
-              </div>
+            {/* 2. TAG TOGGLES */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+                <button 
+                    onClick={()=>setTag("BEFORE")}
+                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="BEFORE" ? "bg-red-600 border-red-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
+                >
+                    <AlertTriangle size={20} /> BEFORE
+                </button>
+                <button 
+                    onClick={()=>setTag("AFTER")}
+                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="AFTER" ? "bg-green-600 border-green-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
+                >
+                    <CheckCircle size={20} /> AFTER
+                </button>
+                <button 
+                    onClick={()=>setTag("DOCS")}
+                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="DOCS" ? "bg-yellow-600 border-yellow-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
+                >
+                    <File size={20} /> DOCS
+                </button>
+            </div>
 
-              <input
-                type="file"
-                id="sitesnap-camera-input"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleCamera}
-              />
-
-              <button
-                type="button"
-                onClick={() => document.getElementById('sitesnap-camera-input')?.click()}
-                className="sitesnap-btn-primary"
-                style={{ backgroundColor: '#333', border: '1px solid #555' }}
-              >
-                <i className="fa-solid fa-camera fa-lg" /> TAKE PHOTO
-              </button>
-
-              {currentImageBase64 && (
-                <div className="relative rounded-lg overflow-hidden border border-[#ff6700]">
-                  <img
-                    src={currentImageBase64}
-                    alt="Preview"
-                    className="w-full h-48 object-cover opacity-50"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white font-bold text-xl">PHOTO READY</span>
-                  </div>
+            {/* 3. CAMERA INPUT */}
+            {!preview ? (
+                <div 
+                    onClick={()=>fileInputRef.current.click()}
+                    className="border-2 border-dashed border-[#404040] rounded-xl h-48 flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-[#FF6700] hover:text-[#FF6700] transition bg-[#1a1a1a]"
+                >
+                    <Camera size={48} className="mb-2" />
+                    <span className="font-oswald uppercase tracking-wide">Tap to Snap Photo</span>
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" capture="environment" className="hidden" />
                 </div>
-              )}
-
-              <button
-                type="button"
-                onClick={saveEntry}
-                className="sitesnap-btn-primary shadow-lg shadow-orange-900/20"
-              >
-                ADD TO LOG
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between items-end mb-3">
-              <h2 className="text-white text-xl">Photo Log</h2>
-              <span className="text-xs bg-[#333] px-2 py-1 rounded text-[#a3a3a3]">
-                {photos.length} Photos
-              </span>
-            </div>
-
-            {photos.length === 0 ? (
-              <div className="text-center py-10 opacity-50">
-                <i className="fa-solid fa-images text-4xl mb-3 text-[#444]" />
-                <p className="text-sm text-[#a3a3a3]">No photos logged yet.</p>
-              </div>
             ) : (
-              <div className="space-y-4">
-                {photos.map((p) => (
-                  <div key={p.id} className="photo-wrapper bg-[#262626]">
-                    <img src={p.img} alt="Photo" className="w-full h-64 object-cover" />
-                    <div className="watermark-overlay">
-                      <div className="flex justify-between items-end">
-                        <div>
-                          <div className={`font-bold text-lg leading-none ${getTagColor(p.tag)}`}>
-                            {p.tag}
-                          </div>
-                          <div className="text-sm font-bold text-white mt-1">{p.job}</div>
-                          <div className="text-xs text-gray-300 mt-1">
-                            {p.date} • {p.time}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => deletePhoto(p.id)}
-                          className="text-gray-400 hover:text-red-500"
-                        >
-                          <i className="fa-solid fa-trash" />
-                        </button>
-                      </div>
-                      {p.note && (
-                        <div className="mt-2 text-xs italic text-gray-300 border-l-2 border-[#ff6700] pl-2">
-                          {p.note}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                <div className="relative rounded-xl overflow-hidden border border-[#FF6700]">
+                    <img src={preview} className="w-full h-64 object-cover" />
+                    <button onClick={()=>{setPreview(null); setFileToUpload(null)}} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full text-white hover:bg-red-600"><Trash2 size={20}/></button>
+                </div>
             )}
-          </div>
 
-          {photos.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowPrintModal(true)}
-              className="w-full py-4 text-[#a3a3a3] font-bold hover:text-white transition"
-            >
-              <i className="fa-solid fa-file-pdf mr-2" />
-              GENERATE PDF REPORT
-            </button>
-          )}
+            {/* 4. NOTES & SAVE */}
+            <div className="mt-4">
+                <input 
+                    type="text" 
+                    placeholder="Notes (e.g. Broken pipe under sink)" 
+                    value={notes}
+                    onChange={(e)=>setNotes(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none mb-3"
+                />
+                <button 
+                    onClick={savePhoto}
+                    disabled={uploading}
+                    className="w-full bg-[#FF6700] text-black font-oswald font-bold text-lg py-4 rounded-lg hover:bg-[#cc5200] transition flex items-center justify-center gap-2"
+                >
+                    {uploading ? <Loader2 className="animate-spin" /> : <Camera />} 
+                    {uploading ? "UPLOADING..." : "SAVE TO CLOUD"}
+                </button>
+            </div>
         </div>
 
-        {showPrintModal && (
-          <div className="sitesnap-print-modal active">
-            <div className="max-w-3xl mx-auto">
-              <div className="flex justify-between items-start border-b-4 border-[#ff6700] pb-4 mb-6">
-                <div>
-                  <h1 className="text-4xl text-black font-bold mb-1">FIELD REPORT</h1>
-                  <p className="text-sm text-gray-500">
-                    Generated: {new Date().toLocaleString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-black">SITESNAP</div>
-                  <div className="text-xs text-gray-400">Powered by FieldDeskOps</div>
-                </div>
-              </div>
+        {/* === GALLERY === */}
+        <div className="flex justify-between items-end mb-4 no-print">
+            <h2 className="text-xl font-oswald font-bold text-white">HISTORY ({photos.length})</h2>
+            {photos.length > 0 && (
+                <button onClick={()=>setShowPrintModal(true)} className="text-xs bg-[#333] px-3 py-1.5 rounded flex items-center gap-2 hover:bg-white hover:text-black transition">
+                    <Printer size={14} /> GENERATE REPORT
+                </button>
+            )}
+        </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                {photos.map((p) => (
-                  <div key={p.id} className="border border-gray-200 p-2 break-inside-avoid">
-                    <img
-                      src={p.img}
-                      alt="Photo"
-                      className="w-full h-64 object-contain bg-gray-50 border border-gray-100 mb-2"
-                    />
-                    <div className="p-2">
-                      <div className="font-bold text-black text-sm">{p.tag}</div>
-                      <div className="text-xs text-gray-500 mb-2">
-                        {p.date} @ {p.time}
-                      </div>
-                      <div className="text-sm font-bold text-black">{p.job}</div>
-                      {p.note && (
-                        <div className="text-xs text-gray-600 mt-1 italic">
-                          &quot;{p.note}&quot;
+        {loading ? <Loader2 className="animate-spin text-[#FF6700] mx-auto no-print" /> : (
+            <div className="space-y-4 no-print">
+                {photos.map(p => (
+                    <div key={p.id} className="bg-[#262626] border border-[#404040] rounded-xl overflow-hidden shadow-lg">
+                        <div className="relative h-56 bg-black">
+                            <img src={p.image_url} className="w-full h-full object-contain" />
+                            <div className="absolute top-2 left-2">
+                                <span className={`px-2 py-1 rounded text-xs font-bold border ${getTagStyle(p.tag)}`}>{p.tag}</span>
+                            </div>
                         </div>
-                      )}
+                        <div className="p-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-bold text-lg leading-none">{p.job_name}</h3>
+                                    <p className="text-xs text-gray-500 mt-1">{new Date(p.created_at).toLocaleString()}</p>
+                                </div>
+                                <button onClick={()=>deletePhoto(p.id)} className="text-gray-600 hover:text-red-500"><Trash2 size={18}/></button>
+                            </div>
+                            {p.notes && <p className="mt-2 text-sm text-gray-300 italic border-l-2 border-[#FF6700] pl-3">{p.notes}</p>}
+                        </div>
                     </div>
-                  </div>
                 ))}
-              </div>
-
-              <div className="mt-10 pt-4 border-t border-gray-200 text-xs text-gray-400 text-center">
-                Legal Documentation • Time-Stamped & Geotagged • FieldDeskOps
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.print();
-                  setTimeout(() => setShowPrintModal(false), 400);
-                }}
-                className="no-print fixed bottom-6 right-6 bg-black text-white px-6 py-3 rounded-full shadow-xl font-bold"
-              >
-                CLOSE & PRINT
-              </button>
             </div>
-          </div>
         )}
-      </div>
-    </>
+      </main>
+
+      {/* === PRINT MODAL (THE REPORT) === */}
+      {showPrintModal && (
+        <div id="print-area" className="bg-white text-black min-h-screen p-8 fixed inset-0 z-50 overflow-auto">
+            <div className="max-w-4xl mx-auto">
+                <div className="border-b-4 border-[#FF6700] pb-6 mb-8 flex justify-between items-end">
+                    <div>
+                        <h1 className="text-5xl font-oswald font-bold text-black">FIELD REPORT</h1>
+                        <p className="text-gray-500 mt-2">Generated: {new Date().toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                        <h2 className="text-xl font-bold font-oswald text-[#FF6700]">SITE<span className="text-black">SNAP</span></h2>
+                        <p className="text-xs text-gray-400">FieldDeskOps.com</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                    {photos.map(p => (
+                        <div key={p.id} className="break-inside-avoid mb-4">
+                            <div className="border border-gray-200 rounded p-2">
+                                <img src={p.image_url} className="w-full h-64 object-contain bg-gray-50 mb-3" />
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className={`px-2 py-0.5 text-xs font-bold rounded border ${p.tag === 'BEFORE' ? 'bg-red-100 text-red-700 border-red-200' : p.tag === 'AFTER' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>
+                                        {p.tag}
+                                    </span>
+                                    <span className="text-xs text-gray-400">{new Date(p.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <h3 className="font-bold text-sm">{p.job_name}</h3>
+                                {p.notes && <p className="text-xs italic text-gray-600 mt-1">"{p.notes}"</p>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-12 text-center text-xs text-gray-400 border-t pt-4">
+                    <p>Documentation generated automatically by SiteSnap. Securely stored via FieldDeskOps.</p>
+                </div>
+
+                <button onClick={()=>window.print()} className="no-print fixed bottom-8 right-8 bg-black text-white px-8 py-4 rounded-full font-bold shadow-2xl hover:scale-105 transition flex items-center gap-2">
+                    <Printer /> PRINT PDF
+                </button>
+                <button onClick={()=>setShowPrintModal(false)} className="no-print fixed top-8 right-8 bg-gray-200 text-black p-2 rounded-full hover:bg-gray-300">
+                    <ArrowLeft />
+                </button>
+            </div>
+        </div>
+      )}
+
+    </div>
   );
 }
