@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
-  Package, Plus, Minus, Trash2, Download, AlertTriangle, 
-  Search, X, Loader2 
+  Package, Plus, Minus, Search, Trash2, X, Loader2, 
+  Truck, Copy, ClipboardList, ChevronDown 
 } from "lucide-react";
 import Link from "next/link";
 
@@ -12,276 +12,292 @@ export default function LoadOut() {
   const supabase = createClient();
   
   // STATE
+  const [vans, setVans] = useState([]);
+  const [currentVan, setCurrentVan] = useState(null);
   const [items, setItems] = useState([]);
+  
   const [newItem, setNewItem] = useState("");
-  const [newQuantity, setNewQuantity] = useState("1");
-  const [newCategory, setNewCategory] = useState("tools");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [toast, setToast] = useState(null);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
   
-  // EDITING STATE (Modal)
+  // EDITING
   const [editingItem, setEditingItem] = useState(null);
-  
-  // LONG PRESS LOGIC
   const timerRef = useRef(null);
 
-  // 1. LOAD FROM CLOUD
+  // THE "ESSENTIALS" LIST (Auto-fill)
+  const defaultLoadout = [
+    { name: "Wax Ring", category: "parts", color: "#c2410c" },
+    { name: "Angle Stop", category: "parts", color: "#c2410c" },
+    { name: "Teflon Tape", category: "supplies", color: "#c2410c" },
+    { name: "PVC Glue", category: "supplies", color: "#c2410c" },
+    { name: "P-Trap", category: "parts", color: "#c2410c" },
+    { name: "Coupling", category: "parts", color: "#c2410c" },
+    { name: "Supply Line", category: "parts", color: "#c2410c" },
+    { name: "Flapper", category: "parts", color: "#c2410c" },
+    { name: "Ball Valve", category: "parts", color: "#c2410c" },
+    { name: "Drain Snake", category: "tools", color: "#262626" }
+  ];
+
+  // 1. INITIAL LOAD
   useEffect(() => {
-    fetchInventory();
+    initFleet();
   }, []);
 
-  const fetchInventory = async () => {
+  const initFleet = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // A. Fetch Vans
+    let { data: userVans } = await supabase.from("vans").select("*").order("created_at");
+
+    // B. If no vans, create "Main Van"
+    if (!userVans || userVans.length === 0) {
+        const { data: newVan } = await supabase.from("vans").insert({
+            user_id: user.id,
+            name: "Van #1"
+        }).select().single();
+        userVans = [newVan];
+    }
+
+    setVans(userVans);
+    setCurrentVan(userVans[0]);
+    fetchInventory(userVans[0].id);
+  };
+
+  // 2. FETCH INVENTORY FOR SPECIFIC VAN
+  const fetchInventory = async (vanId) => {
+    setLoading(true);
     const { data } = await supabase
       .from("inventory")
       .select("*")
+      .eq("van_id", vanId) // Filter by Van
       .order("created_at", { ascending: false });
     
-    if (data) setItems(data);
-    setLoading(false);
-  };
-
-  // 2. ADD ITEM
-  const addItem = async () => {
-    if (!newItem.trim()) { showToast("Enter item name", "error"); return; }
-    const qty = parseInt(newQuantity) || 1;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Optimistic Update
-    const tempItem = { 
-        id: Math.random(), 
-        name: newItem, 
-        quantity: qty, 
-        category: newCategory, 
-        color: "#262626",
-        created_at: new Date().toISOString() 
-    };
-    setItems([tempItem, ...items]);
-    setNewItem(""); 
-    setNewQuantity("1");
-
-    // Save to Cloud
-    const { data, error } = await supabase.from("inventory").insert({
-      user_id: user.id,
-      name: tempItem.name,
-      quantity: tempItem.quantity,
-      category: tempItem.category,
-      color: tempItem.color
-    }).select();
-
-    if (data) {
-        // Swap temp ID with real ID
-        setItems(prev => prev.map(i => i.id === tempItem.id ? data[0] : i));
-        showToast("✅ Added to Cloud", "success");
+    // C. AUTO-FILL CHECK
+    if (!data || data.length === 0) {
+        // Seeding logic
+        await seedEssentials(vanId);
+    } else {
+        setItems(data);
+        setLoading(false);
     }
   };
 
-  // 3. UPDATE QUANTITY (+/-)
+  const seedEssentials = async (vanId) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    // Prepare batch insert
+    const rows = defaultLoadout.map(item => ({
+        user_id: user.id,
+        van_id: vanId,
+        name: item.name,
+        category: item.category,
+        quantity: 1, // Default to 1 so they see it
+        color: item.color
+    }));
+
+    const { data } = await supabase.from("inventory").insert(rows).select();
+    if (data) setItems(data);
+    setLoading(false);
+    showToast("✨ Van stocked with Essentials!", "success");
+  };
+
+  // 3. CREATE NEW VAN
+  const createVan = async () => {
+    const name = prompt("Enter Name for new Vehicle/Location:");
+    if (!name) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // PAYWALL CHECK (Placeholder)
+    // if (vans.length >= 1 && !user.isPro) return alert("Upgrade to Pro for multiple vans!");
+
+    const { data: newVan, error } = await supabase.from("vans").insert({
+        user_id: user.id,
+        name: name
+    }).select().single();
+
+    if (newVan) {
+        setVans([...vans, newVan]);
+        setCurrentVan(newVan);
+        fetchInventory(newVan.id); // This will trigger auto-fill for the new van!
+        showToast(`Created ${name}`, "success");
+    }
+  };
+
+  // 4. SWITCH VAN
+  const switchVan = (vanId) => {
+    const selected = vans.find(v => v.id === vanId);
+    setCurrentVan(selected);
+    fetchInventory(vanId);
+  };
+
+  // 5. COPY SHOPPING LIST
+  const copyShoppingList = () => {
+    // Logic: Copy items with quantity 0 or 1 (Low stock)
+    const toBuy = items.filter(i => i.quantity < 2);
+    
+    if (toBuy.length === 0) {
+        showToast("Stock is good! Nothing to buy.", "info");
+        return;
+    }
+
+    const text = `SHOPPING LIST (${currentVan.name}):\n\n` + 
+                 toBuy.map(i => `- ${i.name}`).join("\n");
+    
+    navigator.clipboard.writeText(text);
+    showToast("📋 Shopping List Copied!", "success");
+  };
+
+  // ... (STANDARD ADD/UPDATE/DELETE/LONGPRESS LOGIC - Same as V2 but with van_id) ...
+
+  const addItem = async (e) => {
+    e.preventDefault();
+    if (!newItem.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const temp = { id: Math.random(), name: newItem, quantity: 1, color: "#262626", category: "tools" };
+    setItems([temp, ...items]);
+    setNewItem("");
+
+    const { data } = await supabase.from("inventory").insert({
+        user_id: user.id,
+        van_id: currentVan.id, // Link to current Van
+        name: temp.name,
+        quantity: 1,
+        color: "#262626"
+    }).select();
+
+    if (data) setItems(prev => prev.map(i => i.id === temp.id ? data[0] : i));
+  };
+
   const updateQuantity = async (id, currentQty, change) => {
     const newQty = Math.max(0, Number(currentQty) + change);
-    
-    // Optimistic UI
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
-    
-    // Cloud Update
     await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
   };
 
-  // 4. SAVE EDIT (Name/Color)
   const saveEdit = async () => {
     if (!editingItem) return;
-    
     setItems(prev => prev.map(i => i.id === editingItem.id ? editingItem : i));
-    
     await supabase.from("inventory").update({ 
         name: editingItem.name, 
-        color: editingItem.color,
-        category: editingItem.category
+        color: editingItem.color 
     }).eq("id", editingItem.id);
-    
     setEditingItem(null);
-    showToast("Item Updated", "success");
   };
 
-  // 5. DELETE
   const deleteItem = async (id) => {
-    if(!confirm("Delete this item?")) return;
+    if(!confirm("Remove item?")) return;
     setItems(prev => prev.filter(i => i.id !== id));
     await supabase.from("inventory").delete().eq("id", id);
     setEditingItem(null);
-    showToast("Item Deleted", "info");
   };
 
-  // LONG PRESS HANDLERS
-  const startPress = (item) => {
-    timerRef.current = setTimeout(() => {
-      setEditingItem(item); // Open Modal
-    }, 600); // 600ms hold time
-  };
+  const startPress = (item) => { timerRef.current = setTimeout(() => setEditingItem(item), 600); };
+  const endPress = () => { clearTimeout(timerRef.current); };
 
-  const endPress = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  // UTILS
-  const showToast = (message, type) => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  const exportCSV = () => {
-    const csv = [
-      ["Item", "Quantity", "Category", "Date Added"],
-      ...items.map(item => [item.name, item.quantity, item.category, new Date(item.created_at).toLocaleDateString()])
-    ].map(row => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `loadout-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-  };
-
-  // FILTERS
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const lowStockItems = items.filter(item => item.quantity < 3);
-
-  // COLORS
+  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
+  
   const colors = [
-    { hex: "#262626", name: "Default" },
+    { hex: "#262626", name: "Charcoal" },
+    { hex: "#c2410c", name: "Orange" }, // Matched to your image
     { hex: "#7f1d1d", name: "Red" },
-    { hex: "#c2410c", name: "Orange" },
-    { hex: "#a16207", name: "Yellow" },
     { hex: "#14532d", name: "Green" },
     { hex: "#1e3a8a", name: "Blue" },
   ];
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-20">
-      <style jsx global>{`
+    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-32">
+       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
         .font-oswald { font-family: 'Oswald', sans-serif; }
         .no-select { user-select: none; -webkit-user-select: none; }
       `}</style>
 
-      {/* HEADER */}
-      <div className="max-w-5xl mx-auto px-6 pt-8 pb-4">
-        <div className="flex items-center gap-2 mb-2">
-            <Package size={32} className="text-[#FF6700]" />
-            <h1 className="text-3xl md:text-4xl font-bold font-oswald text-[#f5f5f5] tracking-wide">LOADOUT</h1>
+      {/* HEADER WITH VAN SWITCHER */}
+      <header className="max-w-5xl mx-auto px-6 pt-8 pb-6">
+        <div className="flex justify-between items-start">
+            <Link href="/" className="flex items-center gap-2 hover:opacity-80">
+                <Package className="w-8 h-8 text-[#FF6700]" />
+                <h1 className="text-3xl font-oswald font-bold tracking-wide">LOAD<span className="text-[#FF6700]">OUT</span></h1>
+            </Link>
+
+            {/* VAN SELECTOR */}
+            <div className="relative group z-20">
+                <button className="flex items-center gap-2 bg-[#262626] border border-[#404040] px-4 py-2 rounded-lg font-bold text-sm uppercase hover:border-[#FF6700] transition">
+                    <Truck size={16} className="text-[#FF6700]" />
+                    {currentVan ? currentVan.name : "Loading..."}
+                    <ChevronDown size={14} />
+                </button>
+                
+                {/* DROPDOWN */}
+                <div className="absolute right-0 top-full mt-2 w-48 bg-[#262626] border border-[#404040] rounded-xl shadow-xl overflow-hidden hidden group-hover:block">
+                    {vans.map(v => (
+                        <button 
+                            key={v.id}
+                            onClick={() => switchVan(v.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-[#333] border-b border-[#333] last:border-0 text-sm font-bold"
+                        >
+                            {v.name}
+                        </button>
+                    ))}
+                    <button 
+                        onClick={createVan}
+                        className="w-full text-left px-4 py-3 bg-[#FF6700] text-black font-bold text-sm hover:bg-[#cc5200] flex items-center gap-2"
+                    >
+                        <Plus size={14} /> ADD NEW VAN
+                    </button>
+                </div>
+            </div>
         </div>
-        <p className="text-gray-500 text-sm">Cloud Inventory • Hold Card to Edit</p>
-      </div>
+      </header>
 
       <main className="max-w-5xl mx-auto px-6">
         
-        {/* STATS */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-[#262626] border border-[#404040] rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-[#FF6700]">{items.reduce((a,b) => a + Number(b.quantity), 0)}</div>
-                <div className="text-xs text-gray-500 uppercase">Total Count</div>
-            </div>
-            <div className="bg-[#262626] border border-[#404040] rounded-lg p-4 text-center">
-                <div className={`text-3xl font-bold ${lowStockItems.length > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                    {items.length}
-                </div>
-                <div className="text-xs text-gray-500 uppercase">Unique Items</div>
-            </div>
-        </div>
-
-        {/* ADD NEW BAR */}
-        <div className="bg-[#262626] border border-[#404040] rounded-xl p-4 mb-6">
-            <h2 className="text-[#FF6700] font-oswald font-bold mb-3">ADD NEW ITEM</h2>
-            <div className="flex flex-col md:flex-row gap-3">
-                <input 
-                    type="text" 
-                    value={newItem} 
-                    onChange={(e)=>setNewItem(e.target.value)} 
-                    placeholder="Item Name..." 
-                    className="flex-[2] bg-[#1a1a1a] border border-[#404040] rounded px-4 py-3 focus:border-[#FF6700] outline-none" 
-                />
-                <input 
-                    type="number" 
-                    value={newQuantity} 
-                    onChange={(e)=>setNewQuantity(e.target.value)} 
-                    className="flex-1 bg-[#1a1a1a] border border-[#404040] rounded px-4 py-3 focus:border-[#FF6700] outline-none text-center" 
-                />
-                <select 
-                    value={newCategory} 
-                    onChange={(e)=>setNewCategory(e.target.value)} 
-                    className="flex-1 bg-[#1a1a1a] border border-[#404040] rounded px-4 py-3 focus:border-[#FF6700] outline-none"
-                >
-                    {['tools', 'supplies', 'safety', 'equipment', 'parts'].map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-                </select>
-                <button onClick={addItem} className="bg-[#FF6700] text-black font-bold px-6 rounded hover:bg-[#cc5200] transition">
-                    <Plus />
-                </button>
-            </div>
-        </div>
-
-        {/* SEARCH & EXPORT */}
-        <div className="flex gap-3 mb-6">
+        {/* ADD & SEARCH */}
+        <form onSubmit={addItem} className="flex gap-2 mb-6">
             <div className="relative flex-1">
                 <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
                 <input 
                     type="text" 
-                    value={searchTerm} 
-                    onChange={(e)=>setSearchTerm(e.target.value)} 
-                    placeholder="Search..." 
-                    className="w-full bg-[#262626] border border-[#404040] rounded-lg pl-10 pr-4 py-3 focus:border-[#FF6700] outline-none"
+                    value={newItem}
+                    onChange={(e)=>setNewItem(e.target.value)}
+                    placeholder="Add item..."
+                    className="w-full bg-[#262626] border border-[#404040] rounded-xl pl-10 pr-4 py-3 focus:border-[#FF6700] outline-none transition"
                 />
             </div>
-            <button onClick={exportCSV} className="bg-[#262626] border border-[#404040] text-gray-400 px-4 rounded-lg hover:text-white hover:border-white transition">
-                <Download />
+            <button type="submit" className="bg-[#FF6700] text-black rounded-xl w-12 flex items-center justify-center font-bold hover:bg-[#cc5200]">
+                <Plus />
             </button>
-        </div>
+        </form>
 
-        {/* THE PEGBOARD (GRID) */}
-        {loading ? <div className="text-center py-10"><Loader2 className="animate-spin inline text-[#FF6700]" /></div> : (
+        {/* GRID */}
+        {loading ? <div className="text-center py-10"><Loader2 className="animate-spin inline text-[#FF6700]"/></div> : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 no-select">
-                {filteredItems.map(item => (
+                {items.map(item => (
                     <div 
                         key={item.id}
                         onMouseDown={() => startPress(item)}
                         onMouseUp={endPress}
                         onTouchStart={() => startPress(item)}
                         onTouchEnd={endPress}
-                        style={{ backgroundColor: item.color || '#262626' }}
-                        className="relative h-40 rounded-xl p-4 flex flex-col justify-between shadow-lg active:scale-95 transition-transform border border-white/5"
+                        style={{ backgroundColor: item.color }}
+                        className="relative h-32 rounded-xl p-4 flex flex-col justify-between shadow-lg active:scale-95 transition-transform"
                     >
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h3 className="font-oswald font-bold text-lg leading-tight shadow-black drop-shadow-md">{item.name}</h3>
-                                <span className="text-xs opacity-70 uppercase tracking-wider">{item.category}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between mt-2 bg-black/20 rounded-full p-1 backdrop-blur-sm">
+                        <h3 className="font-oswald font-bold text-lg leading-tight drop-shadow-md truncate">{item.name}</h3>
+                        
+                        <div className="flex items-center justify-between mt-2">
                             <button 
                                 onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, -1); }}
-                                className="w-8 h-8 bg-black/40 rounded-full flex items-center justify-center hover:bg-black/60 active:bg-red-500 transition"
+                                className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition"
                             >
                                 <Minus size={16} />
                             </button>
-                            
-                            <span className="text-2xl font-oswald font-bold mx-2">
-                                {item.quantity}
-                            </span>
-
+                            <span className="text-2xl font-oswald font-bold drop-shadow-md">{item.quantity}</span>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, 1); }}
-                                className="w-8 h-8 bg-black/40 rounded-full flex items-center justify-center hover:bg-black/60 active:bg-green-500 transition"
+                                className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition"
                             >
                                 <Plus size={16} />
                             </button>
@@ -292,48 +308,41 @@ export default function LoadOut() {
         )}
       </main>
 
+      {/* FOOTER ACTION BAR */}
+      <div className="fixed bottom-0 left-0 w-full bg-[#1a1a1a]/90 backdrop-blur border-t border-[#333] p-4 z-10">
+        <div className="max-w-5xl mx-auto flex justify-center">
+             <button 
+                onClick={copyShoppingList}
+                className="flex items-center gap-2 text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition"
+             >
+                <ClipboardList size={18} /> Copy Shopping List
+             </button>
+        </div>
+      </div>
+
       {/* EDIT MODAL */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 backdrop-blur-sm">
             <div className="bg-[#262626] border border-[#404040] w-full max-w-sm rounded-xl p-6 shadow-2xl relative">
                 <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
                 <h2 className="text-[#FF6700] font-oswald font-bold text-xl mb-6">EDIT ITEM</h2>
+                <input type="text" value={editingItem.name} onChange={(e)=>setEditingItem({...editingItem, name: e.target.value})} className="w-full bg-[#1a1a1a] border border-[#404040] rounded p-3 text-white mb-4" />
                 
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs text-gray-500 font-bold">NAME</label>
-                        <input type="text" value={editingItem.name} onChange={(e)=>setEditingItem({...editingItem, name: e.target.value})} className="w-full bg-[#1a1a1a] border border-[#404040] rounded p-3 text-white" />
-                    </div>
-                    <div>
-                        <label className="text-xs text-gray-500 font-bold">CATEGORY</label>
-                        <select value={editingItem.category} onChange={(e)=>setEditingItem({...editingItem, category: e.target.value})} className="w-full bg-[#1a1a1a] border border-[#404040] rounded p-3 text-white">
-                             {['tools', 'supplies', 'safety', 'equipment', 'parts'].map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-xs text-gray-500 font-bold">COLOR CODE</label>
-                        <div className="grid grid-cols-6 gap-2 mt-2">
-                            {colors.map(c => (
-                                <button 
-                                    key={c.hex} 
-                                    onClick={()=>setEditingItem({...editingItem, color: c.hex})}
-                                    style={{ backgroundColor: c.hex }}
-                                    className={`h-8 rounded ${editingItem.color === c.hex ? 'ring-2 ring-white' : ''}`}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                    <div className="flex gap-2 pt-4">
-                        <button onClick={()=>deleteItem(editingItem.id)} className="flex-1 bg-red-900/30 text-red-500 border border-red-900 py-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Delete</button>
-                        <button onClick={saveEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded font-bold">SAVE CHANGES</button>
-                    </div>
+                <div className="grid grid-cols-5 gap-2 mb-6">
+                    {colors.map(c => (
+                        <button key={c.hex} onClick={()=>setEditingItem({...editingItem, color: c.hex})} style={{ backgroundColor: c.hex }} className={`h-8 rounded ${editingItem.color === c.hex ? 'ring-2 ring-white' : ''}`} />
+                    ))}
+                </div>
+
+                <div className="flex gap-2">
+                    <button onClick={()=>deleteItem(editingItem.id)} className="flex-1 bg-red-900/30 text-red-500 border border-red-900 py-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Delete</button>
+                    <button onClick={saveEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded font-bold">SAVE</button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* TOAST */}
-      {toast && <div className={`fixed bottom-6 right-6 px-6 py-3 rounded shadow-xl font-bold text-white ${toast.type==='error'?'bg-red-500':'bg-green-500'}`}>{toast.message}</div>}
+      {toast && <div className={`fixed bottom-20 right-6 px-6 py-3 rounded shadow-xl font-bold text-white ${toast.type==='success'?'bg-green-600':'bg-blue-600'}`}>{toast.msg}</div>}
     </div>
   );
 }
