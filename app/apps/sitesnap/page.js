@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   Camera, Trash2, FileText, Printer, ArrowLeft, 
-  AlertTriangle, CheckCircle, File, Loader2, Image as ImageIcon
+  AlertTriangle, CheckCircle, File, Loader2, Upload, Share, FileDigit 
 } from "lucide-react";
 import Link from "next/link";
 
@@ -17,15 +17,17 @@ export default function SiteSnap() {
   const [uploading, setUploading] = useState(false);
   
   // FORM STATE
-  const [jobs, setJobs] = useState([]); // From ProfitLock
+  const [jobs, setJobs] = useState([]); 
   const [selectedJob, setSelectedJob] = useState("");
   const [customJob, setCustomJob] = useState("");
-  const [tag, setTag] = useState("BEFORE"); // BEFORE, AFTER, DOCS
+  const [tag, setTag] = useState("BEFORE");
   const [notes, setNotes] = useState("");
   const [preview, setPreview] = useState(null);
   const [fileToUpload, setFileToUpload] = useState(null);
+  const [fileType, setFileType] = useState("image"); // 'image' or 'pdf'
   
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
   // 1. LOAD DATA
@@ -37,11 +39,11 @@ export default function SiteSnap() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // A. Load Jobs from ProfitLock (Smart Integration)
+    // Load Jobs
     const { data: bids } = await supabase.from("bids").select("project_name").order("created_at", { ascending: false });
     if (bids) setJobs(bids.map(b => b.project_name));
 
-    // B. Load Photos
+    // Load Photos/Docs
     const { data: savedPhotos } = await supabase
       .from("site_photos")
       .select("*")
@@ -51,16 +53,22 @@ export default function SiteSnap() {
     setLoading(false);
   };
 
-  // 2. HANDLE CAMERA
+  // 2. HANDLE FILE SELECTION (Camera or Upload)
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setFileToUpload(file);
       
-      // Create Preview
-      const reader = new FileReader();
-      reader.onload = (ev) => setPreview(ev.target.result);
-      reader.readAsDataURL(file);
+      // Check type
+      if (file.type.includes("pdf")) {
+        setFileType("pdf");
+        setPreview("PDF_ICON"); // Placeholder for logic
+      } else {
+        setFileType("image");
+        const reader = new FileReader();
+        reader.onload = (ev) => setPreview(ev.target.result);
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -68,14 +76,14 @@ export default function SiteSnap() {
   const savePhoto = async () => {
     const finalJobName = customJob || selectedJob;
     if (!finalJobName) return alert("Select or enter a Job Name");
-    if (!fileToUpload) return alert("Take a photo first");
+    if (!fileToUpload) return alert("Select a file first");
 
     setUploading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
-    // A. Upload Image to Storage Bucket
-    // Path: user_id/job_name/timestamp.jpg
-    const fileName = `${user.id}/${finalJobName.replace(/\s/g, "_")}/${Date.now()}.jpg`;
+    // Path: user_id/job_name/timestamp.ext
+    const ext = fileType === "pdf" ? "pdf" : "jpg";
+    const fileName = `${user.id}/${finalJobName.replace(/\s/g, "_")}/${Date.now()}.${ext}`;
     
     const { error: uploadError } = await supabase.storage
       .from("sitesnap")
@@ -87,11 +95,11 @@ export default function SiteSnap() {
       return;
     }
 
-    // B. Get Public URL
+    // Get Public URL
     const { data: { publicUrl } } = supabase.storage.from("sitesnap").getPublicUrl(fileName);
 
-    // C. Save Metadata to DB
-    const { data: newEntry, error: dbError } = await supabase.from("site_photos").insert({
+    // Save DB Entry
+    const { data: newEntry } = await supabase.from("site_photos").insert({
       user_id: user.id,
       job_name: finalJobName,
       tag: tag,
@@ -101,7 +109,6 @@ export default function SiteSnap() {
 
     if (newEntry) {
       setPhotos([newEntry, ...photos]);
-      // Reset Form
       setPreview(null);
       setFileToUpload(null);
       setNotes("");
@@ -111,22 +118,40 @@ export default function SiteSnap() {
   };
 
   // 4. DELETE
-  const deletePhoto = async (id, path) => {
-    if(!confirm("Delete this photo?")) return;
-    // We only delete the DB entry for safety, or we could delete storage too.
-    // Let's delete DB entry for now.
+  const deletePhoto = async (id) => {
+    if(!confirm("Delete this entry?")) return;
     const { error } = await supabase.from("site_photos").delete().eq("id", id);
     if (!error) {
       setPhotos(photos.filter(p => p.id !== id));
     }
   };
 
-  // HELPER: TAG COLORS
+  // 5. SHARE HANDLER
+  const handleShare = async () => {
+    const text = `Field Report Generated: ${new Date().toLocaleDateString()}\n${photos.length} Items Logged.`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "FieldDeskOps Report",
+          text: text,
+          url: window.location.href // Shares link to app
+        });
+      } catch (err) {
+        console.log("Share cancelled");
+      }
+    } else {
+      alert("Share feature not supported on this device. Use Print/PDF.");
+    }
+  };
+
   const getTagStyle = (t) => {
     if (t === "BEFORE") return "bg-red-900/40 text-red-500 border-red-900";
     if (t === "AFTER") return "bg-green-900/40 text-green-500 border-green-900";
     return "bg-yellow-900/40 text-yellow-500 border-yellow-900";
   };
+
+  // Helper to check if URL is PDF (for rendering history)
+  const isPdf = (url) => url && url.toLowerCase().includes(".pdf");
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-20">
@@ -154,7 +179,7 @@ export default function SiteSnap() {
         {/* === UPLOAD CARD === */}
         <div className="bg-[#262626] border border-[#404040] rounded-xl p-4 shadow-xl mb-8 no-print">
             
-            {/* 1. JOB SELECTOR */}
+            {/* JOB SELECTOR */}
             <div className="mb-4">
                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Select Job</label>
                 <select 
@@ -177,63 +202,65 @@ export default function SiteSnap() {
                 )}
             </div>
 
-            {/* 2. TAG TOGGLES */}
+            {/* TAGS */}
             <div className="grid grid-cols-3 gap-2 mb-4">
-                <button 
-                    onClick={()=>setTag("BEFORE")}
-                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="BEFORE" ? "bg-red-600 border-red-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
-                >
-                    <AlertTriangle size={20} /> BEFORE
-                </button>
-                <button 
-                    onClick={()=>setTag("AFTER")}
-                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="AFTER" ? "bg-green-600 border-green-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
-                >
-                    <CheckCircle size={20} /> AFTER
-                </button>
-                <button 
-                    onClick={()=>setTag("DOCS")}
-                    className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 transition-all ${tag==="DOCS" ? "bg-yellow-600 border-yellow-600 text-white shadow-lg scale-105" : "bg-[#1a1a1a] border-[#333] text-gray-500 opacity-70"}`}
-                >
-                    <File size={20} /> DOCS
-                </button>
+                <button onClick={()=>setTag("BEFORE")} className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 ${tag==="BEFORE" ? "bg-red-600 border-red-600 text-white" : "bg-[#1a1a1a] border-[#333] text-gray-500"}`}><AlertTriangle size={20} /> BEFORE</button>
+                <button onClick={()=>setTag("AFTER")} className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 ${tag==="AFTER" ? "bg-green-600 border-green-600 text-white" : "bg-[#1a1a1a] border-[#333] text-gray-500"}`}><CheckCircle size={20} /> AFTER</button>
+                <button onClick={()=>setTag("DOCS")} className={`p-3 rounded-lg font-bold text-sm border-2 flex flex-col items-center gap-1 ${tag==="DOCS" ? "bg-yellow-600 border-yellow-600 text-white" : "bg-[#1a1a1a] border-[#333] text-gray-500"}`}><File size={20} /> DOCS</button>
             </div>
 
-            {/* 3. CAMERA INPUT */}
+            {/* ACTION BUTTONS (CAMERA / UPLOAD) */}
             {!preview ? (
-                <div 
-                    onClick={()=>fileInputRef.current.click()}
-                    className="border-2 border-dashed border-[#404040] rounded-xl h-48 flex flex-col items-center justify-center text-gray-500 cursor-pointer hover:border-[#FF6700] hover:text-[#FF6700] transition bg-[#1a1a1a]"
-                >
-                    <Camera size={48} className="mb-2" />
-                    <span className="font-oswald uppercase tracking-wide">Tap to Snap Photo</span>
-                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" capture="environment" className="hidden" />
+                <div className="grid grid-cols-2 gap-3 h-32 mb-4">
+                    <button 
+                        onClick={()=>cameraInputRef.current.click()}
+                        className="border-2 border-dashed border-[#404040] rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-[#FF6700] hover:text-[#FF6700] bg-[#1a1a1a] transition"
+                    >
+                        <Camera size={32} className="mb-2" />
+                        <span className="font-oswald text-sm">TAKE PHOTO</span>
+                    </button>
+                    <button 
+                        onClick={()=>fileInputRef.current.click()}
+                        className="border-2 border-dashed border-[#404040] rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-[#FF6700] hover:text-[#FF6700] bg-[#1a1a1a] transition"
+                    >
+                        <Upload size={32} className="mb-2" />
+                        <span className="font-oswald text-sm">UPLOAD FILE</span>
+                    </button>
+                    
+                    {/* HIDDEN INPUTS */}
+                    <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*" capture="environment" className="hidden" />
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,application/pdf" className="hidden" />
                 </div>
             ) : (
-                <div className="relative rounded-xl overflow-hidden border border-[#FF6700]">
-                    <img src={preview} className="w-full h-64 object-cover" />
+                <div className="relative rounded-xl overflow-hidden border border-[#FF6700] mb-4 bg-black flex items-center justify-center h-48">
+                    {fileType === 'pdf' ? (
+                        <div className="text-center text-red-500">
+                             <FileDigit size={48} className="mx-auto mb-2" />
+                             <span className="font-bold">PDF DOCUMENT SELECTED</span>
+                        </div>
+                    ) : (
+                        <img src={preview} className="w-full h-full object-cover" />
+                    )}
                     <button onClick={()=>{setPreview(null); setFileToUpload(null)}} className="absolute top-2 right-2 bg-black/50 p-2 rounded-full text-white hover:bg-red-600"><Trash2 size={20}/></button>
                 </div>
             )}
 
-            {/* 4. NOTES & SAVE */}
-            <div className="mt-4">
-                <input 
-                    type="text" 
-                    placeholder="Notes (e.g. Broken pipe under sink)" 
-                    value={notes}
-                    onChange={(e)=>setNotes(e.target.value)}
-                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none mb-3"
-                />
-                <button 
-                    onClick={savePhoto}
-                    disabled={uploading}
-                    className="w-full bg-[#FF6700] text-black font-oswald font-bold text-lg py-4 rounded-lg hover:bg-[#cc5200] transition flex items-center justify-center gap-2"
-                >
-                    {uploading ? <Loader2 className="animate-spin" /> : <Camera />} 
-                    {uploading ? "UPLOADING..." : "SAVE TO CLOUD"}
-                </button>
-            </div>
+            {/* NOTES & SAVE */}
+            <input 
+                type="text" 
+                placeholder="Notes (e.g. Receipt for supplies)" 
+                value={notes}
+                onChange={(e)=>setNotes(e.target.value)}
+                className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none mb-3"
+            />
+            <button 
+                onClick={savePhoto}
+                disabled={uploading}
+                className="w-full bg-[#FF6700] text-black font-oswald font-bold text-lg py-4 rounded-lg hover:bg-[#cc5200] transition flex items-center justify-center gap-2"
+            >
+                {uploading ? <Loader2 className="animate-spin" /> : <Camera />} 
+                {uploading ? "SAVING..." : "SAVE PHOTO / DOCUMENT"}
+            </button>
         </div>
 
         {/* === GALLERY === */}
@@ -241,7 +268,7 @@ export default function SiteSnap() {
             <h2 className="text-xl font-oswald font-bold text-white">HISTORY ({photos.length})</h2>
             {photos.length > 0 && (
                 <button onClick={()=>setShowPrintModal(true)} className="text-xs bg-[#333] px-3 py-1.5 rounded flex items-center gap-2 hover:bg-white hover:text-black transition">
-                    <Printer size={14} /> GENERATE REPORT
+                    <Printer size={14} /> REPORTS
                 </button>
             )}
         </div>
@@ -249,22 +276,29 @@ export default function SiteSnap() {
         {loading ? <Loader2 className="animate-spin text-[#FF6700] mx-auto no-print" /> : (
             <div className="space-y-4 no-print">
                 {photos.map(p => (
-                    <div key={p.id} className="bg-[#262626] border border-[#404040] rounded-xl overflow-hidden shadow-lg">
-                        <div className="relative h-56 bg-black">
-                            <img src={p.image_url} className="w-full h-full object-contain" />
-                            <div className="absolute top-2 left-2">
-                                <span className={`px-2 py-1 rounded text-xs font-bold border ${getTagStyle(p.tag)}`}>{p.tag}</span>
+                    <div key={p.id} className="bg-[#262626] border border-[#404040] rounded-xl overflow-hidden shadow-lg flex">
+                        <div className="w-1/3 bg-black flex items-center justify-center relative">
+                            {isPdf(p.image_url) ? (
+                                <Link href={p.image_url} target="_blank" className="text-gray-400 hover:text-white flex flex-col items-center">
+                                    <FileDigit size={32} />
+                                    <span className="text-[10px] mt-1">OPEN PDF</span>
+                                </Link>
+                            ) : (
+                                <img src={p.image_url} className="w-full h-32 object-cover" />
+                            )}
+                            <div className="absolute top-1 left-1">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${getTagStyle(p.tag)}`}>{p.tag}</span>
                             </div>
                         </div>
-                        <div className="p-4">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h3 className="font-bold text-lg leading-none">{p.job_name}</h3>
-                                    <p className="text-xs text-gray-500 mt-1">{new Date(p.created_at).toLocaleString()}</p>
-                                </div>
-                                <button onClick={()=>deletePhoto(p.id)} className="text-gray-600 hover:text-red-500"><Trash2 size={18}/></button>
+                        <div className="w-2/3 p-3 flex flex-col justify-between">
+                            <div>
+                                <h3 className="font-bold text-md leading-tight">{p.job_name}</h3>
+                                <p className="text-xs text-gray-500 mt-1">{new Date(p.created_at).toLocaleDateString()}</p>
                             </div>
-                            {p.notes && <p className="mt-2 text-sm text-gray-300 italic border-l-2 border-[#FF6700] pl-3">{p.notes}</p>}
+                            <div className="flex justify-between items-end mt-2">
+                                {p.notes ? <p className="text-xs text-gray-300 italic truncate w-3/4">{p.notes}</p> : <span></span>}
+                                <button onClick={()=>deletePhoto(p.id)} className="text-gray-600 hover:text-red-500"><Trash2 size={16}/></button>
+                            </div>
                         </div>
                     </div>
                 ))}
@@ -272,7 +306,7 @@ export default function SiteSnap() {
         )}
       </main>
 
-      {/* === PRINT MODAL (THE REPORT) === */}
+      {/* === PRINT/SHARE MODAL === */}
       {showPrintModal && (
         <div id="print-area" className="bg-white text-black min-h-screen p-8 fixed inset-0 z-50 overflow-auto">
             <div className="max-w-4xl mx-auto">
@@ -283,7 +317,6 @@ export default function SiteSnap() {
                     </div>
                     <div className="text-right">
                         <h2 className="text-xl font-bold font-oswald text-[#FF6700]">SITE<span className="text-black">SNAP</span></h2>
-                        <p className="text-xs text-gray-400">FieldDeskOps.com</p>
                     </div>
                 </div>
 
@@ -291,11 +324,16 @@ export default function SiteSnap() {
                     {photos.map(p => (
                         <div key={p.id} className="break-inside-avoid mb-4">
                             <div className="border border-gray-200 rounded p-2">
-                                <img src={p.image_url} className="w-full h-64 object-contain bg-gray-50 mb-3" />
+                                {isPdf(p.image_url) ? (
+                                    <div className="h-48 flex flex-col items-center justify-center bg-gray-50 border border-dashed mb-2">
+                                        <FileDigit size={40} className="text-gray-400" />
+                                        <span className="text-xs text-gray-500 mt-2">[PDF DOCUMENT ATTACHED]</span>
+                                    </div>
+                                ) : (
+                                    <img src={p.image_url} className="w-full h-48 object-contain bg-gray-50 mb-2" />
+                                )}
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className={`px-2 py-0.5 text-xs font-bold rounded border ${p.tag === 'BEFORE' ? 'bg-red-100 text-red-700 border-red-200' : p.tag === 'AFTER' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>
-                                        {p.tag}
-                                    </span>
+                                    <span className="text-xs font-bold">{p.tag}</span>
                                     <span className="text-xs text-gray-400">{new Date(p.created_at).toLocaleDateString()}</span>
                                 </div>
                                 <h3 className="font-bold text-sm">{p.job_name}</h3>
@@ -305,13 +343,16 @@ export default function SiteSnap() {
                     ))}
                 </div>
 
-                <div className="mt-12 text-center text-xs text-gray-400 border-t pt-4">
-                    <p>Documentation generated automatically by SiteSnap. Securely stored via FieldDeskOps.</p>
+                {/* MODAL ACTION BUTTONS */}
+                <div className="no-print fixed bottom-8 right-8 flex gap-3">
+                    <button onClick={handleShare} className="bg-blue-600 text-white px-6 py-4 rounded-full font-bold shadow-xl hover:scale-105 transition flex items-center gap-2">
+                        <Share size={20} /> SHARE
+                    </button>
+                    <button onClick={()=>window.print()} className="bg-black text-white px-8 py-4 rounded-full font-bold shadow-xl hover:scale-105 transition flex items-center gap-2">
+                        <Printer size={20} /> PRINT PDF
+                    </button>
                 </div>
-
-                <button onClick={()=>window.print()} className="no-print fixed bottom-8 right-8 bg-black text-white px-8 py-4 rounded-full font-bold shadow-2xl hover:scale-105 transition flex items-center gap-2">
-                    <Printer /> PRINT PDF
-                </button>
+                
                 <button onClick={()=>setShowPrintModal(false)} className="no-print fixed top-8 right-8 bg-gray-200 text-black p-2 rounded-full hover:bg-gray-300">
                     <ArrowLeft />
                 </button>
