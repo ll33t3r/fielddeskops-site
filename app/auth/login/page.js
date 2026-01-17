@@ -2,31 +2,35 @@
 
 import { useState } from 'react'
 import { login } from './actions'
+import { useRouter } from 'next/navigation' // We need the router
 import { Loader2, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const router = useRouter()
 
   const handleSubmit = async (formData) => {
     setLoading(true)
     setError(null)
     
-    // We wrap the server action to catch errors
+    // Call the server
     const result = await login(formData)
     
-    // If we get here and there is a result with error, display it
     if (result?.error) {
+      // If error, stop loading and show message
       setError(result.error)
       setLoading(false)
+    } else if (result?.success) {
+      // If success, FORCE the navigation here
+      router.refresh() // Refresh to update middleware cache
+      router.push('/') // Go to Dashboard
     }
   }
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
-      
-      {/* BRANDING */}
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
           FIELD<span className="text-[#FF6700]">DESK</span>OPS
@@ -34,7 +38,6 @@ export default function LoginPage() {
         <p className="text-gray-500 text-sm mt-2">SECURE LOGIN</p>
       </div>
 
-      {/* LOGIN CARD */}
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
         <div className="flex justify-center mb-6">
           <div className="p-3 bg-[#1a1a1a] rounded-full border border-[#333]">
@@ -43,8 +46,6 @@ export default function LoginPage() {
         </div>
 
         <form action={handleSubmit} className="space-y-4">
-          
-          {/* EMAIL */}
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email Address</label>
             <input 
@@ -56,26 +57,23 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* PASSWORD */}
           <div>
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Password</label>
             <input 
               name="password"
               type="password" 
               required
-              placeholder="........"
+              placeholder="••••••••"
               className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
             />
           </div>
 
-          {/* ERROR MESSAGE */}
           {error && (
             <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm text-center">
               {error}
             </div>
           )}
 
-          {/* SUBMIT BUTTON */}
           <button 
             type="submit" 
             disabled={loading}
@@ -94,8 +92,7 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
-
-      <style jsx global>{`
+       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
         .font-inter { font-family: 'Inter', sans-serif; }
         .font-oswald { font-family: 'Oswald', sans-serif; }
