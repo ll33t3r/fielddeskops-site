@@ -1,9 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
-// CHANGED: Using relative path instead of @
 import { createClient } from '../utils/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import LogoutButton from '../components/LogoutButton'
 import {
@@ -12,28 +10,27 @@ import {
   Camera,
   PenTool,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  User
 } from 'lucide-react'
 
 export default function Home() {
-  const [isLoading, setIsLoading] = useState(true)
-  const router = useRouter()
+  const [userEmail, setUserEmail] = useState('Loading...')
   const supabase = createClient()
 
-  // ?? SECURITY CHECK (The Gatekeeper)
+  // Just fetch the user name for display. 
+  // We NO LONGER redirect here. We trust the Middleware to block intruders.
   useEffect(() => {
-    const checkUser = async () => {
+    const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        // If no user, kick them to login immediately
-        router.push('/auth/login')
+      if (user) {
+        setUserEmail(user.email)
       } else {
-        // If user exists, show the dashboard
-        setIsLoading(false)
+        setUserEmail('Guest')
       }
     }
-    checkUser()
-  }, [router, supabase])
+    getUser()
+  }, [supabase])
 
   const apps = [
     { name: 'ProfitLock', desc: 'Bid Calculator & Margin Protection', icon: Calculator, href: '/apps/profitlock', status: 'Beta' },
@@ -44,17 +41,6 @@ export default function Home() {
     { name: 'SafetyBrief', desc: 'OSHA Logs', icon: ShieldAlert, href: '/apps/safetybrief', status: 'Coming Soon' }
   ]
 
-  // While checking security, show a blank loading screen (so they don't see the dash)
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#FF6700] font-oswald text-xl animate-pulse">
-          VERIFYING ACCESS...
-        </div>
-      </div>
-    )
-  }
-
   return (
     <main className="min-h-screen bg-[#1a1a1a] text-white font-inter px-6 py-10">
       {/* HEADER */}
@@ -64,11 +50,13 @@ export default function Home() {
             <h1 className="text-5xl font-oswald font-bold">
               FIELD<span className="text-[#FF6700]">DESK</span>OPS
             </h1>
-            <p className="text-gray-400 mt-1">The Operating System for the Trades.</p>
+            <div className="flex items-center gap-2 mt-2 text-gray-400">
+               <User size={14} />
+               <span className="text-sm uppercase tracking-wider">{userEmail}</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-             {/* Logout Button Logic */}
-            <LogoutButton />
+             <LogoutButton />
           </div>
         </div>
       </div>
