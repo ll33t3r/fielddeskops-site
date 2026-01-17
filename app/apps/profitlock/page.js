@@ -1,38 +1,73 @@
 ﻿"use client";
 
-import { useState, useEffect } from 'react';
-import { Trash2, Save, Calculator } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { createClient } from "../../../utils/supabase/client"; // Cloud Connection
+import { Trash2, Save, Calculator, Loader2 } from "lucide-react";
 
 export default function ProfitLock() {
-  const [jobName, setJobName] = useState('');
+  const supabase = createClient();
+  
+  // STATE
+  const [jobName, setJobName] = useState("");
   const [materialsCost, setMaterialsCost] = useState(0);
   const [laborHours, setLaborHours] = useState(0);
   const [hourlyRate, setHourlyRate] = useState(75);
   const [markupPercent, setMarkupPercent] = useState(20);
   const [bidHistory, setBidHistory] = useState([]);
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false); // New loading state
 
+  // LOAD BIDS FROM SUPABASE (Replaces localStorage)
   useEffect(() => {
-    const stored = localStorage.getItem('profitlock_data');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setBidHistory(parsed.bidHistory || []);
-      setHourlyRate(parsed.hourlyRate || 75);
-      setMarkupPercent(parsed.markupPercent || 20);
-    }
+    fetchBids();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(
-      'profitlock_data',
-      JSON.stringify({
-        bidHistory,
-        hourlyRate,
-        markupPercent
-      })
-    );
-  }, [bidHistory, hourlyRate, markupPercent]);
+  const fetchBids = async () => {
+    // 1. Get User
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
+    // 2. Fetch Data
+    const { data, error } = await supabase
+      .from("bids")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching bids:", error);
+      return;
+    }
+
+    // 3. Map Database columns back to your App structure
+    const mappedBids = data.map(bid => {
+      // Re-calculate derived values for display
+      const cost = Number(bid.materials) + (Number(bid.hours) * Number(bid.rate));
+      const finalBid = Number(bid.sale_price);
+      const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
+      
+      // Format Date
+      const dateObj = new Date(bid.created_at);
+      const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const timeStr = dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+      return {
+        id: bid.id, // We need the ID to delete it later
+        jobName: bid.project_name,
+        materials: Number(bid.materials),
+        hours: Number(bid.hours),
+        hourlyRate: Number(bid.rate),
+        markup: Number(bid.margin),
+        cost: cost,
+        finalPrice: `$${finalBid.toFixed(2)}`,
+        grossMargin: Math.round(grossMargin),
+        date: `${dateStr} at ${timeStr}`
+      };
+    });
+
+    setBidHistory(mappedBids);
+  };
+
+  // MATH (Your original logic)
   const materials = parseFloat(materialsCost) || 0;
   const hours = parseFloat(laborHours) || 0;
   const rate = parseFloat(hourlyRate) || 75;
@@ -44,84 +79,71 @@ export default function ProfitLock() {
   const finalBid = cost + markupAmount;
   const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
 
+  // PROFIT METER (Your original logic)
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
     if (margin < 20) {
-      return {
-        color: '#ef4444',
-        label: '🚨 CRITICAL RISK',
-        sublabel: 'You are barely breaking even',
-        visualWidth
-      };
+      return { color: "#ef4444", label: "🚨 CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
     } else if (margin < 40) {
-      return {
-        color: '#eab308',
-        label: '⚠️ THIN MARGINS',
-        sublabel: 'You are surviving, but not growing',
-        visualWidth
-      };
+      return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
     } else if (margin < 60) {
-      return {
-        color: '#22c55e',
-        label: '✅ HEALTHY',
-        sublabel: 'This is where a real business lives',
-        visualWidth
-      };
+      return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
     } else {
-      return {
-        color: '#f97316',
-        label: '💰 AGGRESSIVE',
-        sublabel: 'High profit - watch for rejection risk',
-        visualWidth
-      };
+      return { color: "#f97316", label: "💰 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
     }
   };
 
   const meterInfo = getProfitMeterInfo(grossMargin);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2500);
   };
 
-  const saveBid = () => {
+  // SAVE TO SUPABASE (Replaces localStorage)
+  const saveBid = async () => {
     if (!jobName.trim()) {
-      showToast('Please enter a job name', 'error');
+      showToast("Please enter a job name", "error");
       return;
     }
     if (materials === 0 && hours === 0) {
-      showToast('Add materials or labor hours', 'error');
+      showToast("Add materials or labor hours", "error");
       return;
     }
 
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    const timeStr = now.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
+    setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      showToast("You must be logged in to save", "error");
+      setLoading(false);
+      return;
+    }
+
+    const profit = finalBid - cost;
+
+    // INSERT into Database
+    const { error } = await supabase.from("bids").insert({
+      user_id: user.id,
+      project_name: jobName,
+      materials: materials,
+      hours: hours,
+      rate: rate,
+      margin: markup,
+      sale_price: finalBid,
+      profit: profit
     });
 
-    const bid = {
-      jobName,
-      materials,
-      hours,
-      hourlyRate: rate,
-      markup,
-      cost,
-      finalPrice: `$${finalBid.toFixed(2)}`,
-      grossMargin: Math.round(grossMargin),
-      date: `${dateStr} at ${timeStr}`
-    };
-
-    setBidHistory([bid, ...bidHistory]);
-    setJobName('');
-    setMaterialsCost(0);
-    setLaborHours(0);
-    showToast('✅ Bid Saved!', 'success');
+    if (error) {
+      showToast(error.message, "error");
+    } else {
+      await fetchBids(); // Reload list from cloud
+      setJobName("");
+      setMaterialsCost(0);
+      setLaborHours(0);
+      showToast("✅ Bid Saved to Cloud!", "success");
+    }
+    setLoading(false);
   };
 
   const loadBidIntoCalculator = (bid) => {
@@ -130,98 +152,69 @@ export default function ProfitLock() {
     setLaborHours(bid.hours);
     setHourlyRate(bid.hourlyRate);
     setMarkupPercent(bid.markup);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteBid = (index) => {
-    setBidHistory(bidHistory.filter((_, i) => i !== index));
+  // DELETE FROM SUPABASE
+  const deleteBid = async (id, index) => {
+    if(!confirm("Delete this bid permanently?")) return;
+
+    // Optimistic Update (remove from UI immediately)
+    const newHistory = [...bidHistory];
+    newHistory.splice(index, 1);
+    setBidHistory(newHistory);
+
+    // Delete from Cloud
+    const { error } = await supabase.from("bids").delete().eq("id", id);
+    
+    if (error) {
+      showToast("Error deleting bid", "error");
+      fetchBids(); // Revert if failed
+    } else {
+      showToast("Bid deleted", "success");
+    }
   };
 
   return (
-    <div
-      className="min-h-screen w-full max-w-2xl mx-auto p-4"
-      style={{ backgroundColor: '#1a1a1a' }}
-    >
+    <div className="min-h-screen w-full max-w-2xl mx-auto p-4" style={{ backgroundColor: "#1a1a1a" }}>
+      
       {/* Header */}
       <div className="mb-8 pt-4">
         <div className="flex items-center gap-2 mb-2">
-          <Calculator size={32} style={{ color: '#FF6700' }} />
-          <h1
-            className="text-3xl md:text-4xl font-bold"
-            style={{
-              fontFamily: "'Oswald', sans-serif",
-              letterSpacing: '0.03em',
-              color: '#f5f5f5'
-            }}
-          >
+          <Calculator size={32} style={{ color: "#FF6700" }} />
+          <h1 className="text-3xl md:text-4xl font-bold" style={{ fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em", color: "#f5f5f5" }}>
             PROFITLOCK
           </h1>
-          <span
-            className="text-xs md:text-sm"
-            style={{ color: '#888', marginLeft: '8px' }}
-          >
-            V5
-          </span>
+          <span className="text-xs md:text-sm" style={{ color: "#888", marginLeft: "8px" }}>V5 CLOUD</span>
         </div>
-        <p style={{ color: '#888' }}>Real-time Bid Calculator</p>
+        <p style={{ color: "#888" }}>Real-time Bid Calculator</p>
       </div>
 
       {/* Calculator */}
-      <div
-        className="p-4 md:p-6 rounded-lg mb-6"
-        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
-      >
-        <div
-          style={{
-            fontSize: '1.25rem',
-            fontWeight: '700',
-            marginBottom: '16px',
-            color: '#FF6700',
-            fontFamily: "'Oswald', sans-serif",
-            letterSpacing: '0.03em'
-          }}
-        >
+      <div className="p-4 md:p-6 rounded-lg mb-6" style={{ backgroundColor: "#262626", border: "1px solid #404040" }}>
+        <div style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "16px", color: "#FF6700", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em" }}>
           Calculate Your Bid
         </div>
 
         {/* Job Name */}
         <div className="mb-4">
-          <label
-            className="block font-semibold mb-2 text-sm"
-            style={{ color: '#f5f5f5' }}
-          >
-            Job Name
-          </label>
+          <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Job Name</label>
           <input
             type="text"
             value={jobName}
             onChange={(e) => setJobName(e.target.value)}
             placeholder="e.g., Kitchen Sink Repair"
             maxLength={50}
-            style={{
-              backgroundColor: '#1a1a1a',
-              border: '2px solid #404040',
-              color: '#f5f5f5',
-              minHeight: '50px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              width: '100%',
-              fontFamily: "'Inter', sans-serif"
-            }}
-            onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
-            onBlur={(e) => (e.target.style.borderColor = '#404040')}
+            style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
+            onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
+            onBlur={(e) => (e.target.style.borderColor = "#404040")}
           />
         </div>
 
         {/* Materials & Labor */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <div>
-            <label
-              className="block font-semibold mb-2 text-sm"
-              style={{ color: '#f5f5f5' }}
-            >
-              Materials Cost ($)
-            </label>
+            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Materials Cost ($)</label>
             <input
               type="number"
               value={materialsCost}
@@ -229,27 +222,13 @@ export default function ProfitLock() {
               placeholder="0.00"
               min="0"
               step="0.01"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '2px solid #404040',
-                color: '#f5f5f5',
-                minHeight: '50px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                width: '100%',
-                fontFamily: "'Inter', sans-serif"
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
-              onBlur={(e) => (e.target.style.borderColor = '#404040')}
+              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
+              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
+              onBlur={(e) => (e.target.style.borderColor = "#404040")}
             />
           </div>
           <div>
-            <label
-              className="block font-semibold mb-2 text-sm"
-              style={{ color: '#f5f5f5' }}
-            >
-              Labor Hours
-            </label>
+            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Labor Hours</label>
             <input
               type="number"
               value={laborHours}
@@ -257,18 +236,9 @@ export default function ProfitLock() {
               placeholder="0"
               min="0"
               step="0.5"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '2px solid #404040',
-                color: '#f5f5f5',
-                minHeight: '50px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                width: '100%',
-                fontFamily: "'Inter', sans-serif"
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
-              onBlur={(e) => (e.target.style.borderColor = '#404040')}
+              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
+              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
+              onBlur={(e) => (e.target.style.borderColor = "#404040")}
             />
           </div>
         </div>
@@ -276,12 +246,7 @@ export default function ProfitLock() {
         {/* Rate & Markup */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           <div>
-            <label
-              className="block font-semibold mb-2 text-sm"
-              style={{ color: '#f5f5f5' }}
-            >
-              Hourly Rate ($)
-            </label>
+            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Hourly Rate ($)</label>
             <input
               type="number"
               value={hourlyRate}
@@ -289,27 +254,13 @@ export default function ProfitLock() {
               placeholder="75"
               min="0"
               step="5"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '2px solid #404040',
-                color: '#f5f5f5',
-                minHeight: '50px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                width: '100%',
-                fontFamily: "'Inter', sans-serif"
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
-              onBlur={(e) => (e.target.style.borderColor = '#404040')}
+              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
+              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
+              onBlur={(e) => (e.target.style.borderColor = "#404040")}
             />
           </div>
           <div>
-            <label
-              className="block font-semibold mb-2 text-sm"
-              style={{ color: '#f5f5f5' }}
-            >
-              Markup (%)
-            </label>
+            <label className="block font-semibold mb-2 text-sm" style={{ color: "#f5f5f5" }}>Markup (%)</label>
             <input
               type="number"
               value={markupPercent}
@@ -317,52 +268,28 @@ export default function ProfitLock() {
               placeholder="20"
               min="0"
               step="5"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '2px solid #404040',
-                color: '#f5f5f5',
-                minHeight: '50px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                width: '100%',
-                fontFamily: "'Inter', sans-serif"
-              }}
-              onFocus={(e) => (e.target.style.borderColor = '#FF6700')}
-              onBlur={(e) => (e.target.style.borderColor = '#404040')}
+              style={{ backgroundColor: "#1a1a1a", border: "2px solid #404040", color: "#f5f5f5", minHeight: "50px", padding: "12px 16px", borderRadius: "8px", width: "100%", fontFamily: "'Inter', sans-serif" }}
+              onFocus={(e) => (e.target.style.borderColor = "#FF6700")}
+              onBlur={(e) => (e.target.style.borderColor = "#404040")}
             />
           </div>
         </div>
 
         {/* Breakdown */}
-        <div
-          className="p-4 rounded-lg mb-6"
-          style={{ backgroundColor: '#1a1a1a', border: '1px solid #404040' }}
-        >
-          <div
-            className="flex justify-between mb-3 text-sm"
-            style={{ color: '#888' }}
-          >
+        <div className="p-4 rounded-lg mb-6" style={{ backgroundColor: "#1a1a1a", border: "1px solid #404040" }}>
+          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
             <span>Materials</span>
             <span>${materials.toFixed(2)}</span>
           </div>
-          <div
-            className="flex justify-between mb-3 text-sm"
-            style={{ color: '#888' }}
-          >
+          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
             <span>Labor (Hours × Rate)</span>
             <span>${labor.toFixed(2)}</span>
           </div>
-          <div
-            className="flex justify-between mb-3 text-sm"
-            style={{ color: '#888' }}
-          >
+          <div className="flex justify-between mb-3 text-sm" style={{ color: "#888" }}>
             <span>Subtotal (Cost)</span>
             <span>${cost.toFixed(2)}</span>
           </div>
-          <div
-            className="flex justify-between text-sm"
-            style={{ color: '#FF6700', fontWeight: '700' }}
-          >
+          <div className="flex justify-between text-sm" style={{ color: "#FF6700", fontWeight: "700" }}>
             <span>Markup</span>
             <span>${markupAmount.toFixed(2)}</span>
           </div>
@@ -370,78 +297,23 @@ export default function ProfitLock() {
 
         {/* Final Price */}
         <div className="text-center mb-6">
-          <p
-            className="text-xs md:text-sm"
-            style={{ color: '#888', marginBottom: '8px' }}
-          >
-            FINAL BID PRICE
-          </p>
-          <div
-            style={{
-              fontSize: '2rem',
-              fontWeight: '700',
-              color: '#22c55e',
-              textShadow: '0 0 20px rgba(34, 197, 94, 0.3)',
-              fontFamily: "'Oswald', sans-serif"
-            }}
-          >
+          <p className="text-xs md:text-sm" style={{ color: "#888", marginBottom: "8px" }}>FINAL BID PRICE</p>
+          <div style={{ fontSize: "2rem", fontWeight: "700", color: "#22c55e", textShadow: "0 0 20px rgba(34, 197, 94, 0.3)", fontFamily: "'Oswald', sans-serif" }}>
             ${finalBid.toFixed(2)}
           </div>
         </div>
 
         {/* Profit Meter */}
         <div className="mb-6">
-          <div
-            style={{
-              width: '100%',
-              height: '40px',
-              backgroundColor: '#1a1a1a',
-              borderRadius: '20px',
-              overflow: 'hidden',
-              border: '2px solid #404040',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)'
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                borderRadius: '18px',
-                width: `${meterInfo.visualWidth}%`,
-                backgroundColor: meterInfo.color,
-                transition: 'width 0.4s ease, background-color 0.4s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                paddingLeft: '12px',
-                fontWeight: '700',
-                fontSize: '0.85rem',
-                color: '#fff',
-                fontFamily: "'Oswald', sans-serif",
-                letterSpacing: '0.02em'
-              }}
-            >
-              {meterInfo.visualWidth > 15 ? `${Math.round(grossMargin)}%` : ''}
+          <div style={{ width: "100%", height: "40px", backgroundColor: "#1a1a1a", borderRadius: "20px", overflow: "hidden", border: "2px solid #404040", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)" }}>
+            <div style={{ height: "100%", borderRadius: "18px", width: `${meterInfo.visualWidth}%`, backgroundColor: meterInfo.color, transition: "width 0.4s ease, background-color 0.4s ease", display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: "12px", fontWeight: "700", fontSize: "0.85rem", color: "#fff", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.02em" }}>
+              {meterInfo.visualWidth > 15 ? `${Math.round(grossMargin)}%` : ""}
             </div>
           </div>
-          <div
-            style={{
-              fontWeight: '700',
-              fontSize: '1rem',
-              padding: '12px 0 4px 0',
-              fontFamily: "'Oswald', sans-serif",
-              letterSpacing: '0.03em',
-              color: meterInfo.color
-            }}
-          >
+          <div style={{ fontWeight: "700", fontSize: "1rem", padding: "12px 0 4px 0", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.03em", color: meterInfo.color }}>
             {meterInfo.label}
           </div>
-          <div
-            style={{
-              fontSize: '0.85rem',
-              color: '#888',
-              marginTop: '4px'
-            }}
-          >
+          <div style={{ fontSize: "0.85rem", color: "#888", marginTop: "4px" }}>
             {meterInfo.sublabel}
           </div>
         </div>
@@ -449,152 +321,56 @@ export default function ProfitLock() {
         {/* Save Button */}
         <button
           onClick={saveBid}
-          style={{
-            backgroundColor: '#FF6700',
-            color: '#1a1a1a',
-            fontWeight: '700',
-            minHeight: '50px',
-            border: 'none',
-            borderRadius: '8px',
-            width: '100%',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            fontFamily: "'Oswald', sans-serif",
-            letterSpacing: '0.05em'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.backgroundColor = '#e55c00';
-            e.target.style.transform = 'translateY(-2px)';
-            e.target.style.boxShadow =
-              '0 4px 12px rgba(255, 103, 0, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.backgroundColor = '#FF6700';
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = 'none';
-          }}
+          disabled={loading}
+          style={{ backgroundColor: "#FF6700", color: "#1a1a1a", fontWeight: "700", minHeight: "50px", border: "none", borderRadius: "8px", width: "100%", cursor: "pointer", transition: "all 0.3s ease", fontFamily: "'Oswald', sans-serif", letterSpacing: "0.05em", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#e55c00"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(255, 103, 0, 0.3)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#FF6700"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
         >
-          <Save className="inline mr-2" size={18} /> SAVE BID TO HISTORY
+          {loading ? <Loader2 className="animate-spin" size={20} /> : <><Save size={18} /> SAVE BID TO CLOUD</>}
         </button>
       </div>
 
       {/* History */}
-      <div
-        className="p-4 md:p-6 rounded-lg"
-        style={{ backgroundColor: '#262626', border: '1px solid #404040' }}
-      >
-        <div
-          style={{
-            fontSize: '1.25rem',
-            fontWeight: '700',
-            marginBottom: '16px',
-            color: '#FF6700',
-            fontFamily: "'Oswald', sans-serif"
-          }}
-        >
-          Recent Bids
+      <div className="p-4 md:p-6 rounded-lg" style={{ backgroundColor: "#262626", border: "1px solid #404040" }}>
+        <div style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "16px", color: "#FF6700", fontFamily: "'Oswald', sans-serif" }}>
+          Recent Bids (Cloud)
         </div>
 
         {bidHistory.length === 0 ? (
           <div className="text-center py-8">
-            <p style={{ color: '#888' }}>No bids saved yet. Create one above!</p>
+            <p style={{ color: "#888" }}>No bids saved yet. Create one above!</p>
           </div>
         ) : (
           <div>
             {bidHistory.map((bid, index) => (
               <div
-                key={index}
+                key={bid.id} // Uses Database ID
                 onClick={() => loadBidIntoCalculator(bid)}
-                style={{
-                  backgroundColor: '#262626',
-                  border: '1px solid #404040',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#FF6700';
-                  e.currentTarget.style.backgroundColor = '#2d2d2d';
-                  e.currentTarget.style.transform = 'translateX(-4px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#404040';
-                  e.currentTarget.style.backgroundColor = '#262626';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                }}
+                style={{ backgroundColor: "#262626", border: "1px solid #404040", borderRadius: "8px", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", cursor: "pointer", transition: "all 0.3s ease" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#FF6700"; e.currentTarget.style.backgroundColor = "#2d2d2d"; e.currentTarget.style.transform = "translateX(-4px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#404040"; e.currentTarget.style.backgroundColor = "#262626"; e.currentTarget.style.transform = "translateX(0)"; }}
               >
                 <div className="flex-1">
-                  <div
-                    style={{
-                      fontWeight: '700',
-                      color: '#f5f5f5',
-                      fontSize: '1.05rem'
-                    }}
-                  >
-                    {bid.jobName || 'Unnamed Job'}
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        backgroundColor: 'rgba(255, 103, 0, 0.15)',
-                        color: '#FF6700',
-                        padding: '4px 12px',
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        fontWeight: '600',
-                        marginLeft: '8px'
-                      }}
-                    >
+                  <div style={{ fontWeight: "700", color: "#f5f5f5", fontSize: "1.05rem" }}>
+                    {bid.jobName || "Unnamed Job"}
+                    <span style={{ display: "inline-block", backgroundColor: "rgba(255, 103, 0, 0.15)", color: "#FF6700", padding: "4px 12px", borderRadius: "6px", fontSize: "0.8rem", fontWeight: "600", marginLeft: "8px" }}>
                       {Math.round(bid.grossMargin)}% Margin
                     </span>
                   </div>
-                  <div
-                    style={{
-                      color: '#888',
-                      fontSize: '0.875rem',
-                      marginTop: '4px'
-                    }}
-                  >
+                  <div style={{ color: "#888", fontSize: "0.875rem", marginTop: "4px" }}>
                     {bid.date}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', marginRight: '16px' }}>
-                  <div
-                    style={{
-                      color: '#22c55e',
-                      fontWeight: '700',
-                      fontSize: '1.25rem'
-                    }}
-                  >
+                <div style={{ textAlign: "right", marginRight: "16px" }}>
+                  <div style={{ color: "#22c55e", fontWeight: "700", fontSize: "1.25rem" }}>
                     {bid.finalPrice}
                   </div>
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteBid(index);
-                  }}
-                  style={{
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    color: '#ff4444',
-                    cursor: 'pointer',
-                    fontSize: '1.25rem',
-                    padding: '8px',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.color = '#ff6666';
-                    e.target.style.transform = 'scale(1.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.color = '#ff4444';
-                    e.target.style.transform = 'scale(1)';
-                  }}
+                  onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, index); }}
+                  style={{ backgroundColor: "transparent", border: "none", color: "#ff4444", cursor: "pointer", fontSize: "1.25rem", padding: "8px", transition: "all 0.3s ease" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#ff6666"; e.currentTarget.style.transform = "scale(1.1)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#ff4444"; e.currentTarget.style.transform = "scale(1)"; }}
                 >
                   <Trash2 size={20} />
                 </button>
@@ -606,39 +382,15 @@ export default function ProfitLock() {
 
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            backgroundColor:
-              toast.type === 'success'
-                ? '#22c55e'
-                : toast.type === 'error'
-                ? '#ff4444'
-                : '#888',
-            color: '#1a1a1a',
-            padding: '16px 24px',
-            borderRadius: '8px',
-            fontWeight: '700',
-            zIndex: 9999,
-            animation: 'slideIn 0.3s ease-out'
-          }}
-        >
+        <div style={{ position: "fixed", bottom: "20px", right: "20px", backgroundColor: toast.type === "success" ? "#22c55e" : toast.type === "error" ? "#ff4444" : "#888", color: "#1a1a1a", padding: "16px 24px", borderRadius: "8px", fontWeight: "700", zIndex: 9999, animation: "slideIn 0.3s ease-out" }}>
           {toast.message}
         </div>
       )}
 
       <style jsx>{`
         @keyframes slideIn {
-          from {
-            transform: translateX(400px);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+          from { transform: translateX(400px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
       `}</style>
     </div>
