@@ -2,7 +2,6 @@
 
 import { createClient } from '../../../lib/supabase/server'
 import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 
 export async function signup(formData) {
   const origin = headers().get('origin')
@@ -10,7 +9,7 @@ export async function signup(formData) {
   const password = formData.get('password')
   const supabase = createClient()
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -22,6 +21,11 @@ export async function signup(formData) {
     return { error: error.message }
   }
 
-  // We don't redirect here because we want to show the "Check Email" success message
-  return { success: true }
+  // Check if we have an active session immediately (Auto-Confirm ON)
+  if (data?.session) {
+    return { success: true, autoConfirmed: true }
+  }
+
+  // No session yet (Auto-Confirm OFF)
+  return { success: true, autoConfirmed: false }
 }

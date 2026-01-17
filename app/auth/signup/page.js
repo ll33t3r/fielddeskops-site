@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import { signup } from './actions'
+import { useRouter } from 'next/navigation'
 import { Loader2, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
+  const [checkEmail, setCheckEmail] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (formData) => {
     setLoading(true)
@@ -19,13 +21,18 @@ export default function SignupPage() {
     if (result?.error) {
       setError(result.error)
       setLoading(false)
+    } else if (result?.autoConfirmed) {
+      // If account created AND logged in -> Go to Dashboard
+      router.refresh()
+      router.push('/')
     } else {
-      setSuccess(true)
+      // If account created but needs email check
+      setCheckEmail(true)
       setLoading(false)
     }
   }
 
-  if (success) {
+  if (checkEmail) {
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter text-center">
         <div className="p-4 bg-green-900/20 border border-green-900 rounded-full mb-6">
@@ -33,7 +40,7 @@ export default function SignupPage() {
         </div>
         <h1 className="text-3xl font-oswald font-bold text-white mb-2">CHECK YOUR EMAIL</h1>
         <p className="text-gray-400 max-w-md">
-          We have sent a confirmation link to your email address. You must click it before you can sign in.
+          Confirmation required. Please check your inbox.
         </p>
         <Link href="/auth/login" className="mt-8 text-[#FF6700] hover:underline">
           Return to Login
