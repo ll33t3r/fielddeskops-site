@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '../utils/supabase/client'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import LogoutButton from '../components/LogoutButton'
 import {
@@ -11,26 +12,32 @@ import {
   PenTool,
   Clock,
   ShieldAlert,
-  User
+  User,
+  Loader2
 } from 'lucide-react'
 
 export default function Home() {
   const [userEmail, setUserEmail] = useState('Loading...')
+  const [isLoading, setIsLoading] = useState(true) // SECURITY STATE: Default to locked
+  const router = useRouter()
   const supabase = createClient()
 
-  // Just fetch the user name for display. 
-  // We NO LONGER redirect here. We trust the Middleware to block intruders.
+  // SECURITY CHECK
   useEffect(() => {
-    const getUser = async () => {
+    const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setUserEmail(user.email)
+      
+      if (!user) {
+        // IF GUEST: Kick them out immediately
+        router.replace('/auth/login')
       } else {
-        setUserEmail('Guest')
+        // IF USER: Unlock the screen
+        setUserEmail(user.email)
+        setIsLoading(false) 
       }
     }
-    getUser()
-  }, [supabase])
+    checkUser()
+  }, [supabase, router])
 
   const apps = [
     { name: 'ProfitLock', desc: 'Bid Calculator & Margin Protection', icon: Calculator, href: '/apps/profitlock', status: 'Beta' },
@@ -41,6 +48,21 @@ export default function Home() {
     { name: 'SafetyBrief', desc: 'OSHA Logs', icon: ShieldAlert, href: '/apps/safetybrief', status: 'Coming Soon' }
   ]
 
+  // SECURITY LOADING SCREEN (Prevents "Flash" of content)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="animate-spin text-[#FF6700]" size={48} />
+        <p className="text-gray-500 font-oswald tracking-widest text-sm animate-pulse">VERIFYING CREDENTIALS...</p>
+        <style jsx global>{`
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+          .font-oswald { font-family: 'Oswald', sans-serif; }
+        `}</style>
+      </div>
+    )
+  }
+
+  // YOUR ORIGINAL DASHBOARD
   return (
     <main className="min-h-screen bg-[#1a1a1a] text-white font-inter px-6 py-10">
       {/* HEADER */}
