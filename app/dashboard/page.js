@@ -27,6 +27,12 @@ export default function Dashboard() {
       icon: '📝',
       href: '/apps/signoff',
     },
+    {
+      name: 'CrewClock',
+      description: 'Time Tracking & Payroll',
+      icon: '⏰', 
+      href: '/apps/crewclock',
+    },
   ]
 
   return (
@@ -155,4 +161,3 @@ export default function Dashboard() {
     </div>
   )
 }
-
