@@ -1,47 +1,17 @@
-﻿import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 
-export async function middleware(request) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+export function middleware(request) {
+  // THE RED WALL: Redirect EVERYONE to the login page immediately.
+  // We are not checking Supabase. We are just checking if the file works.
+  
+  if (request.nextUrl.pathname === '/') {
+    console.log("⛔ RED WALL HIT: Blocking access to Dashboard")
+    return NextResponse.redirect(new URL('/auth/login', request.url))
+  }
 
-  const supabase = createServerClient(
-    'https://itfjpyzywllsjipjtfrk.supabase.co',
-    'sb_publishable_l2NVlaleo2vsHPUf4nTXIQ_URedDg2N',
-    {
-      cookies: {
-        get(name) {
-          return request.cookies.get(name)?.value
-        },
-        set(name, value, options) {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name, options) {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-        },
-      },
-    }
-  )
-
-  // Refresh session if expired
-  await supabase.auth.getSession()
-
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth).*)'],
 }
