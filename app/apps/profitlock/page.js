@@ -9,7 +9,7 @@ export default function ProfitLock() {
   const supabase = createClient();
   
   // STATE
-  const [isInvoiceMode, setIsInvoiceMode] = useState(false); // TOGGLE STATE
+  const [isInvoiceMode, setIsInvoiceMode] = useState(false);
   const [jobName, setJobName] = useState("");
   const [materialsCost, setMaterialsCost] = useState(0);
   const [laborHours, setLaborHours] = useState(0);
@@ -61,7 +61,7 @@ export default function ProfitLock() {
   const finalBid = cost + markupAmount;
   const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
 
-  // METER LOGIC (Restored from V6)
+  // METER LOGIC
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
     if (margin < 20) return { color: "#ef4444", label: "🚨 CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
@@ -96,7 +96,7 @@ export default function ProfitLock() {
     setLaborHours(bid.hours);
     setHourlyRate(bid.rate);
     setMarkupPercent(bid.markup);
-    setIsInvoiceMode(false); // Auto-switch to calculator to see details
+    setIsInvoiceMode(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -143,7 +143,7 @@ export default function ProfitLock() {
             PROFIT<span className="text-[#FF6700]">LOCK</span>
             </h1>
         </Link>
-        <span className="self-end text-xs text-gray-400 ml-2">V7.1 INVOICE</span>
+        <span className="self-end text-xs text-gray-400 ml-2">V7.2 INVOICE</span>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 pb-12 grid gap-6 md:grid-cols-3">
@@ -151,7 +151,7 @@ export default function ProfitLock() {
         {/* ===== LEFT COLUMN: THE TOOL ===== */}
         <section className="md:col-span-2">
             
-            {/* TABS (Switcher) */}
+            {/* TABS */}
             <div className="flex gap-2 mb-4 no-print">
                 <button 
                     onClick={() => setIsInvoiceMode(false)}
@@ -167,14 +167,14 @@ export default function ProfitLock() {
                 </button>
             </div>
 
-            {/* VIEW 1: CALCULATOR (EXACT KIMI V6 UI) */}
+            {/* VIEW 1: CALCULATOR */}
             {!isInvoiceMode && (
                 <div className="bg-[#262626] border border-[#404040] rounded-b-xl rounded-tr-xl p-6 shadow-lg">
                     <h2 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">WORK ORDER</h2>
 
                     {/* Job Name */}
-                    <label className="block text-sm font-semibold mb-1">Job Name</label>
-                    <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Kitchen Sink Repair" maxLength={50} className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" />
+                    <label className="block text-sm font-semibold mb-1">Job Name (Client & Description)</label>
+                    <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen Repair" maxLength={50} className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" />
 
                     {/* Inputs Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
@@ -211,26 +211,25 @@ export default function ProfitLock() {
                         </div>
                     </div>
 
-                    {/* Save Button */}
                     <button onClick={saveBid} disabled={loading} className="mt-6 w-full h-12 bg-[#FF6700] text-[#1a1a1a] font-oswald font-bold uppercase rounded-lg hover:bg-[#e65c00] transition flex items-center justify-center gap-2">
                         {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={18} />} Save Bid to Cloud
                     </button>
                 </div>
             )}
 
-            {/* VIEW 2: CLIENT INVOICE (New Feature) */}
+            {/* VIEW 2: CLIENT INVOICE (With Fixed Labels) */}
             {isInvoiceMode && (
                 <div id="invoice-area" className="bg-white text-black rounded-b-xl rounded-tr-xl p-8 shadow-2xl relative min-h-[600px]">
-                    {/* WATERMARK LOGO */}
                     <div className="absolute top-8 right-8 text-right">
                         <h2 className="text-2xl font-bold font-oswald tracking-widest text-gray-900">INVOICE</h2>
                         <p className="text-sm text-gray-500">Date: {new Date().toLocaleDateString()}</p>
                     </div>
 
                     <div className="mb-12">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Bill To</p>
+                        {/* THE FIX: Changed Label to "RE: PROJECT / JOB" */}
+                        <p className="text-xs font-bold text-gray-400 uppercase">RE: PROJECT / JOB</p>
                         <h1 className="text-3xl font-bold border-b-2 border-black pb-2 inline-block min-w-[300px]">
-                            {jobName || "Client Name / Job"}
+                            {jobName || "Unnamed Project"}
                         </h1>
                     </div>
 
@@ -264,7 +263,6 @@ export default function ProfitLock() {
                         <p>Thank you for your business.</p>
                     </div>
 
-                    {/* PRINT BUTTON (Hidden when printing) */}
                     <div className="absolute top-[-50px] right-0 no-print">
                         <button onClick={handlePrint} className="bg-white text-black px-4 py-2 rounded shadow font-bold flex items-center gap-2 hover:bg-gray-200 transition">
                             <Printer size={18} /> PRINT / PDF
@@ -275,7 +273,7 @@ export default function ProfitLock() {
 
         </section>
 
-        {/* ===== RIGHT COLUMN: HISTORY (EXACT KIMI V6 UI) ===== */}
+        {/* ===== RIGHT COLUMN: HISTORY ===== */}
         <aside className="no-print bg-[#262626] border border-[#404040] rounded-xl p-6 shadow-lg max-h-[75vh] overflow-y-auto">
           <h3 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">Saved Bids</h3>
           {bidHistory.length === 0 ? (
