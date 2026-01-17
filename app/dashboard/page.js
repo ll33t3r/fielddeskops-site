@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link'
+import LogoutButton from '../../components/LogoutButton'
 
 export default function Dashboard() {
   const apps = [
@@ -154,3 +155,4 @@ export default function Dashboard() {
     </div>
   )
 }
+

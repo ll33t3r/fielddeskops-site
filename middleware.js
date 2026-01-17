@@ -9,8 +9,8 @@ export async function middleware(request) {
   })
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    'https://itfjpyzywllsjipjtfrk.supabase.co',
+    'sb_publishable_l2NVlaleo2vsHPUf4nTXIQ_URedDg2N',
     {
       cookies: {
         get(name) {
@@ -36,36 +36,6 @@ export async function middleware(request) {
 
   // Refresh session if expired
   await supabase.auth.getSession()
-
-  // Protected routes
-  const { pathname } = request.nextUrl
-  const protectedRoutes = ['/dashboard', '/account', '/apps']
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
-
-  if (isProtectedRoute) {
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      // Check for demo user in localStorage (client-side only)
-      // We'll handle this in the page components
-      // For now, redirect to login
-      const redirectUrl = new URL('/auth/login', request.url)
-      redirectUrl.searchParams.set('redirectedFrom', pathname)
-      return NextResponse.redirect(redirectUrl)
-    }
-  }
-
-  // Auth routes - redirect if already logged in
-  const authRoutes = ['/auth/login', '/auth/signup']
-  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
-
-  if (isAuthRoute) {
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-  }
 
   return response
 }

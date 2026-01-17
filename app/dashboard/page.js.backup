@@ -30,7 +30,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 p-4 md:p-8">
-      {/* Header */}
+      {/* Header with Account and Sign Out buttons */}
       <header className="mb-8">
         <div className="flex justify-between items-center">
           <div>
@@ -44,13 +44,13 @@ export default function Dashboard() {
           <div className="flex items-center space-x-4">
             <Link 
               href="/account"
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-white"
             >
               Account
             </Link>
             <Link 
               href="/auth/login"
-              className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors"
+              className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors text-white"
             >
               Sign Out
             </Link>
@@ -101,8 +101,6 @@ export default function Dashboard() {
               href={app.href}
               className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-6 border border-gray-700 hover:border-primary transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/20"
             >
-              <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-300 ${app.color}"></div>
-              
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-4xl">{app.icon}</span>
