@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { Trash2, Save, Calculator, Loader2, FileText, Printer } from "lucide-react";
 import Link from "next/link";
-import Header from "@/components/Header";
+import Header from "../../components/Header";
 
 export default function ProfitLock() {
   const supabase = createClient();
@@ -65,10 +65,10 @@ export default function ProfitLock() {
   // METER LOGIC
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
-    if (margin < 20) return { color: "#ef4444", label: "🚨 CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
-    else if (margin < 40) return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
-    else if (margin < 60) return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
-    else return { color: "#f97316", label: "💰 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
+    if (margin < 20) return { color: "#ef4444", label: "?? CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
+    else if (margin < 40) return { color: "#eab308", label: "?? THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
+    else if (margin < 60) return { color: "#22c55e", label: "? HEALTHY", sublabel: "This is where a real business lives", visualWidth };
+    else return { color: "#f97316", label: "?? AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
   };
   const meterInfo = getProfitMeterInfo(grossMargin);
 
@@ -86,7 +86,7 @@ export default function ProfitLock() {
       sale_price: finalBid, profit: finalBid - cost
     });
     
-    if (!error) { fetchBids(); showToast("✅ Saved to Cloud", "success"); }
+    if (!error) { fetchBids(); showToast("? Saved to Cloud", "success"); }
     else { showToast(error.message, "error"); }
     setLoading(false);
   };

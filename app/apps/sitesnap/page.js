@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
@@ -6,7 +6,7 @@ import {
   Camera, Trash2, Printer, 
   AlertTriangle, CheckCircle, File, Loader2, Upload, Share, FileDigit 
 } from "lucide-react";
-import Header from "@/components/Header";
+import Header from "../../components/Header";
 
 export default function SiteSnap() {
   const supabase = createClient();
@@ -132,7 +132,7 @@ export default function SiteSnap() {
     });
 
     Object.keys(grouped).forEach(job => {
-        text += `📍 JOB: ${job}\n`;
+        text += `?? JOB: ${job}\n`;
         grouped[job].forEach(p => {
             text += `- ${p.tag}: ${p.notes || "No notes"}\n`;
             text += `  View: ${p.image_url}\n`; 

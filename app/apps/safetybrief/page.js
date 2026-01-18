@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   ShieldAlert, CheckSquare, Users, Save, CheckCircle 
 } from "lucide-react";
-import Header from "@/components/Header";
+import Header from "../../components/Header";
 
 export default function SafetyBrief() {
   const supabase = createClient();

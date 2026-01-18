@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
@@ -6,7 +6,7 @@ import {
   FileText, Eraser, Check, Plus, 
   Download, FileSignature, ShieldAlert, BadgeDollarSign, Import
 } from "lucide-react";
-import Header from "@/components/Header";
+import Header from "../../components/Header";
 
 export default function SignOff() {
   const supabase = createClient();
