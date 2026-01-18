@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
-import { Trash2, Save, Calculator, Loader2, FileText, Printer, Settings, ChevronDown } from "lucide-react";
+import { Trash2, Save, FileText, Printer, Settings, ChevronDown, Loader2 } from "lucide-react";
 import Header from "../../components/Header";
 
 export default function ProfitLock() {
@@ -13,8 +13,11 @@ export default function ProfitLock() {
   const [jobName, setJobName] = useState("");
   const [materialsCost, setMaterialsCost] = useState(0);
   const [laborHours, setLaborHours] = useState(0);
+  
+  // HIDDEN VARIABLES (Defaults)
   const [hourlyRate, setHourlyRate] = useState(75);
   const [markupPercent, setMarkupPercent] = useState(20);
+  
   const [bidHistory, setBidHistory] = useState([]);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -49,28 +52,29 @@ export default function ProfitLock() {
     }
   };
 
-  // MATH
+  // MATH ENGINE
   const materials = parseFloat(materialsCost) || 0;
   const hours = parseFloat(laborHours) || 0;
   const rate = parseFloat(hourlyRate) || 75;
   const markup = parseFloat(markupPercent) || 20;
-  const labor = hours * rate;
-  const cost = materials + labor;
-  const markupAmount = cost * (markup / 100);
-  const finalBid = cost + markupAmount;
-  const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
+  
+  const laborCost = hours * rate; // Internal Cost
+  const totalInternalCost = materials + laborCost;
+  const markupAmount = totalInternalCost * (markup / 100);
+  const finalBid = totalInternalCost + markupAmount;
+  const netProfit = finalBid - totalInternalCost;
+  const grossMargin = finalBid > 0 ? (netProfit / finalBid) * 100 : 0;
 
   // METER LOGIC
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
-    if (margin < 20) return { color: "#ef4444", label: "⚠️ CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
-    else if (margin < 40) return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
-    else if (margin < 60) return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
-    else return { color: "#f97316", label: "🚀 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
+    if (margin < 20) return { color: "#ef4444", label: "RISKY", width: visualWidth };
+    else if (margin < 40) return { color: "#eab308", label: "OK", width: visualWidth };
+    else return { color: "#22c55e", label: "HEALTHY", width: visualWidth };
   };
   const meterInfo = getProfitMeterInfo(grossMargin);
 
-  // SAVE
+  // SAVE TO DB
   const saveBid = async () => {
     if (!jobName.trim()) { showToast("Enter job name", "error"); return; }
     setLoading(true);
@@ -81,10 +85,10 @@ export default function ProfitLock() {
       user_id: user.id,
       project_name: jobName,
       materials, hours, rate, margin: markup,
-      sale_price: finalBid, profit: finalBid - cost
+      sale_price: finalBid, profit: netProfit
     });
     
-    if (!error) { fetchBids(); showToast("✅ Saved to Cloud", "success"); }
+    if (!error) { fetchBids(); showToast("✅ Saved", "success"); }
     else { showToast(error.message, "error"); }
     setLoading(false);
   };
@@ -142,22 +146,21 @@ export default function ProfitLock() {
                     onClick={() => setIsInvoiceMode(true)}
                     className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-white text-black' : 'glass-btn text-gray-500'}`}
                 >
-                    <FileText size={16} /> INVOICE VIEW
+                    <FileText size={16} /> INVOICE
                 </button>
             </div>
 
-            {/* VIEW 1: CALCULATOR */}
+            {/* VIEW 1: CALCULATOR (STEALTH MODE) */}
             {!isInvoiceMode && (
-                <div className="glass-panel rounded-xl p-6 space-y-6 animate-in fade-in slide-in-from-left-4">
-                    <h2 className="text-xl font-oswald font-bold text-[#FF6700]">WORK ESTIMATE</h2>
-
+                <div className="glass-panel rounded-xl p-6 space-y-6 animate-in fade-in">
+                    
                     {/* Job Name */}
                     <div>
-                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Project Name</label>
-                      <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen" className="input-field rounded-lg p-3 w-full font-bold" />
+                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Job Name</label>
+                      <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith - Water Heater" className="input-field rounded-lg p-3 w-full font-bold" />
                     </div>
 
-                    {/* Materials & Labor Grid */}
+                    {/* Materials & Labor Grid (Transparent) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Materials ($)</label>
@@ -169,18 +172,26 @@ export default function ProfitLock() {
                         </div>
                     </div>
 
-                    {/* Settings / Sensitive Data (HIDDEN BY DEFAULT) */}
+                    {/* FINAL PRICE (Clean, No "Profit" labels) */}
+                    <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-6 text-center">
+                        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1 font-bold">ESTIMATED TOTAL</p>
+                        <p className="text-5xl font-oswald font-bold text-white tracking-wide">${finalBid.toFixed(2)}</p>
+                    </div>
+
+                    {/* --- THE SECRET SETTINGS MENU --- */}
                     <div className="bg-black/20 rounded-lg overflow-hidden border border-white/5">
                         <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition text-gray-400">
-                          <span className="font-bold text-xs uppercase flex items-center gap-2"><Settings size={14} /> Profit Settings</span>
+                          <span className="font-bold text-xs uppercase flex items-center gap-2"><Settings size={14} /> Settings</span>
                           <ChevronDown size={16} className={`transition-transform ${showSettings ? 'rotate-180' : ''}`} />
                         </button>
 
+                        {/* Hidden Area: Rates & Profits */}
                         {showSettings && (
-                          <div className="p-4 space-y-4 border-t border-white/5 animate-in slide-in-from-top-2">
+                          <div className="p-4 space-y-4 border-t border-white/5 animate-in slide-in-from-top-2 bg-[#050505]">
+                            
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Hourly Rate</label>
+                                    <label className="block text-xs text-gray-500 mb-1">Hourly Rate ($)</label>
                                     <input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="input-field rounded p-2 w-full text-sm" />
                                 </div>
                                 <div>
@@ -189,24 +200,23 @@ export default function ProfitLock() {
                                 </div>
                             </div>
 
-                            {/* Profit Meter */}
-                            <div>
-                              <p className="text-xs text-gray-500 mb-2">Margin Analysis</p>
-                              <div className="h-2 bg-[#333] rounded-full overflow-hidden">
-                                <div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.visualWidth, 100)}%`, backgroundColor: meterInfo.color }}></div>
-                              </div>
-                              <p className="text-xs mt-1 font-bold" style={{ color: meterInfo.color }}>{meterInfo.label} ({grossMargin.toFixed(0)}%)</p>
+                            {/* Internal Data (Only visible here) */}
+                            <div className="pt-2 border-t border-white/10 mt-2">
+                                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                    <span>Internal Cost:</span>
+                                    <span>${totalInternalCost.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm font-bold text-green-500">
+                                    <span>Net Profit:</span>
+                                    <span>${netProfit.toFixed(2)} ({grossMargin.toFixed(0)}%)</span>
+                                </div>
+                                {/* Meter */}
+                                <div className="h-1 bg-[#333] rounded-full overflow-hidden mt-2">
+                                    <div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.width, 100)}%`, backgroundColor: meterInfo.color }}></div>
+                                </div>
                             </div>
                           </div>
                         )}
-                    </div>
-
-                    {/* Final Price Spotlight */}
-                    <div className="bg-gradient-to-r from-green-900/30 to-green-900/10 border border-green-500/30 rounded-xl p-6 text-center relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-12 bg-green-500/10 rounded-full translate-x-4 -translate-y-4 blur-xl"></div>
-                        <p className="text-xs text-green-400 uppercase tracking-widest mb-1 font-bold">Recommended Bid Price</p>
-                        <p className="text-5xl font-oswald font-bold text-white drop-shadow-[0_0_15px_rgba(34,197,94,0.4)] relative z-10">${finalBid.toFixed(2)}</p>
-                        <p className="text-xs text-gray-400 mt-2 relative z-10">Total Cost: ${cost.toFixed(2)} • Profit: ${(finalBid - cost).toFixed(2)}</p>
                     </div>
 
                     <button onClick={saveBid} disabled={loading} className="w-full h-14 bg-[#FF6700] text-black font-bold text-lg uppercase rounded-xl shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-[1.02] transition flex items-center justify-center gap-2">
@@ -301,7 +311,7 @@ export default function ProfitLock() {
 
       </main>
 
-      {/* Toast Notification */}
+      {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-bold animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}>
           {toast.message}
