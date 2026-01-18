@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "../utils/supabase/client";
 import { 
-  Calculator, Package, Camera, PenTool, Clock,
+  Calculator, Package, Camera, PenTool, Clock, ShieldAlert,
   AlertTriangle, TrendingUp, DollarSign, Loader2, LogOut, Plus 
 } from "lucide-react";
 import Link from "next/link";
@@ -108,7 +108,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* SECTION 2: APP GRID (Scrollable if needed, but compact) */}
+      {/* SECTION 2: APP GRID */}
       <main className="flex-1 p-4 overflow-y-auto">
          <div className="grid grid-cols-2 gap-3 max-w-lg mx-auto">
             
@@ -150,19 +150,28 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-500 leading-tight">Contracts & Signatures</p>
             </Link>
 
-            {/* CREWCLOCK (Full Width) */}
-            <Link href="/apps/crewclock" className="col-span-2 bg-gradient-to-r from-[#262626] to-[#1a1a1a] p-4 rounded-xl border border-[#404040] hover:border-[#FF6700] group transition-all flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-oswald font-bold text-gray-200">CREWCLOCK</h2>
-                    <p className="text-xs text-gray-500 leading-tight">GPS Time Tracking</p>
+            {/* SAFETYBRIEF */}
+            <Link href="/apps/safetybrief" className="bg-[#262626] p-4 rounded-xl border border-[#404040] hover:border-[#FF6700] group transition-all">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="bg-[#333] p-2 rounded-lg group-hover:bg-[#FF6700] group-hover:text-black transition-colors"><ShieldAlert size={20} /></div>
                 </div>
-                <div className="bg-[#333] p-3 rounded-lg group-hover:bg-[#FF6700] group-hover:text-black transition-colors"><Clock size={24} /></div>
+                <h2 className="text-lg font-oswald font-bold text-gray-200">SAFETYBRIEF</h2>
+                <p className="text-xs text-gray-500 leading-tight">OSHA & Toolbox Talks</p>
+            </Link>
+
+            {/* CREWCLOCK (Integrated) */}
+            <Link href="/apps/crewclock" className="bg-[#262626] p-4 rounded-xl border border-[#404040] hover:border-[#FF6700] group transition-all">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="bg-[#333] p-2 rounded-lg group-hover:bg-[#FF6700] group-hover:text-black transition-colors"><Clock size={20} /></div>
+                </div>
+                <h2 className="text-lg font-oswald font-bold text-gray-200">CREWCLOCK</h2>
+                <p className="text-xs text-gray-500 leading-tight">GPS Time Tracking</p>
             </Link>
 
          </div>
       </main>
 
-      {/* FOOTER: DEMO WARNING */}
+      {/* FOOTER */}
       <div className="bg-red-900/20 border-t border-red-900/50 p-2 text-center">
           <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex items-center justify-center gap-2">
             <AlertTriangle size={10} /> Demo Mode: Data Wipes in 14 Days
