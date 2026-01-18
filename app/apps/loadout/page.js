@@ -5,7 +5,7 @@ import { createClient } from "../../../utils/supabase/client";
 import { 
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
-  RefreshCw, Edit3, CheckCircle2 
+  RefreshCw, Edit3, CheckCircle2, Eye, EyeOff
 } from "lucide-react";
 import Header from "../../components/Header";
 
@@ -25,6 +25,7 @@ export default function LoadOut() {
   const [showSettings, setShowSettings] = useState(false); // Global Menu
   const [editingItem, setEditingItem] = useState(null); // The item being edited
   const [renameVanName, setRenameVanName] = useState("");
+  const [targetQtyInput, setTargetQtyInput] = useState(""); // Fix for sticky input bug
   
   // UX STATE
   const [loading, setLoading] = useState(true);
@@ -122,15 +123,31 @@ export default function LoadOut() {
 
   // --- 3. EDIT & SETTINGS LOGIC ---
 
+  const openEditModal = (item) => {
+      setEditingItem(item);
+      setTargetQtyInput(item.min_quantity.toString()); // Load the value into local string state
+  };
+
   const saveItemEdit = async () => {
     if (!editingItem) return;
-    setItems(prev => prev.map(i => i.id === editingItem.id ? editingItem : i));
+    
+    // Parse the input back to integer
+    const newMin = parseInt(targetQtyInput) || 0;
+
+    const updatedItem = {
+        ...editingItem,
+        min_quantity: newMin
+    };
+
+    setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
+    
     await supabase.from("inventory").update({ 
-        name: editingItem.name, 
-        color: editingItem.color, 
-        min_quantity: editingItem.min_quantity,
-        quantity: editingItem.quantity // In case they used "Refill"
-    }).eq("id", editingItem.id);
+        name: updatedItem.name, 
+        color: updatedItem.color, 
+        min_quantity: updatedItem.min_quantity,
+        quantity: updatedItem.quantity 
+    }).eq("id", updatedItem.id);
+    
     setEditingItem(null);
   };
 
@@ -203,27 +220,49 @@ export default function LoadOut() {
         <div className="flex items-center justify-between mb-6 bg-[#1a1a1a] border border-white/10 p-3 rounded-xl">
             
             {/* Van Dropdown */}
-            <div className="relative">
-                <button onClick={() => setShowSettings(!showSettings)} className="flex items-center gap-3 font-bold text-lg uppercase tracking-wide">
-                    <Truck className="text-[#FF6700]" size={20} />
-                    {currentVan ? currentVan.name : "Loading..."}
-                    <ChevronDown size={16} className={`transition-transform ${showSettings ? "rotate-180" : ""}`}/>
+            <div className="relative w-full">
+                <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
+                    <div className="flex items-center gap-3">
+                        <Truck className="text-[#FF6700]" size={20} />
+                        {currentVan ? currentVan.name : "Loading..."}
+                    </div>
+                    <Settings size={20} className={`text-gray-400 transition-transform ${showSettings ? "rotate-90 text-white" : ""}`}/>
                 </button>
 
-                {/* --- THE GLOBAL MENU --- */}
+                {/* --- THE GLOBAL MENU (Tucked Away) --- */}
                 {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-72 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in slide-in-from-top-2 border border-white/10 bg-[#0a0a0a]">
+                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in slide-in-from-top-2 border border-white/10 bg-[#0a0a0a]">
                         
-                        {/* 1. Rename Van */}
+                        {/* 1. EDIT MODE TOGGLE */}
+                        <div className="mb-4 pb-4 border-b border-white/10">
+                            <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface Mode</label>
+                            <button 
+                                onClick={() => { setIsEditMode(!isEditMode); setShowSettings(false); }} 
+                                className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] border-[#FF6700] text-black" : "bg-white/5 border-white/10 text-gray-300"}`}
+                            >
+                                <span className="font-bold text-sm flex items-center gap-2">
+                                    {isEditMode ? <Eye size={16}/> : <EyeOff size={16}/>}
+                                    {isEditMode ? "EDITING ON" : "STANDARD VIEW"}
+                                </span>
+                                <div className={`w-8 h-4 rounded-full relative transition-colors ${isEditMode ? "bg-black/30" : "bg-white/20"}`}>
+                                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isEditMode ? "left-4" : "left-1"}`}></div>
+                                </div>
+                            </button>
+                            <p className="text-[10px] text-gray-500 mt-2 text-center">
+                                {isEditMode ? "Tap items to edit details." : "Tap +/- to count inventory."}
+                            </p>
+                        </div>
+
+                        {/* 2. Rename Van */}
                         <div className="mb-4 pb-4 border-b border-white/10">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Vehicle Name</label>
                             <div className="flex gap-2">
                                 <input value={renameVanName} onChange={e => setRenameVanName(e.target.value)} className="input-field rounded p-2 text-sm flex-1" />
-                                <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2 size={16}/></button>
+                                <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2 hover:scale-105"><CheckCircle2 size={16}/></button>
                             </div>
                         </div>
 
-                        {/* 2. Switch Van List */}
+                        {/* 3. Switch Van List */}
                         <div className="mb-4 pb-4 border-b border-white/10 space-y-2">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Switch Vehicle</label>
                             {vans.map(v => (
@@ -236,7 +275,7 @@ export default function LoadOut() {
                             </button>
                         </div>
 
-                        {/* 3. Global Actions */}
+                        {/* 4. Global Actions */}
                         <div className="space-y-2">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-white p-2 rounded hover:bg-white/5">
                                 <ClipboardList size={16}/> Copy Shopping List
@@ -248,14 +287,6 @@ export default function LoadOut() {
                     </div>
                 )}
             </div>
-
-            {/* EDIT MODE TOGGLE */}
-            <button 
-                onClick={() => setIsEditMode(!isEditMode)} 
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase transition-all ${isEditMode ? "bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.5)]" : "bg-white/5 text-gray-400 hover:bg-white/10"}`}
-            >
-                <Edit3 size={16}/> {isEditMode ? "Edit Mode ON" : "Edit Mode OFF"}
-            </button>
         </div>
 
         {/* ADD ITEM FORM */}
@@ -275,7 +306,7 @@ export default function LoadOut() {
             <div
               key={item.id}
               onClick={() => {
-                if(isEditMode) setEditingItem(item); // Tap to Edit if Mode is ON
+                if(isEditMode) openEditModal(item); // Tap to Edit if Mode is ON
               }}
               style={{ backgroundColor: item.color || "#262626" }} 
               className={`relative h-36 rounded-xl p-4 flex flex-col justify-between shadow-lg transition-transform border border-white/5 ${isEditMode ? "cursor-pointer hover:scale-105 hover:ring-2 ring-white" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
@@ -329,7 +360,7 @@ export default function LoadOut() {
         </div>
       </main>
 
-      {/* --- EDIT MODAL (The Overhaul) --- */}
+      {/* --- EDIT MODAL (Bug Fix Applied) --- */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
@@ -348,21 +379,22 @@ export default function LoadOut() {
                 className="input-field rounded-lg mb-4 w-full p-3 font-bold text-lg" 
             />
             
-            {/* 2. Target Quantity (The requested feature) */}
+            {/* 2. Target Quantity (FIXED: Uses local string state to prevent sticky #) */}
             <div className="mb-6 bg-white/5 p-4 rounded-lg border border-white/5">
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-xs font-bold text-gray-400 uppercase">Target / Low Stock Level</label>
-                    <span className="text-xs text-[#FF6700]">Alerts under {editingItem.min_quantity || 3}</span>
+                    <span className="text-xs text-[#FF6700]">Alerts under {targetQtyInput || 0}</span>
                 </div>
                 <div className="flex gap-4 items-center">
                     <input 
                         type="number" 
-                        value={editingItem.min_quantity || 3} 
-                        onChange={(e) => setEditingItem({ ...editingItem, min_quantity: Number(e.target.value) })} 
+                        value={targetQtyInput} 
+                        onChange={(e) => setTargetQtyInput(e.target.value)} 
                         className="input-field rounded-lg w-20 text-center font-oswald text-xl p-2"
+                        placeholder="0"
                     />
                     <div className="flex-1 text-xs text-gray-500 leading-tight">
-                        Set the minimum amount to keep on the truck before alerting.
+                        Enter a number. The alert triggers if quantity drops below this.
                     </div>
                 </div>
             </div>
@@ -393,12 +425,12 @@ export default function LoadOut() {
             {/* Quick Refill Action */}
             <button 
                 onClick={() => {
-                    setEditingItem({...editingItem, quantity: editingItem.min_quantity || 3}); 
-                    // Note: User still needs to hit Save to apply
+                    const refillVal = parseInt(targetQtyInput) || 3;
+                    setEditingItem({...editingItem, quantity: refillVal}); 
                 }}
                 className="w-full mt-3 text-xs text-green-500 font-bold uppercase tracking-wider hover:text-green-400 py-2 border border-green-900/30 rounded bg-green-900/10"
             >
-                Quick Action: Refill to Target ({editingItem.min_quantity || 3})
+                Quick Action: Refill to Target
             </button>
           </div>
         </div>
