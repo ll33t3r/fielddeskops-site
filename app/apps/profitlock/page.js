@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
-import { Trash2, Save, Calculator, Loader2, FileText, Printer } from "lucide-react";
-import Link from "next/link";
+import { Trash2, Save, Calculator, Loader2, FileText, Printer, Settings, ChevronDown } from "lucide-react";
 import Header from "../../components/Header";
 
 export default function ProfitLock() {
@@ -19,11 +18,10 @@ export default function ProfitLock() {
   const [bidHistory, setBidHistory] = useState([]);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // LOAD BIDS
-  useEffect(() => {
-    fetchBids();
-  }, []);
+  useEffect(() => { fetchBids(); }, []);
 
   const fetchBids = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -65,10 +63,10 @@ export default function ProfitLock() {
   // METER LOGIC
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
-    if (margin < 20) return { color: "#ef4444", label: "?? CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
-    else if (margin < 40) return { color: "#eab308", label: "?? THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
-    else if (margin < 60) return { color: "#22c55e", label: "? HEALTHY", sublabel: "This is where a real business lives", visualWidth };
-    else return { color: "#f97316", label: "?? AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
+    if (margin < 20) return { color: "#ef4444", label: "⚠️ CRITICAL RISK", sublabel: "You are barely breaking even", visualWidth };
+    else if (margin < 40) return { color: "#eab308", label: "⚠️ THIN MARGINS", sublabel: "You are surviving, but not growing", visualWidth };
+    else if (margin < 60) return { color: "#22c55e", label: "✅ HEALTHY", sublabel: "This is where a real business lives", visualWidth };
+    else return { color: "#f97316", label: "🚀 AGGRESSIVE", sublabel: "High profit - watch for rejection risk", visualWidth };
   };
   const meterInfo = getProfitMeterInfo(grossMargin);
 
@@ -86,7 +84,7 @@ export default function ProfitLock() {
       sale_price: finalBid, profit: finalBid - cost
     });
     
-    if (!error) { fetchBids(); showToast("? Saved to Cloud", "success"); }
+    if (!error) { fetchBids(); showToast("✅ Saved to Cloud", "success"); }
     else { showToast(error.message, "error"); }
     setLoading(false);
   };
@@ -98,6 +96,7 @@ export default function ProfitLock() {
     setHourlyRate(bid.rate);
     setMarkupPercent(bid.markup);
     setIsInvoiceMode(false);
+    setShowSettings(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -109,195 +108,202 @@ export default function ProfitLock() {
     await supabase.from("bids").delete().eq("id", id);
   };
 
-  const showToast = (msg, type) => {
-      setToast({message: msg, type});
-      setTimeout(()=>setToast(null), 3000);
-  };
-
-  const handlePrint = () => {
-      window.print();
-  };
+  const showToast = (msg, type) => { setToast({message: msg, type}); setTimeout(()=>setToast(null), 3000); };
+  const handlePrint = () => { window.print(); };
 
   return (
-    <div className="min-h-screen bg-industrial-bg text-white font-inter">
+    <div className="min-h-screen bg-[#121212] text-white font-inter pb-20">
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400 ;600&family=Oswald:wght@500;700&display=swap');
-        .font-oswald { font-family: 'Oswald', sans-serif; }
         @media print {
             body * { visibility: hidden; }
             #invoice-area, #invoice-area * { visibility: visible; }
             #invoice-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; color: black; }
             .no-print { display: none !important; }
         }
-        @keyframes slide-in {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
 
       {/* HEADER */}
       <Header title="PROFITLOCK" backLink="/" />
 
-      <main className="max-w-5xl mx-auto px-6 pb-12 grid gap-6 md:grid-cols-3">
+      <main className="max-w-6xl mx-auto px-6 grid gap-6 md:grid-cols-3 pt-4">
         
         {/* ===== LEFT COLUMN: THE TOOL ===== */}
-        <section className="md:col-span-2">
+        <section className="md:col-span-2 space-y-4">
             
             {/* TABS */}
-            <div className="flex gap-2 mb-4 no-print">
+            <div className="flex gap-2 no-print">
                 <button 
                     onClick={() => setIsInvoiceMode(false)}
-                    className={`px-6 py-2 rounded-t-lg font-bold font-oswald tracking-wide transition-colors ${!isInvoiceMode ? 'bg-industrial-orange text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'bg-[#262626] text-gray-500 border border-b-0 border-[#404040]'}`}
+                    className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'glass-btn text-gray-500'}`}
                 >
                     CALCULATOR
                 </button>
                 <button 
                     onClick={() => setIsInvoiceMode(true)}
-                    className={`px-6 py-2 rounded-t-lg font-bold font-oswald tracking-wide flex items-center gap-2 transition-colors ${isInvoiceMode ? 'bg-white text-black' : 'bg-[#262626] text-gray-500 border border-b-0 border-[#404040]'}`}
+                    className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-white text-black' : 'glass-btn text-gray-500'}`}
                 >
-                    <FileText size={16} /> CLIENT INVOICE
+                    <FileText size={16} /> INVOICE VIEW
                 </button>
             </div>
 
             {/* VIEW 1: CALCULATOR */}
             {!isInvoiceMode && (
-                <div className="glass-panel rounded-b-xl rounded-tr-xl p-6 shadow-lg">
-                    <h2 className="text-xl font-oswald font-bold text-industrial-orange mb-4">WORK ORDER</h2>
+                <div className="glass-panel rounded-xl p-6 space-y-6 animate-in fade-in slide-in-from-left-4">
+                    <h2 className="text-xl font-oswald font-bold text-[#FF6700]">WORK ESTIMATE</h2>
 
                     {/* Job Name */}
-                    <label className="block text-sm font-semibold mb-1">Job Name (Client & Description)</label>
-                    <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen Repair" maxLength={50} className="input-field rounded-lg p-3 w-full" />
-
-                    {/* Inputs Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        <div><label className="block text-sm font-semibold mb-1">Materials Cost</label><input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} min="0" step="0.01" className="input-field rounded-lg p-3 w-full" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Labor Hours</label><input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} min="0" step="0.5" className="input-field rounded-lg p-3 w-full" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Hourly Rate</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} min="0" step="5" className="input-field rounded-lg p-3 w-full" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Markup %</label><input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} min="0" step="5" className="input-field rounded-lg p-3 w-full" /></div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Project Name</label>
+                      <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen" className="input-field rounded-lg p-3 w-full font-bold" />
                     </div>
 
-                    {/* Cost Breakdown Panel */}
-                    <div className="mt-6 glass-panel rounded-lg p-4 grid grid-cols-2 gap-2 text-sm">
-                        <span className="text-gray-400">Materials</span><span className="text-right">${materials.toFixed(2)}</span>
-                        <span className="text-gray-400">Labor</span><span className="text-right">${labor.toFixed(2)}</span>
-                        <span className="text-gray-400">Subtotal</span><span className="text-right">${cost.toFixed(2)}</span>
-                        <span className="text-industrial-orange font-semibold">Markup</span><span className="text-right text-industrial-orange font-semibold">${markupAmount.toFixed(2)}</span>
+                    {/* Materials & Labor Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Materials ($)</label>
+                          <input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} min="0" step="0.01" className="input-field rounded-lg p-3 w-full" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Labor Hours</label>
+                          <input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} min="0" step="0.5" className="input-field rounded-lg p-3 w-full" />
+                        </div>
+                    </div>
+
+                    {/* Settings / Sensitive Data (HIDDEN BY DEFAULT) */}
+                    <div className="bg-black/20 rounded-lg overflow-hidden border border-white/5">
+                        <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition text-gray-400">
+                          <span className="font-bold text-xs uppercase flex items-center gap-2"><Settings size={14} /> Profit Settings</span>
+                          <ChevronDown size={16} className={`transition-transform ${showSettings ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {showSettings && (
+                          <div className="p-4 space-y-4 border-t border-white/5 animate-in slide-in-from-top-2">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Hourly Rate</label>
+                                    <input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="input-field rounded p-2 w-full text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Markup %</label>
+                                    <input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="input-field rounded p-2 w-full text-sm" />
+                                </div>
+                            </div>
+
+                            {/* Profit Meter */}
+                            <div>
+                              <p className="text-xs text-gray-500 mb-2">Margin Analysis</p>
+                              <div className="h-2 bg-[#333] rounded-full overflow-hidden">
+                                <div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.visualWidth, 100)}%`, backgroundColor: meterInfo.color }}></div>
+                              </div>
+                              <p className="text-xs mt-1 font-bold" style={{ color: meterInfo.color }}>{meterInfo.label} ({grossMargin.toFixed(0)}%)</p>
+                            </div>
+                          </div>
+                        )}
                     </div>
 
                     {/* Final Price Spotlight */}
-                    <div className="mt-6 text-center">
-                        <p className="text-xs text-gray-400">FINAL BID PRICE</p>
-                        <p className="text-5xl font-oswald font-bold text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.4)]">${finalBid.toFixed(2)}</p>
+                    <div className="bg-gradient-to-r from-green-900/30 to-green-900/10 border border-green-500/30 rounded-xl p-6 text-center relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-12 bg-green-500/10 rounded-full translate-x-4 -translate-y-4 blur-xl"></div>
+                        <p className="text-xs text-green-400 uppercase tracking-widest mb-1 font-bold">Recommended Bid Price</p>
+                        <p className="text-5xl font-oswald font-bold text-white drop-shadow-[0_0_15px_rgba(34,197,94,0.4)] relative z-10">${finalBid.toFixed(2)}</p>
+                        <p className="text-xs text-gray-400 mt-2 relative z-10">Total Cost: ${cost.toFixed(2)} • Profit: ${(finalBid - cost).toFixed(2)}</p>
                     </div>
 
-                    {/* Profit Meter */}
-                    <div className="mt-6">
-                        <div className="h-10 glass-panel rounded-full overflow-hidden">
-                        <div className="h-full flex items-center px-4 text-sm font-oswald tracking-wide transition-all duration-500" style={{ width: `${Math.min(meterInfo.visualWidth, 100)}%`, backgroundColor: meterInfo.color }}>
-                            {meterInfo.visualWidth > 15 && `${grossMargin.toFixed(0)}%`}
-                        </div>
-                        </div>
-                        <div className="mt-2 text-center">
-                        <p className="text-lg font-oswald" style={{ color: meterInfo.color }}>{meterInfo.label}</p>
-                        <p className="text-sm text-gray-400">{meterInfo.sublabel}</p>
-                        </div>
-                    </div>
-
-                    <button onClick={saveBid} disabled={loading} className="mt-6 w-full h-12 bg-industrial-orange text-black font-bold uppercase rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:bg-[#e65c00] transition flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={18} />} Save Bid to Cloud
+                    <button onClick={saveBid} disabled={loading} className="w-full h-14 bg-[#FF6700] text-black font-bold text-lg uppercase rounded-xl shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-[1.02] transition flex items-center justify-center gap-2">
+                        {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} SAVE TO CLOUD
                     </button>
                 </div>
             )}
 
             {/* VIEW 2: CLIENT INVOICE */}
             {isInvoiceMode && (
-                <div id="invoice-area" className="bg-white text-black rounded-b-xl rounded-tr-xl p-8 shadow-2xl relative min-h-[600px]">
-                    <div className="absolute top-8 right-8 text-right">
-                        <h2 className="text-2xl font-bold font-oswald tracking-widest text-gray-900">INVOICE</h2>
-                        <p className="text-sm text-gray-500">Date: {new Date().toLocaleDateString()}</p>
+                <div id="invoice-area" className="bg-white text-black rounded-xl p-8 shadow-2xl min-h-[600px] flex flex-col relative animate-in fade-in">
+                    
+                    {/* Invoice Header */}
+                    <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-200">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p>
+                        <h1 className="text-3xl font-oswald font-bold text-gray-900">{jobName || "Draft Project"}</h1>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">Date Issued</p>
+                        <p className="font-bold">{new Date().toLocaleDateString()}</p>
+                      </div>
                     </div>
 
-                    <div className="mb-12">
-                        <p className="text-xs font-bold text-gray-400 uppercase">RE: PROJECT / JOB</p>
-                        <h1 className="text-3xl font-bold border-b-2 border-black pb-2 inline-block min-w-[300px]">
-                            {jobName || "Unnamed Project"}
-                        </h1>
-                    </div>
-
-                    <table className="w-full mb-8 text-left">
+                    {/* Line Items */}
+                    <table className="w-full mb-8 flex-1">
                         <thead>
-                            <tr className="border-b border-gray-300">
-                                <th className="py-2 font-bold uppercase text-xs text-gray-500">Description</th>
-                                <th className="py-2 font-bold uppercase text-xs text-gray-500 text-right">Amount</th>
+                            <tr className="border-b-2 border-black">
+                                <th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th>
+                                <th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th>
                             </tr>
                         </thead>
-                        <tbody className="font-mono text-sm">
+                        <tbody className="text-sm">
                             <tr className="border-b border-gray-100">
-                                <td className="py-4">Materials & Supplies</td>
+                                <td className="py-4 font-medium">Materials & Supplies</td>
                                 <td className="py-4 text-right">${materials.toFixed(2)}</td>
                             </tr>
                             <tr className="border-b border-gray-100">
-                                <td className="py-4">Labor & Services</td>
+                                <td className="py-4 font-medium">Labor & Services</td>
                                 <td className="py-4 text-right">${(finalBid - materials).toFixed(2)}</td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <div className="flex justify-end">
-                        <div className="text-right">
-                            <p className="text-sm font-bold uppercase text-gray-500">Total Due</p>
-                            <p className="text-4xl font-oswald font-bold text-black">${finalBid.toFixed(2)}</p>
-                        </div>
+                    {/* Total */}
+                    <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end">
+                      <span className="text-sm font-bold text-gray-600 uppercase">Total Due</span>
+                      <span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span>
                     </div>
 
-                    <div className="mt-12 pt-8 border-t border-gray-200 text-center text-xs text-gray-400">
+                    <div className="mt-8 text-center text-xs text-gray-400">
                         <p>Thank you for your business.</p>
                     </div>
 
-                    <div className="absolute top-[-50px] right-0 no-print">
-                        <button onClick={handlePrint} className="bg-white text-black px-4 py-2 rounded shadow font-bold flex items-center gap-2 hover:bg-gray-200 transition">
-                            <Printer size={18} /> PRINT / PDF
-                        </button>
-                    </div>
+                    {/* Print Button */}
+                    <button onClick={handlePrint} className="absolute top-8 right-8 no-print bg-black text-white px-4 py-2 rounded shadow font-bold flex items-center gap-2 hover:bg-gray-800 transition">
+                        <Printer size={16} /> Print PDF
+                    </button>
                 </div>
             )}
-
         </section>
 
         {/* ===== RIGHT COLUMN: HISTORY ===== */}
-        <aside className="no-print glass-panel max-h-[75vh] overflow-y-auto">
-          <h3 className="text-xl font-oswald font-bold text-industrial-orange mb-4">Saved Bids</h3>
-          {bidHistory.length === 0 ? (
-            <p className="text-gray-400 text-sm">No bids saved yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {bidHistory.map((bid, idx) => (
-                <li key={bid.id} onClick={() => loadBid(bid)} className="glass-panel rounded-lg p-3 cursor-pointer hover:border-industrial-orange hover:scale-[1.02] transition">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-white">{bid.jobName || "Unnamed Job"}</p>
-                      <p className="text-xs text-gray-400">{bid.date}</p>
+        <aside className="no-print">
+          <div className="glass-panel rounded-xl p-5 sticky top-24 border border-white/10">
+            <h3 className="text-sm font-bold text-[#FF6700] uppercase tracking-wider mb-4 flex items-center gap-2"><Save size={14}/> Saved Bids</h3>
+            
+            {bidHistory.length === 0 ? (
+              <p className="text-gray-500 text-xs italic">No saved history found.</p>
+            ) : (
+              <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1 custom-scrollbar">
+                {bidHistory.map((bid, idx) => (
+                  <div key={bid.id} onClick={() => loadBid(bid)} className="bg-white/5 border border-white/5 rounded-lg p-3 cursor-pointer hover:bg-white/10 hover:border-[#FF6700]/50 transition group relative">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-bold text-white text-sm truncate w-32">{bid.jobName || "No Name"}</p>
+                        <p className="text-[10px] text-gray-500">{bid.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-green-400 font-oswald font-bold">{bid.finalPrice}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-green-400 font-bold">{bid.finalPrice}</p>
-                      <p className="text-xs text-blue-400">{bid.grossMargin}% margin</p>
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, idx); }} className="ml-2 text-red-400 hover:text-red-300">
-                      <Trash2 size={16} />
+                    <button onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, idx); }} className="absolute -top-2 -right-2 bg-red-900/80 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg">
+                      <Trash2 size={12} />
                     </button>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </aside>
 
       </main>
 
-      {/* Toast */}
+      {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-semibold animate-slide-in" style={{ backgroundColor: toast.type === "success" ? "#22c55e" : "#ef4444" }}>
+        <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-bold animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}>
           {toast.message}
         </div>
       )}
