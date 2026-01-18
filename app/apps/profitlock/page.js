@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
-import { Trash2, Save, FileText, Printer, Settings, ChevronDown, Loader2 } from "lucide-react";
+import { Trash2, Save, FileText, Share, Settings, ChevronDown, Loader2 } from "lucide-react";
 import Header from "../../components/Header";
 
 export default function ProfitLock() {
@@ -113,7 +113,12 @@ export default function ProfitLock() {
   };
 
   const showToast = (msg, type) => { setToast({message: msg, type}); setTimeout(()=>setToast(null), 3000); };
-  const handlePrint = () => { window.print(); };
+  
+  // SHARE / PRINT HANDLER
+  const handleShare = async () => { 
+    // On mobile, window.print() opens the Share sheet for the PDF
+    window.print(); 
+  };
 
   return (
     <div className="min-h-screen bg-[#121212] text-white font-inter pb-20">
@@ -271,9 +276,9 @@ export default function ProfitLock() {
                         <p>Thank you for your business.</p>
                     </div>
 
-                    {/* Print Button */}
-                    <button onClick={handlePrint} className="absolute top-8 right-8 no-print bg-black text-white px-4 py-2 rounded shadow font-bold flex items-center gap-2 hover:bg-gray-800 transition">
-                        <Printer size={16} /> Print PDF
+                    {/* SHARE Button */}
+                    <button onClick={handleShare} className="absolute top-8 right-8 no-print bg-[#FF6700] text-black px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 hover:scale-105 transition active:scale-95">
+                        <Share size={18} /> Share Invoice
                     </button>
                 </div>
             )}
