@@ -1,339 +1,307 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
-  FileText, Eraser, Check, Plus, 
-  Download, FileSignature, ShieldAlert, BadgeDollarSign, Import
+  PenTool, Save, RotateCcw, Download, Printer, 
+  FileText, Calendar, User, Trash2, CheckCircle2, Loader2, X 
 } from "lucide-react";
 import Header from "../../components/Header";
+import SignatureCanvas from "react-signature-canvas";
 
 export default function SignOff() {
   const supabase = createClient();
-  const canvasRef = useRef(null);
+  const sigPad = useRef({});
   
   // STATE
-  const [bids, setBids] = useState([]);
-  const [projectName, setProjectName] = useState("");
-  const [scopeOfWork, setScopeOfWork] = useState("");
-  const [agreementDate, setAgreementDate] = useState("");
-  const [contractType, setContractType] = useState("STANDARD");
+  const [activeTab, setActiveTab] = useState("NEW"); // "NEW" or "HISTORY"
+  const [contracts, setContracts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   
-  const [isSignatureSaved, setIsSignatureSaved] = useState(false);
-  const [signatureImage, setSignatureImage] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [showStamp, setShowStamp] = useState(false);
+  // FORM STATE
+  const [clientName, setClientName] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [contractBody, setContractBody] = useState("");
+  const [isLocked, setIsLocked] = useState(false); // After signing
+  const [savedSignature, setSavedSignature] = useState(null); // URL after save
 
-  // 1. INIT & LOAD DATA
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    setAgreementDate(today);
-    loadBids();
-    setupCanvas();
+  // TEMPLATES
+  const TEMPLATES = [
+    { label: "General Service", text: "I, [Client Name], authorize [Your Company] to perform the following work: \n\n1. Scope: \n2. Payment Terms: 50% Deposit, 50% Completion.\n3. Warranty: 30-Day Labor Warranty." },
+    { label: "Change Order", text: "CHANGE ORDER REQUEST\n\nOriginal Contract Date: \nAdditional Work Required: \n\nAdditional Cost: $\nNew Completion Date: " },
+    { label: "Liability Waiver", text: "I acknowledge that construction work involves risk. I hereby release [Your Company] from liability regarding..." }
+  ];
 
-    const saved = localStorage.getItem("signoff_agreement");
-    if (saved) {
-      const agreement = JSON.parse(saved);
-      setProjectName(agreement.projectName || "");
-      setScopeOfWork(agreement.scopeOfWork || "");
-      setAgreementDate(agreement.agreementDate || today);
-      if (agreement.signatureDataUrl) {
-        setSignatureImage(agreement.signatureDataUrl);
-        setIsSignatureSaved(true);
-        setTimeout(() => setShowStamp(true), 100);
-      }
-    }
-  }, []);
+  useEffect(() => { loadHistory(); }, []);
 
-  // Fetch Bids from ProfitLock DB
-  const loadBids = async () => {
+  // --- DATA LOGIC ---
+  const loadHistory = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from("bids").select("id, project_name, sale_price, materials").order("created_at", { ascending: false });
-    if (data) setBids(data);
+    const { data } = await supabase.from("contracts").select("*").order("created_at", { ascending: false });
+    if (data) setContracts(data);
   };
 
-  // 2. CANVAS LOGIC (Graph Paper & Blue Ink)
-  const setupCanvas = () => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    setTimeout(() => {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = 200;
-        
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-          ctx.lineWidth = 2.5;
-          ctx.strokeStyle = "#00008b";
-        }
-    }, 100);
+  const applyTemplate = (text) => {
+    if(contractBody && !confirm("Overwrite current text?")) return;
+    setContractBody(text);
   };
 
-  // Handle Resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (!isSignatureSaved) setupCanvas();
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [isSignatureSaved]);
-
-  // Drawing Handlers
-  const getPos = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+  // --- SIGNATURE LOGIC ---
+  const clearSignature = () => {
+    sigPad.current.clear();
+    setIsLocked(false);
+    setSavedSignature(null);
   };
 
-  const startDraw = (e) => {
-    if (isSignatureSaved) return;
-    e.preventDefault();
-    setIsDrawing(true);
-    const ctx = canvasRef.current.getContext("2d");
-    const { x, y } = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  };
+  const saveContract = async () => {
+    if (!clientName || !contractBody) return alert("Please fill out Client Name and Contract Text.");
+    if (sigPad.current.isEmpty()) return alert("Please sign the document.");
 
-  const moveDraw = (e) => {
-    if (!isDrawing || isSignatureSaved) return;
-    e.preventDefault();
-    const ctx = canvasRef.current.getContext("2d");
-    const { x, y } = getPos(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
 
-  const endDraw = () => {
-    setIsDrawing(false);
-    canvasRef.current?.getContext("2d").closePath();
-  };
-
-  const clearPad = () => {
-    const canvas = canvasRef.current;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-    setIsSignatureSaved(false);
-    setSignatureImage(null);
-    setShowStamp(false);
-  };
-
-  // 3. ACTIONS & TEMPLATES
-  const handleImportBid = (e) => {
-    const bidId = e.target.value;
-    if (!bidId) return;
-    const bid = bids.find(b => b.id.toString() === bidId);
-    if (bid) {
-        setProjectName(bid.project_name);
-        const text = `Contract for ${bid.project_name}.\n\nTotal Estimate: $${bid.sale_price}\nIncludes materials listed in estimate.\n`;
-        setScopeOfWork(text);
+    // 1. Upload Signature Image
+    // Get high-res PNG from canvas
+    const sigBlob = await new Promise(resolve => sigPad.current.getCanvas().toBlob(resolve, 'image/png'));
+    const fileName = `${user.id}/${Date.now()}-sig.png`;
+    
+    const { error: uploadError } = await supabase.storage.from("signatures").upload(fileName, sigBlob);
+    
+    let publicUrl = null;
+    if (!uploadError) {
+        const { data } = supabase.storage.from("signatures").getPublicUrl(fileName);
+        publicUrl = data.publicUrl;
     }
-  };
 
-  const addTemplate = (type) => {
-    let text = "";
-    if (type === "LIABILITY") text = "\n[LIABILITY WAIVER]\nContractor is not responsible for pre-existing damage to plumbing, electrical, or structural elements discovered during work.\n";
-    if (type === "PAYMENT") text = "\n[PAYMENT TERMS]\n50% Deposit required to schedule. Balance due immediately upon substantial completion.\n";
-    if (type === "CHANGE") {
-        setContractType("CHANGE_ORDER");
-        text = "\n[CHANGE ORDER]\nThis agreement modifies the original contract. All additional costs listed above are due immediately.\n";
+    // 2. Save to DB
+    const { data: newContract, error } = await supabase.from("contracts").insert({
+        user_id: user.id,
+        client_name: clientName,
+        project_name: projectName || "Untitled Project",
+        contract_body: contractBody,
+        signature_url: publicUrl,
+        status: "SIGNED"
+    }).select().single();
+
+    if (newContract) {
+        setContracts([newContract, ...contracts]);
+        setSavedSignature(publicUrl);
+        setIsLocked(true);
+        alert("Contract Saved & Locked!");
+    } else {
+        alert("Error saving: " + error.message);
     }
-    setScopeOfWork(prev => prev + text);
+    setSaving(false);
   };
 
-  const saveAgreement = () => {
-    if (!projectName || !scopeOfWork) return alert("Please fill out the contract details.");
-    const canvas = canvasRef.current;
-    const dataUrl = canvas.toDataURL("image/png");
-    const blank = document.createElement("canvas");
-    blank.width = canvas.width; blank.height = canvas.height;
-    if (dataUrl === blank.toDataURL()) return alert("Please sign the document.");
-
-    setSignatureImage(dataUrl);
-    setIsSignatureSaved(true);
-    const payload = { projectName, scopeOfWork, agreementDate, signatureDataUrl: dataUrl };
-    localStorage.setItem("signoff_agreement", JSON.stringify(payload));
-    setTimeout(() => setShowStamp(true), 100);
+  const deleteContract = async (id) => {
+      if(!confirm("Delete this contract record?")) return;
+      await supabase.from("contracts").delete().eq("id", id);
+      setContracts(contracts.filter(c => c.id !== id));
   };
 
-  const newAgreement = () => {
-    if(!confirm("Clear current agreement?")) return;
-    setProjectName(""); setScopeOfWork(""); setIsSignatureSaved(false); setShowStamp(false); setSignatureImage(null);
-    setTimeout(setupCanvas, 100);
+  const printContract = () => {
+      window.print();
   };
 
+  // --- RENDER ---
   return (
-    <div className="min-h-screen bg-industrial-bg text-white font-inter pb-20">
+    <div className="min-h-screen bg-[#121212] text-white font-inter pb-32 print:bg-white print:text-black">
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400 ;600&family=Oswald:wght@500;700&display=swap');
-        .font-oswald { font-family: 'Oswald', sans-serif; }
-        
-        .paper-bg {
-            background-color: #f5f5f5;
-            background-image: radial-gradient(#ccc 1px, transparent 1px);
-            background-size: 20px 20px;
-            color: #1a1a1a;
-        }
-        .stamp-enter {
-            animation: stamp-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-            opacity: 0;
-            transform: scale(2) rotate(-15deg);
-        }
-        @keyframes stamp-bounce {
-            0% { opacity: 0; transform: scale(3) rotate(-15deg); }
-            50% { opacity: 1; transform: scale(0.8) rotate(-15deg); }
-            100% { opacity: 1; transform: scale(1) rotate(-15deg); }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+            .no-print { display: none !important; }
         }
       `}</style>
 
-      {/* HEADER */}
-      <Header title="SIGNOFF" backLink="/" />
+      <div className="no-print">
+        <Header title="SIGNOFF" backLink="/" />
+      </div>
 
-      <main className="max-w-2xl mx-auto px-6 space-y-6">
+      <main className="max-w-4xl mx-auto px-6 pt-4">
         
-        {/* SECTION 1: CONTRACT DETAILS */}
-        <div className="glass-panel rounded-xl p-5 shadow-xl">
-            <div className="flex justify-between items-center mb-4 border-b border-industrial-border pb-2">
-                <h2 className="font-oswald text-lg text-gray-200">CONTRACT DETAILS</h2>
-                <div className="flex gap-2">
-                    {/* PROFITLOCK INTEGRATION */}
-                    <div className="relative">
-                        <select 
-                            onChange={handleImportBid}
-                            className="input-field rounded-lg p-2 text-xs pr-6 appearance-none"
-                        >
-                            <option value="">Import Bid...</option>
-                            {bids.map(b => <option key={b.id} value={b.id}>{b.project_name} (${b.sale_price})</option>)}
-                        </select>
-                        <Import size={12} className="absolute right-2 top-2.5 text-gray-500 pointer-events-none"/>
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Project Name</label>
-                    <input 
-                        value={projectName}
-                        onChange={(e) => setProjectName(e.target.value)}
-                        disabled={isSignatureSaved}
-                        className="input-field rounded-lg p-3 w-full disabled:opacity-50"
-                        placeholder="e.g. Smith Kitchen Remodel"
-                    />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Agreement Date</label>
-                        <input 
-                            type="date"
-                            value={agreementDate}
-                            onChange={(e) => setAgreementDate(e.target.value)}
-                            disabled={isSignatureSaved}
-                            className="input-field rounded-lg p-3 w-full disabled:opacity-50"
-                        />
-                    </div>
-                    <div>
-                         <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Type</label>
-                         <div className="flex bg-[#1a1a1a] rounded-lg p-1 border border-industrial-border">
-                             <button onClick={() => setContractType("STANDARD")} className={`flex-1 text-xs font-bold rounded py-2 ${contractType === "STANDARD" ? "bg-industrial-orange text-black" : "text-gray-500"}`}>STD</button>
-                             <button onClick={() => addTemplate("CHANGE")} className={`flex-1 text-xs font-bold rounded py-2 ${contractType === "CHANGE_ORDER" ? "bg-red-600 text-white" : "text-gray-500"}`}>CHANGE</button>
-                         </div>
-                    </div>
-                </div>
-
-                <div>
-                    <div className="flex justify-between items-end mb-1">
-                        <label className="text-xs font-bold text-gray-500 uppercase block">Scope of Work</label>
-                        {/* SMART TEMPLATES */}
-                        {!isSignatureSaved && (
-                            <div className="flex gap-2">
-                                <button onClick={() => addTemplate("PAYMENT")} title="Add Payment Terms" className="text-[10px] bg-[#333] hover:bg-industrial-orange hover:text-black px-2 py-1 rounded text-gray-300 transition flex items-center gap-1"><BadgeDollarSign size={10}/> TERMS</button>
-                                <button onClick={() => addTemplate("LIABILITY")} title="Add Liability Waiver" className="text-[10px] bg-[#333] hover:bg-red-600 hover:text-white px-2 py-1 rounded text-gray-300 transition flex items-center gap-1"><ShieldAlert size={10}/> WAIVER</button>
-                            </div>
-                        )}
-                    </div>
-                    <textarea 
-                        value={scopeOfWork}
-                        onChange={(e) => setScopeOfWork(e.target.value)}
-                        disabled={isSignatureSaved}
-                        rows={6}
-                        className="input-field rounded-lg p-3 w-full font-mono text-sm disabled:opacity-50"
-                        placeholder="Describe work, materials, and costs..."
-                    />
-                </div>
-            </div>
+        {/* TABS */}
+        <div className="flex bg-[#1a1a1a] p-1 rounded-xl mb-6 border border-white/10 no-print">
+            <button onClick={() => setActiveTab("NEW")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${activeTab === "NEW" ? "bg-[#FF6700] text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
+                NEW CONTRACT
+            </button>
+            <button onClick={() => setActiveTab("HISTORY")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${activeTab === "HISTORY" ? "bg-white text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
+                HISTORY
+            </button>
         </div>
 
-        {/* SECTION 2: THE PAPER CONTRACT & SIGNATURE */}
-        <div className="relative">
-            <div className="paper-bg rounded-xl p-6 shadow-2xl overflow-hidden min-h-[300px] border-t-8 border-gray-300 relative">
-                {/* Paper Header */}
-                <div className="flex justify-between border-b-2 border-gray-300 pb-2 mb-4">
-                    <span className="font-oswald text-xl font-bold uppercase text-gray-800">{contractType.replace("_", " ")}</span>
-                    <span className="font-mono text-sm text-gray-600">{agreementDate}</span>
-                </div>
+        {/* === NEW CONTRACT TAB === */}
+        {activeTab === "NEW" && (
+            <div id="print-area" className="animate-in fade-in slide-in-from-left-4">
                 
-                <div className="mb-6 font-serif text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
-                    {scopeOfWork || "(Scope of work will appear here...)"}
-                </div>
-
-                {/* SIGNATURE AREA */}
-                <div className="mt-8">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">ACCEPTED BY (SIGN BELOW):</p>
+                {/* PAPER CONTAINER */}
+                <div className="bg-[#e5e5e5] text-black p-8 rounded-xl shadow-2xl relative min-h-[80vh] flex flex-col justify-between print:shadow-none print:rounded-none">
                     
-                    {/* CANVAS CONTAINER */}
-                    <div className="relative border-2 border-dashed border-gray-400 rounded bg-white h-48 w-full touch-none">
-                        {!isSignatureSaved ? (
-                            <canvas 
-                                ref={canvasRef}
-                                onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw}
-                                onTouchStart={startDraw} onTouchMove={moveDraw} onTouchEnd={endDraw}
-                                className="w-full h-full cursor-crosshair"
-                            />
-                        ) : (
-                            <img src={signatureImage} className="w-full h-full object-contain" />
-                        )}
+                    {/* Header Details */}
+                    <div>
+                        <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
+                            <div>
+                                <h1 className="text-3xl font-oswald font-bold tracking-wide">SERVICE AGREEMENT</h1>
+                                <p className="text-sm text-gray-600 mt-1">{new Date().toLocaleDateString()}</p>
+                            </div>
+                            <div className="text-right">
+                                {isLocked ? (
+                                    <div className="border-2 border-red-600 text-red-600 font-bold px-4 py-1 rounded uppercase rotate-[-10deg] opacity-80 text-xl">SIGNED & LOCKED</div>
+                                ) : (
+                                    <div className="bg-black text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider">DRAFT MODE</div>
+                                )}
+                            </div>
+                        </div>
 
-                        {/* STAMP ANIMATION */}
-                        {showStamp && (
-                            <div className="stamp-enter absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-4 border-green-600 text-green-600 font-black text-4xl p-2 rounded transform -rotate-12 opacity-80 pointer-events-none whitespace-nowrap">
-                                SIGNED & LOCKED
+                        {/* Inputs */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Client Name</label>
+                                {isLocked ? <p className="font-bold text-lg">{clientName}</p> : (
+                                    <input 
+                                        className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
+                                        placeholder="Enter Client Name..."
+                                        value={clientName}
+                                        onChange={e => setClientName(e.target.value)}
+                                    />
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Project / Job Name</label>
+                                {isLocked ? <p className="font-bold text-lg">{projectName}</p> : (
+                                    <input 
+                                        className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
+                                        placeholder="e.g. Kitchen Remodel"
+                                        value={projectName}
+                                        onChange={e => setProjectName(e.target.value)}
+                                    />
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Templates (Hidden if Locked) */}
+                        {!isLocked && (
+                            <div className="flex gap-2 mb-4 overflow-x-auto no-print pb-2">
+                                {TEMPLATES.map(t => (
+                                    <button key={t.label} onClick={() => applyTemplate(t.text)} className="whitespace-nowrap px-3 py-1 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100 transition">
+                                        + {t.label}
+                                    </button>
+                                ))}
                             </div>
                         )}
+
+                        {/* Body */}
+                        <div className="mb-8">
+                            <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Contract Terms</label>
+                            {isLocked ? (
+                                <div className="whitespace-pre-wrap font-mono text-sm bg-white p-4 border rounded">{contractBody}</div>
+                            ) : (
+                                <textarea 
+                                    className="w-full h-64 bg-white border border-gray-300 rounded p-4 font-mono text-sm focus:border-[#FF6700] outline-none resize-none shadow-inner"
+                                    placeholder="Type contract terms here..."
+                                    value={contractBody}
+                                    onChange={e => setContractBody(e.target.value)}
+                                />
+                            )}
+                        </div>
                     </div>
-                    
-                    {!isSignatureSaved && <p className="text-[10px] text-gray-400 mt-1 text-center">Use finger or mouse to sign.</p>}
+
+                    {/* Signature Area */}
+                    <div className="border-t-2 border-black pt-6">
+                        <div className="flex justify-between items-end">
+                            <div className="w-full">
+                                <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Authorized Signature</label>
+                                
+                                {isLocked ? (
+                                    <img src={savedSignature} alt="Signature" className="h-24 object-contain border-b border-black w-1/2" />
+                                ) : (
+                                    <div className="relative border-2 border-dashed border-gray-400 rounded bg-white hover:border-[#FF6700] transition">
+                                        <SignatureCanvas 
+                                            ref={sigPad}
+                                            penColor="black"
+                                            velocityFilterWeight={0.7} // Smooths lines
+                                            minWidth={1.5} // Prevents pixelated look
+                                            maxWidth={3.5}
+                                            canvasProps={{
+                                                className: "w-full h-40 rounded cursor-crosshair"
+                                            }} 
+                                        />
+                                        <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print" title="Clear">
+                                            <RotateCcw size={16}/>
+                                        </button>
+                                        <div className="absolute bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none uppercase font-bold tracking-widest no-print">Sign Above</div>
+                                    </div>
+                                )}
+                                
+                                <p className="text-xs font-bold mt-2 uppercase tracking-wider">{clientName || "Client Signature"}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                {/* Actions Bar */}
+                <div className="mt-6 flex gap-3 no-print">
+                    {!isLocked ? (
+                        <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-bold py-4 rounded-xl shadow-lg hover:scale-105 transition flex items-center justify-center gap-2">
+                            {saving ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={24}/>}
+                            SIGN & LOCK CONTRACT
+                        </button>
+                    ) : (
+                        <div className="flex-1 flex gap-3">
+                            <button onClick={printContract} className="flex-1 bg-white text-black font-bold py-4 rounded-xl shadow-lg hover:bg-gray-200 transition flex items-center justify-center gap-2">
+                                <Printer size={24}/> PRINT / PDF
+                            </button>
+                            <button onClick={() => { setIsLocked(false); setSavedSignature(null); }} className="px-6 bg-[#333] text-white rounded-xl font-bold hover:bg-red-600 transition">
+                                NEW
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
-        </div>
+        )}
 
-        {/* ACTION BUTTONS */}
-        <div className="grid grid-cols-2 gap-4 pb-12">
-            {!isSignatureSaved ? (
-                <>
-                    <button onClick={clearPad} className="border border-industrial-border text-gray-400 font-bold py-4 rounded-xl hover:bg-[#262626] transition flex justify-center items-center gap-2">
-                        <Eraser size={20}/> CLEAR
-                    </button>
-                    <button onClick={saveAgreement} className="bg-industrial-orange text-black font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] py-4 rounded-xl hover:bg-industrial-orange/90 transition flex justify-center items-center gap-2">
-                        <Check size={20}/> SIGN & LOCK
-                    </button>
-                </>
-            ) : (
-                <>
-                    <button onClick={newAgreement} className="border border-industrial-border text-gray-400 font-bold py-4 rounded-xl hover:bg-[#262626] transition flex justify-center items-center gap-2">
-                        <Plus size={20}/> NEW AGREEMENT
-                    </button>
-                    <button onClick={() => window.print()} className="bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition flex justify-center items-center gap-2">
-                        <Download size={20}/> PRINT / PDF
-                    </button>
-                </>
-            )}
-        </div>
+        {/* === HISTORY TAB === */}
+        {activeTab === "HISTORY" && (
+            <div className="animate-in fade-in slide-in-from-right-4 space-y-4 pb-20">
+                {contracts.length === 0 ? (
+                    <div className="text-center text-gray-500 py-10">No contracts saved yet.</div>
+                ) : contracts.map(c => (
+                    <div key={c.id} className="glass-panel p-4 rounded-xl flex justify-between items-center group">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-white/5 rounded-lg flex items-center justify-center border border-white/10">
+                                <FileText className="text-[#FF6700]" size={24}/>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-white">{c.project_name}</h3>
+                                <p className="text-xs text-gray-400 flex items-center gap-2">
+                                    <User size={12}/> {c.client_name} • <Calendar size={12}/> {new Date(c.created_at).toLocaleDateString()}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 opacity-100 sm:opacity-50 sm:group-hover:opacity-100 transition">
+                            <button onClick={() => {
+                                setClientName(c.client_name);
+                                setProjectName(c.project_name);
+                                setContractBody(c.contract_body);
+                                setSavedSignature(c.signature_url);
+                                setIsLocked(true);
+                                setActiveTab("NEW");
+                            }} className="p-2 bg-white/10 rounded hover:bg-white hover:text-black transition">
+                                <Printer size={18}/>
+                            </button>
+                            <button onClick={() => deleteContract(c.id)} className="p-2 bg-red-900/20 text-red-500 rounded hover:bg-red-900/50 transition">
+                                <Trash2 size={18}/>
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
 
       </main>
     </div>
