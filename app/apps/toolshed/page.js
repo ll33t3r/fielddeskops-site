@@ -15,10 +15,11 @@ export default function ToolShed() {
   const [assets, setAssets] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [defaultVanId, setDefaultVanId] = useState(null); // REQUIRED FOR SYNC
   
   // UI STATE
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showTeamModal, setShowTeamModal] = useState(false); // New Team Modal
+  const [showTeamModal, setShowTeamModal] = useState(false); 
   const [filter, setFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -28,39 +29,39 @@ export default function ToolShed() {
   const [newTool, setNewTool] = useState({ name: "", brand: "", serial: "" });
   const [newPhoto, setNewPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
-  const [newMemberName, setNewMemberName] = useState(""); // For adding people
+  const [newMemberName, setNewMemberName] = useState(""); 
   
   useEffect(() => { 
     const init = async () => {
-        await Promise.all([loadAssets(), loadTeamMembers()]);
+        await Promise.all([loadData()]);
         setLoading(false);
     };
     init(); 
   }, []);
 
   // --- DATA LOADING ---
-  const loadAssets = async () => {
+  const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from("assets").select("*").order("name");
-    if (data) setAssets(data);
+
+    // 1. Get Default Van (For Syncing)
+    const { data: vans } = await supabase.from("vans").select("id").order("created_at").limit(1);
+    if (vans && vans.length > 0) setDefaultVanId(vans[0].id);
+
+    // 2. Get Assets
+    const { data: assetData } = await supabase.from("assets").select("*").order("name");
+    if (assetData) setAssets(assetData);
+
+    // 3. Get Team
+    const { data: teamData } = await supabase.from("team_members").select("*").order("name");
+    if (teamData) setTeamMembers(teamData);
   };
 
-  const loadTeamMembers = async () => {
-    const { data } = await supabase.from("team_members").select("*").order("name");
-    if (data) setTeamMembers(data);
-  };
-
-  // --- TEAM ACTIONS (New) ---
+  // --- TEAM ACTIONS ---
   const addTeamMember = async () => {
       if (!newMemberName.trim()) return;
       const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data } = await supabase.from("team_members").insert({
-          user_id: user.id,
-          name: newMemberName
-      }).select().single();
-
+      const { data } = await supabase.from("team_members").insert({ user_id: user.id, name: newMemberName }).select().single();
       if (data) {
           setTeamMembers([...teamMembers, data]);
           setNewMemberName("");
@@ -68,7 +69,7 @@ export default function ToolShed() {
   };
 
   const deleteTeamMember = async (id) => {
-      if(!confirm("Remove this person? Tools assigned to them will stay checked out but unlinked.")) return;
+      if(!confirm("Remove this person?")) return;
       setTeamMembers(teamMembers.filter(m => m.id !== id));
       await supabase.from("team_members").delete().eq("id", id);
   };
@@ -99,9 +100,10 @@ export default function ToolShed() {
         }
     }
 
-    // 2. Insert Record
-    const { data } = await supabase.from("assets").insert({
+    // 2. Insert Record (NOW WITH VAN ID)
+    const { data, error } = await supabase.from("assets").insert({
         user_id: user.id,
+        van_id: defaultVanId, // <--- CRITICAL FIX FOR SYNC
         name: newTool.name,
         brand: newTool.brand,
         serial_number: newTool.serial,
@@ -109,7 +111,9 @@ export default function ToolShed() {
         status: "IN_VAN" 
     }).select().single();
 
-    if (data) {
+    if (error) {
+        alert("Error adding tool: " + error.message);
+    } else if (data) {
         setAssets([data, ...assets]);
         setShowAddModal(false);
         setNewTool({ name: "", brand: "", serial: "" });
@@ -142,7 +146,6 @@ export default function ToolShed() {
 
   return (
     <div className="min-h-screen bg-[#121212] text-white font-inter pb-24">
-      {/* HEADER */}
       <Header title="TOOLSHED" backLink="/" />
 
       <main className="max-w-xl mx-auto px-6 space-y-6 pt-4">
@@ -177,19 +180,10 @@ export default function ToolShed() {
                     className="input-field rounded-lg pl-10 pr-4 py-3 w-full"
                 />
             </div>
-            {/* TEAM BUTTON */}
-            <button 
-                onClick={() => setShowTeamModal(true)} 
-                className="bg-[#333] hover:bg-white hover:text-black text-white font-bold px-4 rounded-lg flex items-center justify-center transition border border-white/10"
-                title="Manage Team"
-            >
+            <button onClick={() => setShowTeamModal(true)} className="bg-[#333] hover:bg-white hover:text-black text-white font-bold px-4 rounded-lg flex items-center justify-center transition border border-white/10">
                 <Users size={20}/>
             </button>
-            {/* ADD BUTTON */}
-            <button 
-                onClick={() => setShowAddModal(true)} 
-                className="bg-[#FF6700] text-black font-bold px-4 rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition"
-            >
+            <button onClick={() => setShowAddModal(true)} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition">
                 <Plus size={24}/>
             </button>
         </div>
@@ -205,7 +199,6 @@ export default function ToolShed() {
               filteredAssets.map(asset => (
                 <div key={asset.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${asset.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === asset.id ? "ring-1 ring-[#FF6700]" : ""}`}>
                     
-                    {/* CARD HEADER */}
                     <div className="flex gap-4 cursor-pointer" onClick={() => setSelectedAsset(selectedAsset === asset.id ? null : asset.id)}>
                         <div className="w-16 h-16 rounded-lg bg-black/40 flex-shrink-0 border border-white/10 flex items-center justify-center overflow-hidden">
                             {asset.photo_url ? <img src={asset.photo_url} alt={asset.name} className="w-full h-full object-cover" /> : <Wrench size={20} className="text-gray-600"/>}
@@ -228,7 +221,7 @@ export default function ToolShed() {
                         </div>
                     </div>
 
-                    {/* EXPANDED ACTIONS */}
+                    {/* ACTIONS */}
                     {selectedAsset === asset.id && (
                         <div className="mt-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-2">
                             {asset.status === "IN_VAN" ? (
@@ -262,14 +255,10 @@ export default function ToolShed() {
              <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
                 <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
                 <h2 className="font-oswald font-bold text-xl mb-6 text-white flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
-                
-                {/* Add Member */}
                 <div className="flex gap-2 mb-6">
                     <input placeholder="Enter Name (e.g. Mike)" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="input-field rounded-lg p-2 flex-1"/>
                     <button onClick={addTeamMember} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg"><Plus/></button>
                 </div>
-
-                {/* Member List */}
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                     {teamMembers.length === 0 ? <p className="text-gray-500 text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
                         <div key={m.id} className="bg-white/5 border border-white/5 p-3 rounded-lg flex justify-between items-center">
