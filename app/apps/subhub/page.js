@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   Users, Phone, Mail, FileCheck, ShieldAlert, ShieldCheck, 
-  Plus, Search, Star, Trash2, ArrowLeft, Briefcase 
+  Plus, Search, Star, Trash2, Briefcase 
 } from "lucide-react";
-import Link from "next/link";
+import Header from "@/components/Header";
 
 export default function SubHub() {
   const supabase = createClient();
@@ -71,77 +71,64 @@ export default function SubHub() {
 
   // Helper: Check if insurance is expired
   const isExpired = (dateString) => {
-    if (!dateString) return false; // Treat missing as "Unknown" (handled visually)
+    if (!dateString) return false;
     return new Date(dateString) < new Date();
   };
 
   const filteredSubs = subs.filter(s => filterTrade === "ALL" || s.trade === filterTrade);
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-24">
-      <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap");
-        .font-oswald { font-family: "Oswald", sans-serif; }
-      `}</style>
-
+    <div className="min-h-screen bg-industrial-bg text-white font-inter pb-24">
       {/* HEADER */}
-      <header className="max-w-xl mx-auto px-6 pt-8 pb-6 flex items-center gap-3">
-        <Link href="/" className="text-gray-400 hover:text-white"><ArrowLeft /></Link>
-        <div>
-            <h1 className="text-3xl font-oswald font-bold tracking-wide flex items-center gap-2">
-                SUB<span className="text-[#FF6700]">HUB</span> <Users size={24} className="text-[#FF6700]"/>
-            </h1>
-            <p className="text-xs text-gray-500">Subcontractor & Compliance Database</p>
-        </div>
-      </header>
+      <Header title="SUBHUB" backLink="/" />
 
       <main className="max-w-xl mx-auto px-6 space-y-6">
         
         {/* TRADE FILTER */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            <button onClick={() => setFilterTrade("ALL")} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border ${filterTrade === "ALL" ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-[#404040] text-gray-400"}`}>ALL</button>
+            <button onClick={() => setFilterTrade("ALL")} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border ${filterTrade === "ALL" ? "bg-industrial-orange text-black border-industrial-orange shadow-[0_0_20px_rgba(255,103,0,0.4)]" : "border-industrial-border text-gray-400"}`}>ALL</button>
             {TRADES.filter(t => t !== "General").map(t => (
-                <button key={t} onClick={() => setFilterTrade(t)} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border ${filterTrade === t ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-[#404040] text-gray-400"}`}>{t.toUpperCase()}</button>
+                <button key={t} onClick={() => setFilterTrade(t)} className={`whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border ${filterTrade === t ? "bg-industrial-orange text-black border-industrial-orange shadow-[0_0_20px_rgba(255,103,0,0.4)]" : "border-industrial-border text-gray-400"}`}>{t.toUpperCase()}</button>
             ))}
         </div>
 
         {/* ADD NEW SUB FORM */}
         {showAdd ? (
-            <div className="bg-[#262626] border border-[#FF6700] rounded-xl p-4 animate-in fade-in slide-in-from-top-4">
-                <h3 className="font-bold mb-3 text-sm font-oswald">NEW SUBCONTRACTOR</h3>
+            <div className="glass-panel rounded-xl p-4 animate-in fade-in slide-in-from-top-4">
+                <h3 className="font-oswald text-lg font-bold text-white mb-4">NEW SUBCONTRACTOR</h3>
                 
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                    <input placeholder="Company Name" value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} className="col-span-2 bg-[#1a1a1a] border border-[#404040] rounded p-2 text-white outline-none focus:border-[#FF6700]"/>
-                    <input placeholder="Contact Person" value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})} className="bg-[#1a1a1a] border border-[#404040] rounded p-2 text-white outline-none focus:border-[#FF6700]"/>
-                    <select value={form.trade} onChange={e => setForm({...form, trade: e.target.value})} className="bg-[#1a1a1a] border border-[#404040] rounded p-2 text-white outline-none focus:border-[#FF6700]">
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <input placeholder="Company Name" value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} className="input-field rounded-lg p-3 w-full col-span-2"/>
+                    <input placeholder="Contact Person" value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
+                    <select value={form.trade} onChange={e => setForm({...form, trade: e.target.value})} className="input-field rounded-lg p-3 w-full">
                         {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                    <input placeholder="Phone" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="bg-[#1a1a1a] border border-[#404040] rounded p-2 text-white outline-none focus:border-[#FF6700]"/>
-                    <input placeholder="Email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="bg-[#1a1a1a] border border-[#404040] rounded p-2 text-white outline-none focus:border-[#FF6700]"/>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <input placeholder="Phone" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
+                    <input placeholder="Email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
                 </div>
 
-                <div className="border-t border-[#404040] pt-3 mb-3">
+                <div className="border-t border-industrial-border pt-4 mb-4">
                     <p className="text-xs text-gray-500 font-bold mb-2 uppercase">Compliance</p>
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-sm flex items-center gap-2"><FileCheck size={16} className={form.w9_on_file ? "text-green-500" : "text-gray-500"}/> W-9 On File?</label>
-                        <input type="checkbox" checked={form.w9_on_file} onChange={e => setForm({...form, w9_on_file: e.target.checked})} className="w-5 h-5 accent-[#FF6700]"/>
+                        <input type="checkbox" checked={form.w9_on_file} onChange={e => setForm({...form, w9_on_file: e.target.checked})} className="w-5 h-5 accent-industrial-orange"/>
                     </div>
                     <div className="flex items-center justify-between">
                         <label className="text-sm flex items-center gap-2"><ShieldCheck size={16} className="text-gray-500"/> Insurance Exp.</label>
-                        <input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="bg-[#1a1a1a] border border-[#404040] rounded p-1 text-xs text-white"/>
+                        <input type="date" value={form.insurance_expiry} onChange={e => setForm({...form, insurance_expiry: e.target.value})} className="input-field rounded p-2 text-xs w-auto"/>
                     </div>
                 </div>
 
                 <div className="flex gap-2">
-                    <button onClick={saveSub} className="flex-1 bg-[#FF6700] text-black font-bold py-3 rounded hover:bg-[#e55c00]">SAVE SUB</button>
-                    <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-gray-400 hover:text-white">CANCEL</button>
+                    <button onClick={saveSub} className="flex-1 bg-industrial-orange text-black font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] py-3 rounded-lg hover:bg-industrial-orange/90 transition">SAVE SUB</button>
+                    <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-gray-400 hover:text-white border border-industrial-border rounded-lg">CANCEL</button>
                 </div>
             </div>
         ) : (
-            <button onClick={() => setShowAdd(true)} className="w-full border-2 border-dashed border-[#404040] text-gray-500 font-bold py-3 rounded-xl hover:border-[#FF6700] hover:text-[#FF6700] transition flex items-center justify-center gap-2">
+            <button onClick={() => setShowAdd(true)} className="w-full border-2 border-dashed border-industrial-border text-gray-400 font-bold py-4 rounded-xl hover:border-industrial-orange hover:text-industrial-orange transition flex items-center justify-center gap-2">
                 <Plus size={20}/> ADD SUBCONTRACTOR
             </button>
         )}
@@ -149,12 +136,12 @@ export default function SubHub() {
         {/* SUB LIST */}
         <div className="space-y-4">
             {filteredSubs.map(sub => (
-                <div key={sub.id} className="bg-[#262626] border border-[#404040] p-4 rounded-xl relative group hover:border-[#FF6700] transition-colors">
+                <div key={sub.id} className="glass-panel rounded-xl p-4 relative group hover:border-industrial-orange transition-colors">
                     
                     {/* Header */}
-                    <div className="flex justify-between items-start mb-2">
+                    <div className="flex justify-between items-start mb-3">
                         <div>
-                            <h3 className="font-bold text-lg text-white leading-none">{sub.company_name}</h3>
+                            <h3 className="font-oswald text-xl font-bold text-white leading-none">{sub.company_name}</h3>
                             <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Briefcase size={12}/> {sub.trade} • {sub.contact_name}</p>
                         </div>
                         <div className="flex gap-1">
@@ -189,10 +176,10 @@ export default function SubHub() {
 
                     {/* Actions */}
                     <div className="grid grid-cols-3 gap-2">
-                        <a href={`tel:${sub.phone}`} className="bg-[#333] hover:bg-[#FF6700] hover:text-black text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition">
+                        <a href={`tel:${sub.phone}`} className="bg-[#333] hover:bg-industrial-orange hover:text-black text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition">
                             <Phone size={14}/> CALL
                         </a>
-                        <a href={`mailto:${sub.email}`} className="bg-[#333] hover:bg-[#FF6700] hover:text-black text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition">
+                        <a href={`mailto:${sub.email}`} className="bg-[#333] hover:bg-industrial-orange hover:text-black text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition">
                             <Mail size={14}/> EMAIL
                         </a>
                         <button onClick={() => deleteSub(sub.id)} className="bg-[#333] hover:bg-red-600 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-2 transition">

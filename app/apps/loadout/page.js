@@ -1,4 +1,5 @@
-﻿"use client";
+﻿```jsx
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
@@ -7,8 +8,9 @@ import {
   Truck, ClipboardList, ChevronDown 
 } from "lucide-react";
 import Link from "next/link";
+import Header from "@/components/Header";
 
-// RESTORED ORIGINAL BRAND ORANGE
+// Brand-orange token unchanged
 const THEME_ORANGE = "#FF6700"; 
 
 export default function LoadOut() {
@@ -18,16 +20,13 @@ export default function LoadOut() {
   const [vans, setVans] = useState([]);
   const [currentVan, setCurrentVan] = useState(null);
   const [items, setItems] = useState([]);
-  
   const [newItem, setNewItem] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  
-  // EDITING
   const [editingItem, setEditingItem] = useState(null);
   const timerRef = useRef(null);
 
-  // ESSENTIALS LIST (Now matches Brand Orange)
+  // ESSENTIALS LIST
   const defaultLoadout = [
     { name: "Wax Ring", category: "parts", color: THEME_ORANGE },
     { name: "Angle Stop", category: "parts", color: THEME_ORANGE },
@@ -129,7 +128,6 @@ export default function LoadOut() {
     if (!newItem.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Default new items to THEME_ORANGE instead of dark gray for visibility
     const temp = { id: Math.random(), name: newItem, quantity: 1, color: THEME_ORANGE, category: "tools" };
     setItems([temp, ...items]);
     setNewItem("");
@@ -165,7 +163,7 @@ export default function LoadOut() {
     setEditingItem(null);
   };
 
-  // UX FIX: 900ms Hold + Scroll Cancel
+  // UX: 900ms Hold + Scroll Cancel
   const startPress = (item) => { 
     timerRef.current = setTimeout(() => {
         setEditingItem(item);
@@ -179,7 +177,7 @@ export default function LoadOut() {
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
   
-  // Colors for Picker
+  // Color picker palette
   const colors = [
     { hex: "#262626", name: "Charcoal" },
     { hex: THEME_ORANGE, name: "Brand Orange" }, 
@@ -188,116 +186,176 @@ export default function LoadOut() {
     { hex: "#1e3a8a", name: "Blue" },
   ];
 
-  return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter pb-32">
-       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
-        .font-oswald { font-family: 'Oswald', sans-serif; }
-        .no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-      `}</style>
+  if (loading)
+    return (
+      <div className="min-h-screen bg-industrial-bg flex items-center justify-center">
+        <Loader2 className="animate-spin text-industrial-orange" size={40} />
+      </div>
+    );
 
-      {/* HEADER */}
-      <header className="max-w-5xl mx-auto px-6 pt-8 pb-6 flex justify-between items-start">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80">
-            <Package className="w-8 h-8" style={{color: THEME_ORANGE}} />
-            <h1 className="text-3xl font-oswald font-bold tracking-wide">LOAD<span style={{color: THEME_ORANGE}}>OUT</span></h1>
-        </Link>
-        <div className="relative group z-20">
-            <button className="flex items-center gap-2 bg-[#262626] border border-[#404040] px-4 py-2 rounded-lg font-bold text-sm uppercase transition" style={{borderColor: '#404040'}}>
-                <Truck size={16} style={{color: THEME_ORANGE}} />
-                {currentVan ? currentVan.name : "Loading..."}
-                <ChevronDown size={14} />
-            </button>
-            <div className="absolute right-0 top-full mt-2 w-48 bg-[#262626] border border-[#404040] rounded-xl shadow-xl overflow-hidden hidden group-hover:block">
-                {vans.map(v => (
-                    <button key={v.id} onClick={() => switchVan(v.id)} className="w-full text-left px-4 py-3 hover:bg-[#333] border-b border-[#333] last:border-0 text-sm font-bold">
-                        {v.name}
-                    </button>
-                ))}
-                <button onClick={createVan} className="w-full text-left px-4 py-3 text-black font-bold text-sm hover:opacity-90 flex items-center gap-2" style={{backgroundColor: THEME_ORANGE}}>
-                    <Plus size={14} /> ADD NEW VAN
-                </button>
-            </div>
-        </div>
-      </header>
+  return (
+    <div className="min-h-screen bg-industrial-bg text-white font-inter pb-32">
+      <Header title="LOADOUT" backLink="/" />
 
       <main className="max-w-5xl mx-auto px-6">
-        
-        {/* ADD & SEARCH */}
-        <form onSubmit={addItem} className="flex gap-2 mb-6">
-            <div className="relative flex-1">
-                <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
-                <input 
-                    type="text" 
-                    value={newItem}
-                    onChange={(e)=>setNewItem(e.target.value)}
-                    placeholder="Add item..."
-                    className="w-full bg-[#262626] border border-[#404040] rounded-xl pl-10 pr-4 py-3 outline-none transition"
-                    style={{borderColor: '#404040'}}
-                />
-            </div>
-            <button type="submit" className="text-black rounded-xl w-12 flex items-center justify-center font-bold hover:opacity-90" style={{backgroundColor: THEME_ORANGE}}>
-                <Plus />
+        {/* Van Selector */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="relative group z-20">
+            <button className="flex items-center gap-2 glass-panel px-4 py-2 rounded-lg font-bold text-sm uppercase">
+              <Truck size={16} className="text-industrial-orange" />
+              {currentVan ? currentVan.name : "Loading..."}
+              <ChevronDown size={14} />
             </button>
+            <div className="absolute right-0 top-full mt-2 w-48 glass-panel rounded-xl shadow-xl overflow-hidden hidden group-hover:block">
+              {vans.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => switchVan(v.id)}
+                  className="w-full text-left px-4 py-3 hover:bg-[#333] border-b border-industrial-border last:border-0 text-sm font-bold"
+                >
+                  {v.name}
+                </button>
+              ))}
+              <button
+                onClick={createVan}
+                className="w-full text-left px-4 py-3 text-black font-bold text-sm hover:opacity-90 flex items-center gap-2 bg-industrial-orange"
+              >
+                <Plus size={14} /> ADD NEW VAN
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={copyShoppingList}
+            className="flex items-center gap-2 text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition"
+          >
+            <ClipboardList size={18} /> Copy Shopping List
+          </button>
+        </div>
+
+        {/* Add Item */}
+        <form onSubmit={addItem} className="flex gap-2 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
+            <input
+              type="text"
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              placeholder="Add item..."
+              className="input-field rounded-lg pl-10 pr-4 py-3"
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-industrial-orange text-black font-bold rounded-lg w-12 flex items-center justify-center shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:opacity-90"
+          >
+            <Plus />
+          </button>
         </form>
 
-        {/* GRID */}
-        {loading ? <div className="text-center py-10"><Loader2 className="animate-spin inline" style={{color: THEME_ORANGE}}/></div> : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 no-select">
-                {items.map(item => (
-                    <div 
-                        key={item.id}
-                        onMouseDown={() => startPress(item)}
-                        onMouseUp={endPress}
-                        onMouseLeave={endPress}
-                        onTouchStart={() => startPress(item)}
-                        onTouchEnd={endPress}
-                        onTouchMove={endPress} // Scroll cancels Edit
-                        style={{ backgroundColor: item.color }}
-                        className="relative h-32 rounded-xl p-4 flex flex-col justify-between shadow-lg active:scale-95 transition-transform"
-                    >
-                        <h3 className="font-oswald font-bold text-lg leading-tight drop-shadow-md truncate">{item.name}</h3>
-                        
-                        <div className="flex items-center justify-between mt-2">
-                            <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, -1); }} className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition"><Minus size={16} /></button>
-                            <span className="text-2xl font-oswald font-bold drop-shadow-md">{item.quantity}</span>
-                            <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, 1); }} className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition"><Plus size={16} /></button>
-                        </div>
-                    </div>
-                ))}
+        {/* Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 no-select">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              onMouseDown={() => startPress(item)}
+              onMouseUp={endPress}
+              onMouseLeave={endPress}
+              onTouchStart={() => startPress(item)}
+              onTouchEnd={endPress}
+              onTouchMove={endPress}
+              style={{ backgroundColor: item.color }}
+              className="relative h-32 rounded-xl p-4 flex flex-col justify-between shadow-lg active:scale-95 transition-transform"
+            >
+              <h3 className="font-oswald font-bold text-lg leading-tight drop-shadow-md truncate">
+                {item.name}
+              </h3>
+
+              <div className="flex items-center justify-between mt-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateQuantity(item.id, item.quantity, -1);
+                  }}
+                  className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="text-2xl font-oswald font-bold drop-shadow-md">
+                  {item.quantity}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateQuantity(item.id, item.quantity, 1);
+                  }}
+                  className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
             </div>
-        )}
+          ))}
+        </div>
       </main>
 
-      {/* FOOTER */}
-      <div className="fixed bottom-0 left-0 w-full bg-[#1a1a1a]/90 backdrop-blur border-t border-[#333] p-4 z-10">
-        <div className="max-w-5xl mx-auto flex justify-center">
-             <button onClick={copyShoppingList} className="flex items-center gap-2 text-gray-400 hover:text-white font-bold text-sm uppercase tracking-wide transition">
-                <ClipboardList size={18} /> Copy Shopping List
-             </button>
-        </div>
-      </div>
-
-      {/* MODAL */}
+      {/* Edit Modal */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 backdrop-blur-sm">
-            <div className="bg-[#262626] border border-[#404040] w-full max-w-sm rounded-xl p-6 shadow-2xl relative">
-                <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
-                <h2 className="font-oswald font-bold text-xl mb-6" style={{color: THEME_ORANGE}}>EDIT ITEM</h2>
-                <input type="text" value={editingItem.name} onChange={(e)=>setEditingItem({...editingItem, name: e.target.value})} className="w-full bg-[#1a1a1a] border border-[#404040] rounded p-3 text-white mb-4" />
-                <div className="grid grid-cols-5 gap-2 mb-6">
-                    {colors.map(c => (
-                        <button key={c.hex} onClick={()=>setEditingItem({...editingItem, color: c.hex})} style={{ backgroundColor: c.hex }} className={`h-8 rounded ${editingItem.color === c.hex ? 'ring-2 ring-white' : ''}`} />
-                    ))}
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={()=>deleteItem(editingItem.id)} className="flex-1 bg-red-900/30 text-red-500 border border-red-900 py-3 rounded font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> Delete</button>
-                    <button onClick={saveEdit} className="flex-[2] text-black py-3 rounded font-bold" style={{backgroundColor: THEME_ORANGE}}>SAVE</button>
-                </div>
+          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative">
+            <button
+              onClick={() => setEditingItem(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-white"
+            >
+              <X />
+            </button>
+            <h2 className="font-oswald font-bold text-xl mb-6 text-industrial-orange">
+              EDIT ITEM
+            </h2>
+            <input
+              type="text"
+              value={editingItem.name}
+              onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+              className="input-field rounded-lg mb-4"
+            />
+            <div className="grid grid-cols-5 gap-2 mb-6">
+              {colors.map((c) => (
+                <button
+                  key={c.hex}
+                  onClick={() => setEditingItem({ ...editingItem, color: c.hex })}
+                  style={{ backgroundColor: c.hex }}
+                  className={`h-8 rounded ${editingItem.color === c.hex ? "ring-2 ring-white" : ""}`}
+                />
+              ))}
             </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => deleteItem(editingItem.id)}
+                className="flex-1 bg-red-900/30 text-red-500 border border-red-900 py-3 rounded-lg font-bold flex items-center justify-center gap-2"
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+              <button
+                onClick={saveEdit}
+                className="flex-[2] bg-industrial-orange text-black py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:opacity-90"
+              >
+                SAVE
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      {toast && <div className={`fixed bottom-20 right-6 px-6 py-3 rounded shadow-xl font-bold text-white ${toast.type==='success'?'bg-green-600':'bg-blue-600'}`}>{toast.msg}</div>}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed bottom-20 right-6 px-6 py-3 rounded shadow-xl font-bold text-white ${
+            toast.type === "success" ? "bg-green-600" : "bg-blue-600"
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

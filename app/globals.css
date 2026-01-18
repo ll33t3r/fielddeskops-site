@@ -5,37 +5,88 @@
 /* 1. Load fonts */
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* 2. CSS variables for the Industrial-V2 palette */
+/* FIELDDESKOPS DESIGN SYSTEM (Premium Upgrade) */
+
 :root {
-  --color-bg: #1a1a1a;        /* Dark Asphalt */
-  --color-card: #262626;       /* Gunmetal */
-  --color-primary: #FF6700;    /* Safety Orange */
+  --color-primary: #FF6700; /* Safety Orange */
 }
 
-/* 3. Global theme application */
 body {
-  background-color: var(--color-bg);
+  background-color: #121212;
+  /* The Premium Depth Gradient */
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(255, 103, 0, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.05) 0%, transparent 30%);
   color: #ffffff;
-  font-family: 'Inter', sans-serif; /* body font */
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
 }
 
-/* 4. Heading font override */
+/* Heading font override */
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Oswald', sans-serif;
 }
 
-/* 5. Industrial button utility */
-.btn-industrial {
-  @apply inline-flex items-center justify-center;
-  height: 50px;
-  padding: 0 1.5rem;
-  background-color: var(--color-primary);
-  color: #ffffff;
-  font-weight: 700;
-  text-transform: uppercase;
-  border-radius: 0.375rem; /* rounded-md */
-  transition: background-color 0.2s ease;
+/* --- UTILITY CLASSES --- */
+
+/* 1. The Frost Glass Panel (Replaces flat grey cards) */
+.glass-panel {
+  background: rgba(30, 30, 30, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
 }
-.btn-industrial:hover {
-  background-color: #e65c00; /* slightly darker orange */
+
+/* 2. The Interactive Glass Button */
+.glass-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.glass-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.glass-btn:active {
+  transform: scale(0.96);
+}
+
+/* 3. The "Action" Input Fields */
+.input-field {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-field:focus {
+  border-color: #FF6700;
+  outline: none;
+  box-shadow: 0 0 15px rgba(255, 103, 0, 0.1);
+}
+
+/* 4. The Neon Text Effect */
+.text-neon {
+  color: #FF6700;
+  text-shadow: 0 0 10px rgba(255, 103, 0, 0.4);
+}
+
+/* 5. Scrollbar Polish (Optional but nice) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a; 
+}
+::-webkit-scrollbar-thumb {
+  background: #333; 
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF6700; 
 }

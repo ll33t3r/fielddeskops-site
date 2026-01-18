@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { Trash2, Save, Calculator, Loader2, FileText, Printer } from "lucide-react";
 import Link from "next/link";
+import Header from "@/components/Header";
 
 export default function ProfitLock() {
   const supabase = createClient();
@@ -118,9 +119,9 @@ export default function ProfitLock() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white font-inter">
+    <div className="min-h-screen bg-industrial-bg text-white font-inter">
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400 ;600&family=Oswald:wght@500;700&display=swap');
         .font-oswald { font-family: 'Oswald', sans-serif; }
         @media print {
             body * { visibility: hidden; }
@@ -136,15 +137,7 @@ export default function ProfitLock() {
       `}</style>
 
       {/* HEADER */}
-      <header className="max-w-5xl mx-auto px-6 pt-8 pb-4 flex items-center gap-3 no-print">
-        <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <Calculator className="w-8 h-8 text-[#FF6700]" />
-            <h1 className="text-3xl md:text-4xl font-oswald font-bold tracking-wide">
-            PROFIT<span className="text-[#FF6700]">LOCK</span>
-            </h1>
-        </Link>
-        <span className="self-end text-xs text-gray-400 ml-2">V7.2 INVOICE</span>
-      </header>
+      <Header title="PROFITLOCK" backLink="/" />
 
       <main className="max-w-5xl mx-auto px-6 pb-12 grid gap-6 md:grid-cols-3">
         
@@ -155,7 +148,7 @@ export default function ProfitLock() {
             <div className="flex gap-2 mb-4 no-print">
                 <button 
                     onClick={() => setIsInvoiceMode(false)}
-                    className={`px-6 py-2 rounded-t-lg font-bold font-oswald tracking-wide transition-colors ${!isInvoiceMode ? 'bg-[#FF6700] text-[#1a1a1a]' : 'bg-[#262626] text-gray-500 border border-b-0 border-[#404040]'}`}
+                    className={`px-6 py-2 rounded-t-lg font-bold font-oswald tracking-wide transition-colors ${!isInvoiceMode ? 'bg-industrial-orange text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'bg-[#262626] text-gray-500 border border-b-0 border-[#404040]'}`}
                 >
                     CALCULATOR
                 </button>
@@ -169,27 +162,27 @@ export default function ProfitLock() {
 
             {/* VIEW 1: CALCULATOR */}
             {!isInvoiceMode && (
-                <div className="bg-[#262626] border border-[#404040] rounded-b-xl rounded-tr-xl p-6 shadow-lg">
-                    <h2 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">WORK ORDER</h2>
+                <div className="glass-panel rounded-b-xl rounded-tr-xl p-6 shadow-lg">
+                    <h2 className="text-xl font-oswald font-bold text-industrial-orange mb-4">WORK ORDER</h2>
 
                     {/* Job Name */}
                     <label className="block text-sm font-semibold mb-1">Job Name (Client & Description)</label>
-                    <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen Repair" maxLength={50} className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" />
+                    <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith Residence - Kitchen Repair" maxLength={50} className="input-field rounded-lg p-3 w-full" />
 
                     {/* Inputs Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                        <div><label className="block text-sm font-semibold mb-1">Materials Cost</label><input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} min="0" step="0.01" className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Labor Hours</label><input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} min="0" step="0.5" className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Hourly Rate</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} min="0" step="5" className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" /></div>
-                        <div><label className="block text-sm font-semibold mb-1">Markup %</label><input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} min="0" step="5" className="w-full h-12 px-4 bg-[#1a1a1a] border-2 border-[#404040] rounded-lg focus:border-[#FF6700] focus:outline-none transition" /></div>
+                        <div><label className="block text-sm font-semibold mb-1">Materials Cost</label><input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} min="0" step="0.01" className="input-field rounded-lg p-3 w-full" /></div>
+                        <div><label className="block text-sm font-semibold mb-1">Labor Hours</label><input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} min="0" step="0.5" className="input-field rounded-lg p-3 w-full" /></div>
+                        <div><label className="block text-sm font-semibold mb-1">Hourly Rate</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} min="0" step="5" className="input-field rounded-lg p-3 w-full" /></div>
+                        <div><label className="block text-sm font-semibold mb-1">Markup %</label><input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} min="0" step="5" className="input-field rounded-lg p-3 w-full" /></div>
                     </div>
 
                     {/* Cost Breakdown Panel */}
-                    <div className="mt-6 bg-[#1a1a1a] border border-[#404040] rounded-lg p-4 grid grid-cols-2 gap-2 text-sm">
+                    <div className="mt-6 glass-panel rounded-lg p-4 grid grid-cols-2 gap-2 text-sm">
                         <span className="text-gray-400">Materials</span><span className="text-right">${materials.toFixed(2)}</span>
                         <span className="text-gray-400">Labor</span><span className="text-right">${labor.toFixed(2)}</span>
                         <span className="text-gray-400">Subtotal</span><span className="text-right">${cost.toFixed(2)}</span>
-                        <span className="text-[#FF6700] font-semibold">Markup</span><span className="text-right text-[#FF6700] font-semibold">${markupAmount.toFixed(2)}</span>
+                        <span className="text-industrial-orange font-semibold">Markup</span><span className="text-right text-industrial-orange font-semibold">${markupAmount.toFixed(2)}</span>
                     </div>
 
                     {/* Final Price Spotlight */}
@@ -200,7 +193,7 @@ export default function ProfitLock() {
 
                     {/* Profit Meter */}
                     <div className="mt-6">
-                        <div className="h-10 bg-[#1a1a1a] border-2 border-[#404040] rounded-full overflow-hidden">
+                        <div className="h-10 glass-panel rounded-full overflow-hidden">
                         <div className="h-full flex items-center px-4 text-sm font-oswald tracking-wide transition-all duration-500" style={{ width: `${Math.min(meterInfo.visualWidth, 100)}%`, backgroundColor: meterInfo.color }}>
                             {meterInfo.visualWidth > 15 && `${grossMargin.toFixed(0)}%`}
                         </div>
@@ -211,13 +204,13 @@ export default function ProfitLock() {
                         </div>
                     </div>
 
-                    <button onClick={saveBid} disabled={loading} className="mt-6 w-full h-12 bg-[#FF6700] text-[#1a1a1a] font-oswald font-bold uppercase rounded-lg hover:bg-[#e65c00] transition flex items-center justify-center gap-2">
+                    <button onClick={saveBid} disabled={loading} className="mt-6 w-full h-12 bg-industrial-orange text-black font-bold uppercase rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:bg-[#e65c00] transition flex items-center justify-center gap-2">
                         {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={18} />} Save Bid to Cloud
                     </button>
                 </div>
             )}
 
-            {/* VIEW 2: CLIENT INVOICE (With Fixed Labels) */}
+            {/* VIEW 2: CLIENT INVOICE */}
             {isInvoiceMode && (
                 <div id="invoice-area" className="bg-white text-black rounded-b-xl rounded-tr-xl p-8 shadow-2xl relative min-h-[600px]">
                     <div className="absolute top-8 right-8 text-right">
@@ -226,7 +219,6 @@ export default function ProfitLock() {
                     </div>
 
                     <div className="mb-12">
-                        {/* THE FIX: Changed Label to "RE: PROJECT / JOB" */}
                         <p className="text-xs font-bold text-gray-400 uppercase">RE: PROJECT / JOB</p>
                         <h1 className="text-3xl font-bold border-b-2 border-black pb-2 inline-block min-w-[300px]">
                             {jobName || "Unnamed Project"}
@@ -274,14 +266,14 @@ export default function ProfitLock() {
         </section>
 
         {/* ===== RIGHT COLUMN: HISTORY ===== */}
-        <aside className="no-print bg-[#262626] border border-[#404040] rounded-xl p-6 shadow-lg max-h-[75vh] overflow-y-auto">
-          <h3 className="text-xl font-oswald font-bold text-[#FF6700] mb-4">Saved Bids</h3>
+        <aside className="no-print glass-panel max-h-[75vh] overflow-y-auto">
+          <h3 className="text-xl font-oswald font-bold text-industrial-orange mb-4">Saved Bids</h3>
           {bidHistory.length === 0 ? (
             <p className="text-gray-400 text-sm">No bids saved yet.</p>
           ) : (
             <ul className="space-y-3">
               {bidHistory.map((bid, idx) => (
-                <li key={bid.id} onClick={() => loadBid(bid)} className="bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 cursor-pointer hover:border-[#FF6700] hover:scale-[1.02] transition">
+                <li key={bid.id} onClick={() => loadBid(bid)} className="glass-panel rounded-lg p-3 cursor-pointer hover:border-industrial-orange hover:scale-[1.02] transition">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-semibold text-white">{bid.jobName || "Unnamed Job"}</p>
