@@ -1,12 +1,12 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, Filter
+  Camera, User, LayoutGrid, Users
 } from "lucide-react";
 import Header from "../../components/Header";
 
@@ -16,22 +16,22 @@ export default function LoadOut() {
   const supabase = createClient();
   
   // --- GLOBAL STATE ---
-  const [activeTab, setActiveTab] = useState("STOCK"); // "STOCK" or "TOOLS"
+  const [activeTab, setActiveTab] = useState("STOCK");
   const [vans, setVans] = useState([]);
   const [currentVan, setCurrentVan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [showSettings, setShowSettings] = useState(false); // Global Menu
+  const [showSettings, setShowSettings] = useState(false);
   const [renameVanName, setRenameVanName] = useState("");
 
-  // --- STOCK STATE (Inventory) ---
+  // --- STOCK STATE ---
   const [items, setItems] = useState([]);
   const [newItem, setNewItem] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
 
-  // --- TOOLS STATE (Assets) ---
+  // --- TOOLS STATE ---
   const [tools, setTools] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [toolSearch, setToolSearch] = useState("");
@@ -41,11 +41,10 @@ export default function LoadOut() {
   const [newPhoto, setNewPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState(null); // Expanded card ID
+  const [selectedAsset, setSelectedAsset] = useState(null);
   const [toolFilter, setToolFilter] = useState("ALL");
-  const [newMemberName, setNewMemberName] = useState(""); // For adding users
+  const [newMemberName, setNewMemberName] = useState("");
 
-  // Colors for Stock Cards
   const colors = [
     { hex: "#262626", name: "Charcoal" },
     { hex: THEME_ORANGE, name: "Brand Orange" }, 
@@ -57,14 +56,11 @@ export default function LoadOut() {
 
   useEffect(() => { initFleet(); }, []);
 
-  // ==========================
-  // 1. INITIALIZATION & LOADING
-  // ==========================
+  // 1. INIT
   const initFleet = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Load Vans
     let { data: userVans } = await supabase.from("vans").select("*").order("created_at");
     if (!userVans || userVans.length === 0) {
         const { data: newVan } = await supabase.from("vans").insert({ user_id: user.id, name: "Van #1" }).select().single();
@@ -74,21 +70,17 @@ export default function LoadOut() {
     setCurrentVan(userVans[0]);
     setRenameVanName(userVans[0].name);
 
-    // Load Team
     const { data: team } = await supabase.from("team_members").select("*").order("name");
     if (team) setTeamMembers(team);
 
-    // Load Data for first van
     fetchVanData(userVans[0].id);
   };
 
   const fetchVanData = async (vanId) => {
     setLoading(true);
-    // Fetch Stock (Consumables)
     const { data: stock } = await supabase.from("inventory").select("*").eq("van_id", vanId).order("created_at", { ascending: false });
     if (stock) setItems(stock);
     
-    // Fetch Tools (Assets)
     const { data: assets } = await supabase.from("assets").select("*").eq("van_id", vanId).order("created_at", { ascending: false });
     if (assets) setTools(assets);
     
@@ -116,14 +108,11 @@ export default function LoadOut() {
     }
   };
 
-  // ==========================
-  // 2. STOCK LOGIC (From LoadOut)
-  // ==========================
+  // 2. STOCK ACTIONS
   const addStockItem = async (e) => {
     e.preventDefault();
     if (!newItem.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
-    
     const tempId = Math.random();
     const tempItem = { id: tempId, name: newItem, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
     setItems([tempItem, ...items]);
@@ -151,10 +140,7 @@ export default function LoadOut() {
     const newMin = parseInt(targetQtyInput) || 0;
     const updatedItem = { ...editingItem, min_quantity: newMin };
     setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
-    await supabase.from("inventory").update({ 
-        name: updatedItem.name, color: updatedItem.color, 
-        min_quantity: updatedItem.min_quantity, quantity: updatedItem.quantity 
-    }).eq("id", updatedItem.id);
+    await supabase.from("inventory").update({ name: updatedItem.name, color: updatedItem.color, min_quantity: updatedItem.min_quantity, quantity: updatedItem.quantity }).eq("id", updatedItem.id);
     setEditingItem(null);
   };
 
@@ -165,9 +151,7 @@ export default function LoadOut() {
     setEditingItem(null);
   };
 
-  // ==========================
-  // 3. TOOLS LOGIC (From ToolShed)
-  // ==========================
+  // 3. TOOL ACTIONS
   const handlePhotoSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -185,20 +169,26 @@ export default function LoadOut() {
     let finalPhotoUrl = null;
     if (newPhoto) {
         const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
-        const { error } = await supabase.storage.from("tool-photos").upload(fileName, newPhoto);
-        if (!error) {
+        const { error: uploadError } = await supabase.storage.from("tool-photos").upload(fileName, newPhoto);
+        if (uploadError) {
+            console.log("Upload Error:", uploadError);
+            // We continue even if photo fails, just warn user
+            showToast("Photo failed, saving tool anyway...", "error");
+        } else {
             const { data } = supabase.storage.from("tool-photos").getPublicUrl(fileName);
             finalPhotoUrl = data.publicUrl;
         }
     }
 
-    const { data } = await supabase.from("assets").insert({
+    const { data, error } = await supabase.from("assets").insert({
         user_id: user.id, van_id: currentVan.id, name: newTool.name, 
         brand: newTool.brand, serial_number: newTool.serial, 
         photo_url: finalPhotoUrl, status: "IN_VAN"
     }).select().single();
 
-    if (data) {
+    if (error) {
+        showToast("Error saving: " + error.message, "error");
+    } else if (data) {
         setTools([data, ...tools]);
         setShowAddTool(false);
         setNewTool({ name: "", brand: "", serial: "" });
@@ -209,7 +199,6 @@ export default function LoadOut() {
   };
 
   const updateToolStatus = async (id, status, memberId = null) => {
-    // Optimistic Update
     setTools(tools.map(t => t.id === id ? { ...t, status, assigned_to: memberId } : t));
     setSelectedAsset(null);
     await supabase.from("assets").update({ status, assigned_to: memberId }).eq("id", id);
@@ -221,9 +210,7 @@ export default function LoadOut() {
     await supabase.from("assets").delete().eq("id", id);
   };
 
-  // ==========================
-  // 4. TEAM LOGIC
-  // ==========================
+  // 4. TEAM ACTIONS
   const addTeamMember = async () => {
     if (!newMemberName.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
@@ -240,9 +227,7 @@ export default function LoadOut() {
     await supabase.from("team_members").delete().eq("id", id);
   };
 
-  // ==========================
-  // 5. GLOBAL ACTIONS
-  // ==========================
+  // 5. GLOBAL MENU
   const handleRenameVan = async () => {
     if(!renameVanName.trim()) return;
     const updatedVans = vans.map(v => v.id === currentVan.id ? {...v, name: renameVanName} : v);
@@ -254,7 +239,7 @@ export default function LoadOut() {
 
   const handleDeleteVan = async () => {
     if (vans.length <= 1) return showToast("Cannot delete only van", "error");
-    if (!confirm("Delete this van and ALL contents (Stock + Tools)?")) return;
+    if (!confirm("Delete this van and ALL contents?")) return;
     setLoading(true);
     await supabase.from("inventory").delete().eq("van_id", currentVan.id);
     await supabase.from("assets").delete().eq("van_id", currentVan.id);
@@ -287,7 +272,7 @@ export default function LoadOut() {
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
-  // --- FILTERS ---
+  // FILTERS
   const filteredTools = tools.filter(t => {
       const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
       const matchFilter = toolFilter === "ALL" || 
@@ -304,7 +289,7 @@ export default function LoadOut() {
 
       <main className="max-w-6xl mx-auto px-6 pt-4">
         
-        {/* === TOP BAR === */}
+        {/* TOP BAR */}
         <div className="flex items-center justify-between mb-4 bg-[#1a1a1a] border border-white/10 p-3 rounded-xl relative z-20">
             <div className="relative w-full">
                 <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
@@ -315,10 +300,9 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-gray-400 transition-transform ${showSettings ? "rotate-90 text-white" : ""}`}/>
                 </button>
 
-                {/* === GLOBAL MENU === */}
+                {/* MENU */}
                 {showSettings && (
                     <div className="absolute top-full left-0 mt-4 w-full md:w-80 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in bg-[#0a0a0a] border border-white/10">
-                        {/* 1. Edit Mode (Stock Only) */}
                         {activeTab === "STOCK" && (
                             <div className="mb-4 pb-4 border-b border-white/10">
                                 <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
@@ -327,7 +311,6 @@ export default function LoadOut() {
                                 </button>
                             </div>
                         )}
-                        {/* 2. Rename */}
                         <div className="mb-4 pb-4 border-b border-white/10">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-1">Vehicle Name</label>
                             <div className="flex gap-2">
@@ -335,7 +318,6 @@ export default function LoadOut() {
                                 <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2/></button>
                             </div>
                         </div>
-                        {/* 3. Switch Van */}
                         <div className="mb-4 pb-4 border-b border-white/10 space-y-2">
                             <label className="text-xs text-gray-500 font-bold uppercase">Switch Vehicle</label>
                             {vans.map(v => (
@@ -343,19 +325,17 @@ export default function LoadOut() {
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
-                        {/* 4. Actions */}
                         <div className="space-y-2 pb-4 border-b border-white/10">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-300 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
                         </div>
-                        {/* 5. Delete */}
                         <div className="pt-2"><button onClick={handleDeleteVan} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2"><Trash2 size={14}/> Delete Vehicle</button></div>
                     </div>
                 )}
             </div>
         </div>
 
-        {/* === TAB SWITCHER === */}
+        {/* TABS */}
         <div className="flex bg-[#1a1a1a] p-1 rounded-xl mb-6 border border-white/10">
             <button onClick={() => setActiveTab("STOCK")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
                 <LayoutGrid size={18}/> STOCK
@@ -365,7 +345,7 @@ export default function LoadOut() {
             </button>
         </div>
 
-        {/* ======================= TAB 1: STOCK ======================= */}
+        {/* TAB 1: STOCK */}
         {activeTab === "STOCK" && (
             <div className="animate-in fade-in slide-in-from-left-4">
                 <form onSubmit={addStockItem} className="flex gap-2 mb-6">
@@ -400,11 +380,9 @@ export default function LoadOut() {
             </div>
         )}
 
-        {/* ======================= TAB 2: TOOLS ======================= */}
+        {/* TAB 2: TOOLS */}
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
-                
-                {/* TOOLBAR */}
                 <div className="flex gap-2 mb-6">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
@@ -414,14 +392,12 @@ export default function LoadOut() {
                     <button onClick={() => setShowAddTool(true)} className="bg-white text-black font-bold px-4 rounded-lg flex items-center justify-center hover:scale-105 transition"><Plus size={24}/></button>
                 </div>
 
-                {/* FILTERS */}
                 <div className="grid grid-cols-3 gap-2 mb-6">
                     {[{k:"ALL", l:"All Tools"}, {k:"OUT", l:"Checked Out"}, {k:"BROKEN", l:"Broken"}].map(f => (
                         <button key={f.k} onClick={() => setToolFilter(f.k)} className={`p-2 rounded text-xs font-bold border transition ${toolFilter === f.k ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-white/10 text-gray-400"}`}>{f.l}</button>
                     ))}
                 </div>
 
-                {/* TOOL LIST */}
                 <div className="space-y-3 pb-20">
                     {filteredTools.length === 0 ? <div className="text-center py-10 text-gray-500">No tools found.</div> : filteredTools.map(tool => (
                         <div key={tool.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${tool.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === tool.id ? "ring-1 ring-[#FF6700]" : ""}`}>
@@ -471,9 +447,7 @@ export default function LoadOut() {
 
       </main>
 
-      {/* --- MODALS --- */}
-      
-      {/* 1. STOCK EDIT */}
+      {/* MODALS */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
@@ -506,7 +480,6 @@ export default function LoadOut() {
         </div>
       )}
 
-      {/* 2. ADD TOOL */}
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
@@ -540,7 +513,6 @@ export default function LoadOut() {
         </div>
       )}
 
-      {/* 3. MANAGE TEAM */}
       {showTeamModal && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
              <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
