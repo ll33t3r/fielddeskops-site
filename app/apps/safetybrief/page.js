@@ -46,9 +46,10 @@ export default function SafetyBrief() {
   
   // FORM
   const [selectedJob, setSelectedJob] = useState("");
+  const [customJob, setCustomJob] = useState(""); // NEW: For ad-hoc jobs
   const [selectedTopic, setSelectedTopic] = useState("GENERAL");
   const [attendees, setAttendees] = useState("");
-  const [checklist, setChecklist] = useState({}); // { "Item 1": true, "Item 2": false }
+  const [checklist, setChecklist] = useState({}); 
   
   // INIT
   useEffect(() => {
@@ -66,8 +67,8 @@ export default function SafetyBrief() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Load Jobs
-    const { data: bids } = await supabase.from("bids").select("project_name");
+    // Load Jobs (Bids)
+    const { data: bids } = await supabase.from("bids").select("project_name").order("created_at", { ascending: false });
     if (bids) setJobs(bids.map(b => b.project_name));
 
     // Load History
@@ -82,14 +83,22 @@ export default function SafetyBrief() {
   };
 
   const saveLog = async () => {
-    if (!selectedJob) return alert("Select a Job Site");
-    if (!attendees) return alert("List who is present");
+    // 1. Determine Final Job Name
+    let finalJobName = selectedJob;
+    if (selectedJob === "custom") {
+        finalJobName = customJob.trim();
+    }
+
+    // 2. Validation
+    if (!finalJobName) return alert("Please select or type a Job Name.");
+    if (!attendees) return alert("Please list who is present.");
 
     const { data: { user } } = await supabase.auth.getUser();
     
+    // 3. Save to DB
     const { error } = await supabase.from("safety_logs").insert({
         user_id: user.id,
-        job_name: selectedJob,
+        job_name: finalJobName,
         topic: selectedTopic,
         attendees: attendees,
         checklist_data: checklist
@@ -98,9 +107,11 @@ export default function SafetyBrief() {
     if (!error) {
         alert("Safety Briefing Recorded.");
         setAttendees("");
+        setCustomJob("");
+        setSelectedJob("");
         loadData(); // Refresh history
     } else {
-        alert("Error saving log.");
+        alert("Error saving log: " + error.message);
     }
   };
 
@@ -133,11 +144,24 @@ export default function SafetyBrief() {
                 <select 
                     value={selectedJob} 
                     onChange={(e) => setSelectedJob(e.target.value)}
-                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none"
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none mb-2"
                 >
                     <option value="">-- Select Job --</option>
                     {jobs.map(j => <option key={j} value={j}>{j}</option>)}
+                    <option value="custom">+ Other / Quick Job</option>
                 </select>
+
+                {/* Custom Job Input (Conditionally Rendered) */}
+                {selectedJob === "custom" && (
+                    <input 
+                        type="text"
+                        value={customJob}
+                        onChange={(e) => setCustomJob(e.target.value)}
+                        placeholder="Type Job Name (e.g. Shop Maintenance)..."
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg p-3 text-white focus:border-[#FF6700] outline-none animate-in fade-in slide-in-from-top-2"
+                        autoFocus
+                    />
+                )}
             </div>
 
             {/* Topic Tabs */}
