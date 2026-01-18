@@ -23,8 +23,8 @@ export default function SignOff() {
   const [clientName, setClientName] = useState("");
   const [projectName, setProjectName] = useState("");
   const [contractBody, setContractBody] = useState("");
-  const [isLocked, setIsLocked] = useState(false); // After signing
-  const [savedSignature, setSavedSignature] = useState(null); // URL after save
+  const [isSigned, setIsSigned] = useState(false); // Generic "Signed" state
+  const [savedSignature, setSavedSignature] = useState(null); 
 
   // TEMPLATES
   const TEMPLATES = [
@@ -51,7 +51,7 @@ export default function SignOff() {
   // --- SIGNATURE LOGIC ---
   const clearSignature = () => {
     sigPad.current.clear();
-    setIsLocked(false);
+    setIsSigned(false);
     setSavedSignature(null);
   };
 
@@ -63,7 +63,6 @@ export default function SignOff() {
     const { data: { user } } = await supabase.auth.getUser();
 
     // 1. Upload Signature Image
-    // Get high-res PNG from canvas
     const sigBlob = await new Promise(resolve => sigPad.current.getCanvas().toBlob(resolve, 'image/png'));
     const fileName = `${user.id}/${Date.now()}-sig.png`;
     
@@ -88,8 +87,7 @@ export default function SignOff() {
     if (newContract) {
         setContracts([newContract, ...contracts]);
         setSavedSignature(publicUrl);
-        setIsLocked(true);
-        alert("Contract Saved & Locked!");
+        setIsSigned(true);
     } else {
         alert("Error saving: " + error.message);
     }
@@ -97,7 +95,7 @@ export default function SignOff() {
   };
 
   const deleteContract = async (id) => {
-      if(!confirm("Delete this contract record?")) return;
+      if(!confirm("Delete this document?")) return;
       await supabase.from("contracts").delete().eq("id", id);
       setContracts(contracts.filter(c => c.id !== id));
   };
@@ -127,7 +125,7 @@ export default function SignOff() {
         {/* TABS */}
         <div className="flex bg-[#1a1a1a] p-1 rounded-xl mb-6 border border-white/10 no-print">
             <button onClick={() => setActiveTab("NEW")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${activeTab === "NEW" ? "bg-[#FF6700] text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
-                NEW CONTRACT
+                NEW DOCUMENT
             </button>
             <button onClick={() => setActiveTab("HISTORY")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${activeTab === "HISTORY" ? "bg-white text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
                 HISTORY
@@ -145,14 +143,14 @@ export default function SignOff() {
                     <div>
                         <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
                             <div>
-                                <h1 className="text-3xl font-oswald font-bold tracking-wide">SERVICE AGREEMENT</h1>
+                                <h1 className="text-3xl font-oswald font-bold tracking-wide">AGREEMENT / FORM</h1>
                                 <p className="text-sm text-gray-600 mt-1">{new Date().toLocaleDateString()}</p>
                             </div>
                             <div className="text-right">
-                                {isLocked ? (
-                                    <div className="border-2 border-red-600 text-red-600 font-bold px-4 py-1 rounded uppercase rotate-[-10deg] opacity-80 text-xl">SIGNED & LOCKED</div>
+                                {isSigned ? (
+                                    <div className="border-4 border-black text-black font-bold px-4 py-1 rounded uppercase rotate-[-10deg] opacity-80 text-xl font-oswald tracking-widest">SIGNED DOCUMENT</div>
                                 ) : (
-                                    <div className="bg-black text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider">DRAFT MODE</div>
+                                    <div className="bg-black text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider">DRAFT</div>
                                 )}
                             </div>
                         </div>
@@ -160,22 +158,22 @@ export default function SignOff() {
                         {/* Inputs */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
-                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Client Name</label>
-                                {isLocked ? <p className="font-bold text-lg">{clientName}</p> : (
+                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Client / Recipient</label>
+                                {isSigned ? <p className="font-bold text-lg">{clientName}</p> : (
                                     <input 
                                         className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
-                                        placeholder="Enter Client Name..."
+                                        placeholder="Enter Name..."
                                         value={clientName}
                                         onChange={e => setClientName(e.target.value)}
                                     />
                                 )}
                             </div>
                             <div>
-                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Project / Job Name</label>
-                                {isLocked ? <p className="font-bold text-lg">{projectName}</p> : (
+                                <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Project / Title</label>
+                                {isSigned ? <p className="font-bold text-lg">{projectName}</p> : (
                                     <input 
                                         className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
-                                        placeholder="e.g. Kitchen Remodel"
+                                        placeholder="e.g. Work Authorization"
                                         value={projectName}
                                         onChange={e => setProjectName(e.target.value)}
                                     />
@@ -183,8 +181,8 @@ export default function SignOff() {
                             </div>
                         </div>
 
-                        {/* Templates (Hidden if Locked) */}
-                        {!isLocked && (
+                        {/* Templates (Hidden if Signed) */}
+                        {!isSigned && (
                             <div className="flex gap-2 mb-4 overflow-x-auto no-print pb-2">
                                 {TEMPLATES.map(t => (
                                     <button key={t.label} onClick={() => applyTemplate(t.text)} className="whitespace-nowrap px-3 py-1 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100 transition">
@@ -196,13 +194,13 @@ export default function SignOff() {
 
                         {/* Body */}
                         <div className="mb-8">
-                            <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Contract Terms</label>
-                            {isLocked ? (
+                            <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Terms / Details</label>
+                            {isSigned ? (
                                 <div className="whitespace-pre-wrap font-mono text-sm bg-white p-4 border rounded">{contractBody}</div>
                             ) : (
                                 <textarea 
                                     className="w-full h-64 bg-white border border-gray-300 rounded p-4 font-mono text-sm focus:border-[#FF6700] outline-none resize-none shadow-inner"
-                                    placeholder="Type contract terms here..."
+                                    placeholder="Type terms or details here..."
                                     value={contractBody}
                                     onChange={e => setContractBody(e.target.value)}
                                 />
@@ -214,17 +212,17 @@ export default function SignOff() {
                     <div className="border-t-2 border-black pt-6">
                         <div className="flex justify-between items-end">
                             <div className="w-full">
-                                <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Authorized Signature</label>
+                                <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Signature</label>
                                 
-                                {isLocked ? (
+                                {isSigned ? (
                                     <img src={savedSignature} alt="Signature" className="h-24 object-contain border-b border-black w-1/2" />
                                 ) : (
                                     <div className="relative border-2 border-dashed border-gray-400 rounded bg-white hover:border-[#FF6700] transition">
                                         <SignatureCanvas 
                                             ref={sigPad}
                                             penColor="black"
-                                            velocityFilterWeight={0.7} // Smooths lines
-                                            minWidth={1.5} // Prevents pixelated look
+                                            velocityFilterWeight={0.7} 
+                                            minWidth={1.5}
                                             maxWidth={3.5}
                                             canvasProps={{
                                                 className: "w-full h-40 rounded cursor-crosshair"
@@ -237,7 +235,7 @@ export default function SignOff() {
                                     </div>
                                 )}
                                 
-                                <p className="text-xs font-bold mt-2 uppercase tracking-wider">{clientName || "Client Signature"}</p>
+                                <p className="text-xs font-bold mt-2 uppercase tracking-wider">{clientName || "Signed By"}</p>
                             </div>
                         </div>
                     </div>
@@ -246,17 +244,17 @@ export default function SignOff() {
 
                 {/* Actions Bar */}
                 <div className="mt-6 flex gap-3 no-print">
-                    {!isLocked ? (
+                    {!isSigned ? (
                         <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-bold py-4 rounded-xl shadow-lg hover:scale-105 transition flex items-center justify-center gap-2">
                             {saving ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={24}/>}
-                            SIGN & LOCK CONTRACT
+                            COMPLETE & SAVE
                         </button>
                     ) : (
                         <div className="flex-1 flex gap-3">
                             <button onClick={printContract} className="flex-1 bg-white text-black font-bold py-4 rounded-xl shadow-lg hover:bg-gray-200 transition flex items-center justify-center gap-2">
                                 <Printer size={24}/> PRINT / PDF
                             </button>
-                            <button onClick={() => { setIsLocked(false); setSavedSignature(null); }} className="px-6 bg-[#333] text-white rounded-xl font-bold hover:bg-red-600 transition">
+                            <button onClick={() => { setIsSigned(false); setSavedSignature(null); }} className="px-6 bg-[#333] text-white rounded-xl font-bold hover:bg-red-600 transition">
                                 NEW
                             </button>
                         </div>
@@ -269,7 +267,7 @@ export default function SignOff() {
         {activeTab === "HISTORY" && (
             <div className="animate-in fade-in slide-in-from-right-4 space-y-4 pb-20">
                 {contracts.length === 0 ? (
-                    <div className="text-center text-gray-500 py-10">No contracts saved yet.</div>
+                    <div className="text-center text-gray-500 py-10">No documents saved yet.</div>
                 ) : contracts.map(c => (
                     <div key={c.id} className="glass-panel p-4 rounded-xl flex justify-between items-center group">
                         <div className="flex items-center gap-4">
@@ -289,7 +287,7 @@ export default function SignOff() {
                                 setProjectName(c.project_name);
                                 setContractBody(c.contract_body);
                                 setSavedSignature(c.signature_url);
-                                setIsLocked(true);
+                                setIsSigned(true);
                                 setActiveTab("NEW");
                             }} className="p-2 bg-white/10 rounded hover:bg-white hover:text-black transition">
                                 <Printer size={18}/>
