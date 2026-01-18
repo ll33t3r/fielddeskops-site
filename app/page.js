@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { createClient } from "../utils/supabase/client";
 import { 
-  Calculator, Package, Camera, PenTool, Clock, ShieldAlert,
-  AlertTriangle, Wrench, Users, LogOut, Plus, Loader2, X,
-  FilePlus, UserPlus, Play
+  Calculator, Package, Camera, PenTool, Clock, ShieldAlert, 
+  AlertTriangle, Wrench, Users, LogOut, Plus, Loader2, X, 
+  FilePlus, UserPlus, Play, RefreshCw, Trash2, CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,38 +22,78 @@ export default function Dashboard() {
   // POPUPS
   const [showSpeedDial, setShowSpeedDial] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
-  const [alertList, setAlertList] = useState([]); // Stores the actual alert details
+  const [alertList, setAlertList] = useState([]); 
+  const [refreshing, setRefreshing] = useState(false); // For the manual scan button
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/auth/login"); return; }
-
-      // 1. Greeting
-      const h = new Date().getHours();
-      setGreeting(h < 12 ? "GOOD MORNING" : h < 18 ? "GOOD AFTERNOON" : "GOOD EVENING");
-
-      // 2. Fetch Metrics
-      const { data: bids } = await supabase.from("bids").select("sale_price");
-      const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.sale_price) || 0), 0) : 0;
-      const jobs = bids ? bids.length : 0;
-
-      // 3. Fetch Alerts (Low Stock + Expired Subs)
-      const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
-      const { data: subs } = await supabase.from("subcontractors").select("company_name, insurance_expiry");
-
-      const stockAlerts = inventory?.filter(i => i.quantity < i.min_quantity).map(i => ({ type: "STOCK", msg: `${i.name} is low (${i.quantity}/${i.min_quantity})` })) || [];
-      
-      const subAlerts = subs?.filter(s => s.insurance_expiry && new Date(s.insurance_expiry) < new Date()).map(s => ({ type: "INSURANCE", msg: `${s.company_name} insurance expired!` })) || [];
-
-      const allAlerts = [...stockAlerts, ...subAlerts];
-      setAlertList(allAlerts);
-      setMetrics({ revenue, jobs, alerts: allAlerts.length });
-      
-      setLoading(false);
-    };
-    init();
+    // 1. Greeting Logic
+    const h = new Date().getHours();
+    setGreeting(h < 12 ? "GOOD MORNING" : h < 18 ? "GOOD AFTERNOON" : "GOOD EVENING");
+    
+    // 2. Initial Data Load
+    loadDashboardData();
   }, []);
+
+  const loadDashboardData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.replace("/auth/login"); return; }
+
+    // A. Revenue & Jobs
+    const { data: bids } = await supabase.from("bids").select("sale_price");
+    const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.sale_price) || 0), 0) : 0;
+    const jobs = bids ? bids.length : 0;
+
+    // B. Alerts (The Ghost Buster)
+    const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
+    const { data: subs } = await supabase.from("subcontractors").select("company_name, insurance_expiry");
+
+    // Recalculate Stock Alerts (Live Data)
+    const stockAlerts = inventory?.filter(i => i.quantity < i.min_quantity).map(i => ({ 
+        id: "stock-" + Math.random(), 
+        type: "STOCK", 
+        title: "LOW STOCK",
+        msg: `${i.name}: ${i.quantity} / ${i.min_quantity}`,
+        color: "text-red-500",
+        bg: "bg-red-500/10",
+        border: "border-red-500"
+    })) || [];
+    
+    // Recalculate Sub Alerts (Live Data)
+    const subAlerts = subs?.filter(s => s.insurance_expiry && new Date(s.insurance_expiry) < new Date()).map(s => ({ 
+        id: "sub-" + Math.random(), 
+        type: "INSURANCE", 
+        title: "EXPIRED",
+        msg: `${s.company_name} Ins. Expired`,
+        color: "text-orange-500",
+        bg: "bg-orange-500/10",
+        border: "border-orange-500"
+    })) || [];
+
+    const allAlerts = [...stockAlerts, ...subAlerts];
+    setAlertList(allAlerts);
+    setMetrics({ revenue, jobs, alerts: allAlerts.length });
+    setLoading(false);
+  };
+
+  const manualRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setTimeout(() => setRefreshing(false), 800); // Visual feedback delay
+  };
+
+  const dismissAlert = (index) => {
+    const newAlerts = [...alertList];
+    newAlerts.splice(index, 1);
+    setAlertList(newAlerts);
+    setMetrics(prev => ({ ...prev, alerts: newAlerts.length }));
+  };
+
+  const clearAllAlerts = () => {
+    if(!confirm("Clear all alerts from the dashboard? (They will reappear if issues persist on next scan)")) return;
+    setAlertList([]);
+    setMetrics(prev => ({ ...prev, alerts: 0 }));
+    setShowAlerts(false);
+  };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.replace("/auth/login"); };
 
@@ -88,7 +128,8 @@ export default function Dashboard() {
                 <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Jobs</p>
                 <p className="text-white font-oswald text-lg tracking-tight">{metrics.jobs}</p>
             </div>
-            <button onClick={() => setShowAlerts(true)} className={`glass-panel rounded-xl p-3 text-center transition active:scale-95 ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : ""}`}>
+            <button onClick={() => setShowAlerts(true)} className={`glass-panel rounded-xl p-3 text-center transition active:scale-95 relative ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : ""}`}>
+                {metrics.alerts > 0 && <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>}
                 <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">System</p>
                 <div className="flex items-center justify-center gap-1">
                     {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500"/>}
@@ -99,7 +140,7 @@ export default function Dashboard() {
       </header>
 
       {/* APPS GRID */}
-      <main className="flex-1 overflow-y-auto px-5 pb-32">
+      <main className="flex-1 overflow-y-auto px-5 pb-32 custom-scrollbar">
          <div className="grid grid-cols-2 gap-3 max-w-md mx-auto">
             <AppCard href="/apps/profitlock" label="PROFITLOCK" sub="Bids & Invoices" icon={<Calculator size={20}/>} />
             <AppCard href="/apps/loadout" label="LOADOUT" sub="Inventory" icon={<Package size={20}/>} />
@@ -142,21 +183,53 @@ export default function Dashboard() {
       {showAlerts && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="bg-[#1a1a1a] border border-[#333] w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
-                <button onClick={() => setShowAlerts(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
-                <h2 className="font-oswald text-xl mb-4 flex items-center gap-2"><AlertTriangle className="text-red-500"/> SYSTEM ALERTS</h2>
                 
-                <div className="max-h-60 overflow-y-auto space-y-3">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="font-oswald text-xl flex items-center gap-2"><AlertTriangle className="text-[#FF6700]"/> SYSTEM ALERTS</h2>
+                    <div className="flex gap-2">
+                        <button onClick={manualRefresh} className="glass-btn p-2 rounded-lg hover:bg-white/10" disabled={refreshing}>
+                            <RefreshCw size={18} className={refreshing ? "animate-spin text-[#FF6700]" : "text-gray-400"}/>
+                        </button>
+                        <button onClick={() => setShowAlerts(false)} className="glass-btn p-2 rounded-lg hover:bg-white/10 text-gray-400">
+                            <X size={18}/>
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Alert List */}
+                <div className="max-h-60 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
                     {alertList.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4">All systems normal.</p>
+                        <div className="text-center py-8">
+                            <CheckCircle2 size={32} className="mx-auto text-green-500 mb-2 opacity-50"/>
+                            <p className="text-gray-500 text-sm">All systems operational.</p>
+                        </div>
                     ) : (
                         alertList.map((alert, i) => (
-                            <div key={i} className="bg-[#262626] border border-l-4 border-[#333] border-l-red-500 p-3 rounded text-sm text-gray-200">
-                                {alert.msg}
+                            <div key={alert.id} className={`border-l-4 ${alert.border} ${alert.bg} p-3 rounded flex justify-between items-start group`}>
+                                <div>
+                                    <p className={`text-xs font-bold ${alert.color}`}>{alert.title}</p>
+                                    <p className="text-sm text-gray-200">{alert.msg}</p>
+                                </div>
+                                <button onClick={() => dismissAlert(i)} className="text-gray-500 hover:text-white p-1">
+                                    <X size={14}/>
+                                </button>
                             </div>
                         ))
                     )}
                 </div>
-                <button onClick={() => setShowAlerts(false)} className="w-full mt-6 bg-[#333] hover:bg-white hover:text-black py-3 rounded-xl font-bold transition">DISMISS</button>
+
+                {/* Footer Actions */}
+                {alertList.length > 0 && (
+                    <div className="mt-6 pt-4 border-t border-white/5 flex gap-2">
+                         <button onClick={clearAllAlerts} className="flex-1 bg-red-900/20 text-red-500 py-3 rounded-xl font-bold transition hover:bg-red-900/40 text-xs flex items-center justify-center gap-2">
+                            <Trash2 size={14}/> CLEAR ALL
+                        </button>
+                         <button onClick={() => setShowAlerts(false)} className="flex-1 bg-[#333] hover:bg-white hover:text-black py-3 rounded-xl font-bold transition text-xs">
+                            CLOSE
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
       )}
@@ -165,7 +238,7 @@ export default function Dashboard() {
   );
 }
 
-// Reusable Card Component for Grid
+// Reusable Card Component
 function AppCard({ href, label, sub, icon, color }) {
     return (
         <Link href={href} className="glass-panel p-4 rounded-xl hover:bg-white/5 active:scale-95 transition-all group relative overflow-hidden">

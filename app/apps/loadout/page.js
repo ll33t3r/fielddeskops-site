@@ -21,11 +21,11 @@ export default function LoadOut() {
   
   // FORM & MODES
   const [newItem, setNewItem] = useState("");
-  const [isEditMode, setIsEditMode] = useState(false); // Toggle for Edit vs Count
-  const [showSettings, setShowSettings] = useState(false); // Global Menu
-  const [editingItem, setEditingItem] = useState(null); // The item being edited
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [renameVanName, setRenameVanName] = useState("");
-  const [targetQtyInput, setTargetQtyInput] = useState(""); // Fix for sticky input bug
+  const [targetQtyInput, setTargetQtyInput] = useState(""); 
   
   // UX STATE
   const [loading, setLoading] = useState(true);
@@ -97,7 +97,6 @@ export default function LoadOut() {
     if (!newItem.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Default Target is 3, can be changed later
     const tempId = Math.random();
     const tempItem = { id: tempId, name: newItem, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
     setItems([tempItem, ...items]);
@@ -125,22 +124,15 @@ export default function LoadOut() {
 
   const openEditModal = (item) => {
       setEditingItem(item);
-      setTargetQtyInput(item.min_quantity.toString()); // Load the value into local string state
+      setTargetQtyInput(item.min_quantity.toString()); 
   };
 
   const saveItemEdit = async () => {
     if (!editingItem) return;
-    
-    // Parse the input back to integer
     const newMin = parseInt(targetQtyInput) || 0;
-
-    const updatedItem = {
-        ...editingItem,
-        min_quantity: newMin
-    };
-
-    setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
+    const updatedItem = { ...editingItem, min_quantity: newMin };
     
+    setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
     await supabase.from("inventory").update({ 
         name: updatedItem.name, 
         color: updatedItem.color, 
@@ -158,7 +150,7 @@ export default function LoadOut() {
     setEditingItem(null);
   };
 
-  // --- 4. GLOBAL ACTIONS (The "Smart" Features) ---
+  // --- 4. GLOBAL ACTIONS ---
 
   const handleRenameVan = async () => {
     if(!renameVanName.trim()) return;
@@ -167,6 +159,27 @@ export default function LoadOut() {
     setCurrentVan({...currentVan, name: renameVanName});
     await supabase.from("vans").update({ name: renameVanName }).eq("id", currentVan.id);
     showToast("Van Renamed", "success");
+  };
+
+  const handleDeleteVan = async () => {
+    if (vans.length <= 1) {
+        showToast("Cannot delete the only van.", "error");
+        return;
+    }
+    if (!confirm(`DELETE ${currentVan.name.toUpperCase()}?\n\nThis will permanently delete the van and ALL items inside it.`)) return;
+    
+    setLoading(true);
+    await supabase.from("inventory").delete().eq("van_id", currentVan.id); // Clear items
+    await supabase.from("vans").delete().eq("id", currentVan.id); // Delete van
+    
+    const remaining = vans.filter(v => v.id !== currentVan.id);
+    setVans(remaining);
+    setCurrentVan(remaining[0]);
+    setRenameVanName(remaining[0].name);
+    fetchInventory(remaining[0].id);
+    setShowSettings(false);
+    setLoading(false);
+    showToast("Vehicle Deleted", "success");
   };
 
   const copyShoppingList = () => {
@@ -180,25 +193,19 @@ export default function LoadOut() {
     });
     
     navigator.clipboard.writeText(text);
-    showToast("📋 Shopping List Copied!", "success");
+    showToast("📋 Copied!", "success");
     setShowSettings(false);
   };
 
   const restockAll = async () => {
-    if(!confirm("Auto-Refill? This will set ALL low items back to their target quantity.")) return;
-    
+    if(!confirm("Auto-Refill all low items?")) return;
     const updates = items.map(i => {
-        if (i.quantity < i.min_quantity) {
-            return { ...i, quantity: i.min_quantity }; // Set to target
-        }
+        if (i.quantity < i.min_quantity) { return { ...i, quantity: i.min_quantity }; }
         return i;
     });
-    
     setItems(updates);
     setShowSettings(false);
-    showToast("✅ All Items Restocked", "success");
-
-    // Bulk update in DB (loop for now, safer)
+    showToast("✅ Items Restocked", "success");
     for (const item of updates) {
         if (item.quantity !== items.find(old => old.id === item.id).quantity) {
             await supabase.from("inventory").update({ quantity: item.quantity }).eq("id", item.id);
@@ -216,10 +223,8 @@ export default function LoadOut() {
 
       <main className="max-w-6xl mx-auto px-6 pt-4">
         
-        {/* --- TOP BAR: VAN SELECTOR + GLOBAL ACTIONS --- */}
+        {/* --- TOP BAR --- */}
         <div className="flex items-center justify-between mb-6 bg-[#1a1a1a] border border-white/10 p-3 rounded-xl">
-            
-            {/* Van Dropdown */}
             <div className="relative w-full">
                 <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
                     <div className="flex items-center gap-3">
@@ -229,11 +234,11 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-gray-400 transition-transform ${showSettings ? "rotate-90 text-white" : ""}`}/>
                 </button>
 
-                {/* --- THE GLOBAL MENU (Tucked Away) --- */}
+                {/* --- MENU --- */}
                 {showSettings && (
                     <div className="absolute top-full left-0 mt-4 w-full md:w-80 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in slide-in-from-top-2 border border-white/10 bg-[#0a0a0a]">
                         
-                        {/* 1. EDIT MODE TOGGLE */}
+                        {/* 1. EDIT TOGGLE */}
                         <div className="mb-4 pb-4 border-b border-white/10">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface Mode</label>
                             <button 
@@ -248,21 +253,18 @@ export default function LoadOut() {
                                     <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isEditMode ? "left-4" : "left-1"}`}></div>
                                 </div>
                             </button>
-                            <p className="text-[10px] text-gray-500 mt-2 text-center">
-                                {isEditMode ? "Tap items to edit details." : "Tap +/- to count inventory."}
-                            </p>
                         </div>
 
-                        {/* 2. Rename Van */}
+                        {/* 2. RENAME VAN */}
                         <div className="mb-4 pb-4 border-b border-white/10">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Vehicle Name</label>
                             <div className="flex gap-2">
                                 <input value={renameVanName} onChange={e => setRenameVanName(e.target.value)} className="input-field rounded p-2 text-sm flex-1" />
-                                <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2 hover:scale-105"><CheckCircle2 size={16}/></button>
+                                <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2 size={16}/></button>
                             </div>
                         </div>
 
-                        {/* 3. Switch Van List */}
+                        {/* 3. SWITCH VAN */}
                         <div className="mb-4 pb-4 border-b border-white/10 space-y-2">
                             <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Switch Vehicle</label>
                             {vans.map(v => (
@@ -275,8 +277,8 @@ export default function LoadOut() {
                             </button>
                         </div>
 
-                        {/* 4. Global Actions */}
-                        <div className="space-y-2">
+                        {/* 4. ACTIONS */}
+                        <div className="space-y-2 pb-4 border-b border-white/10">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm font-bold text-gray-300 hover:text-white p-2 rounded hover:bg-white/5">
                                 <ClipboardList size={16}/> Copy Shopping List
                             </button>
@@ -284,12 +286,19 @@ export default function LoadOut() {
                                 <RefreshCw size={16}/> Restock All Items
                             </button>
                         </div>
+
+                        {/* 5. DELETE VAN */}
+                        <div className="pt-2">
+                             <button onClick={handleDeleteVan} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2 rounded hover:bg-red-900/20">
+                                <Trash2 size={14}/> Delete This Vehicle
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
         </div>
 
-        {/* ADD ITEM FORM */}
+        {/* ADD FORM */}
         <form onSubmit={addItem} className="flex gap-2 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
@@ -300,148 +309,74 @@ export default function LoadOut() {
           </button>
         </form>
 
-        {/* THE GRID */}
+        {/* GRID */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20 select-none">
           {items.map((item) => (
             <div
               key={item.id}
-              onClick={() => {
-                if(isEditMode) openEditModal(item); // Tap to Edit if Mode is ON
-              }}
+              onClick={() => { if(isEditMode) openEditModal(item); }}
               style={{ backgroundColor: item.color || "#262626" }} 
               className={`relative h-36 rounded-xl p-4 flex flex-col justify-between shadow-lg transition-transform border border-white/5 ${isEditMode ? "cursor-pointer hover:scale-105 hover:ring-2 ring-white" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
             >
-              
-              {/* Header */}
               <div className="flex justify-between items-start">
-                  <h3 className="font-oswald font-bold text-lg leading-tight drop-shadow-md truncate text-white w-24">
-                    {item.name}
-                  </h3>
-                  {isEditMode ? (
-                     <Edit3 size={16} className="text-white/80"/>
-                  ) : (
-                     item.quantity < (item.min_quantity || 3) && <AlertTriangle size={16} className="text-red-500 animate-pulse drop-shadow-md" />
-                  )}
+                  <h3 className="font-oswald font-bold text-lg leading-tight drop-shadow-md truncate text-white w-24">{item.name}</h3>
+                  {isEditMode ? <Edit3 size={16} className="text-white/80"/> : item.quantity < (item.min_quantity || 3) && <AlertTriangle size={16} className="text-red-500 animate-pulse drop-shadow-md" />}
               </div>
 
-              {/* Controls (Hidden in Edit Mode to prevent misclicks) */}
               {!isEditMode && (
                   <div className="flex items-center justify-between mt-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, -1); }}
-                      className="w-10 h-10 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition text-white backdrop-blur-sm"
-                    >
-                      <Minus size={20} />
-                    </button>
-                    
+                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, -1); }} className="w-10 h-10 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition text-white backdrop-blur-sm"><Minus size={20} /></button>
                     <div className="text-center">
                         <span className="text-3xl font-oswald font-bold drop-shadow-md text-white block leading-none">{item.quantity}</span>
                         <span className="text-[10px] text-white/60 font-bold uppercase">Target: {item.min_quantity || 3}</span>
                     </div>
-                    
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, 1); }}
-                      className="w-10 h-10 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition text-white backdrop-blur-sm"
-                    >
-                      <Plus size={20} />
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, item.quantity, 1); }} className="w-10 h-10 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition text-white backdrop-blur-sm"><Plus size={20} /></button>
                   </div>
               )}
               
-              {/* Edit Mode Overlay Info */}
-              {isEditMode && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl">
-                      <p className="text-xs font-bold uppercase tracking-widest text-white border border-white px-2 py-1 rounded">Tap to Edit</p>
-                  </div>
-              )}
-
+              {isEditMode && <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl"><p className="text-xs font-bold uppercase tracking-widest text-white border border-white px-2 py-1 rounded">Tap to Edit</p></div>}
             </div>
           ))}
         </div>
       </main>
 
-      {/* --- EDIT MODAL (Bug Fix Applied) --- */}
+      {/* MODAL */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
             <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700] flex items-center gap-2"><Edit3 size={20}/> EDIT ITEM</h2>
             
-            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700] flex items-center gap-2">
-                <Edit3 size={20}/> EDIT ITEM
-            </h2>
-            
-            {/* 1. Name */}
             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Item Name</label>
-            <input 
-                type="text" 
-                value={editingItem.name} 
-                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} 
-                className="input-field rounded-lg mb-4 w-full p-3 font-bold text-lg" 
-            />
+            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="input-field rounded-lg mb-4 w-full p-3 font-bold text-lg" />
             
-            {/* 2. Target Quantity (FIXED: Uses local string state to prevent sticky #) */}
             <div className="mb-6 bg-white/5 p-4 rounded-lg border border-white/5">
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-xs font-bold text-gray-400 uppercase">Target / Low Stock Level</label>
                     <span className="text-xs text-[#FF6700]">Alerts under {targetQtyInput || 0}</span>
                 </div>
                 <div className="flex gap-4 items-center">
-                    <input 
-                        type="number" 
-                        value={targetQtyInput} 
-                        onChange={(e) => setTargetQtyInput(e.target.value)} 
-                        className="input-field rounded-lg w-20 text-center font-oswald text-xl p-2"
-                        placeholder="0"
-                    />
-                    <div className="flex-1 text-xs text-gray-500 leading-tight">
-                        Enter a number. The alert triggers if quantity drops below this.
-                    </div>
+                    <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="input-field rounded-lg w-20 text-center font-oswald text-xl p-2" placeholder="0"/>
+                    <div className="flex-1 text-xs text-gray-500 leading-tight">Enter a number. The alert triggers if quantity drops below this.</div>
                 </div>
             </div>
 
-            {/* 3. Color Picker */}
             <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Card Color</label>
             <div className="grid grid-cols-6 gap-2 mb-6">
               {colors.map((c) => (
-                <button
-                  key={c.hex}
-                  onClick={() => setEditingItem({ ...editingItem, color: c.hex })}
-                  style={{ backgroundColor: c.hex }}
-                  className={`h-10 rounded-lg transition-transform hover:scale-110 ${editingItem.color === c.hex ? "ring-2 ring-white scale-110" : "opacity-40 hover:opacity-100"}`}
-                />
+                <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg transition-transform hover:scale-110 ${editingItem.color === c.hex ? "ring-2 ring-white scale-110" : "opacity-40 hover:opacity-100"}`} />
               ))}
             </div>
             
-            {/* 4. Actions */}
             <div className="flex gap-2">
-              <button onClick={() => deleteItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-red-900/40">
-                <Trash2 size={16} /> Delete
-              </button>
-              <button onClick={saveItemEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition">
-                SAVE CHANGES
-              </button>
+              <button onClick={() => deleteItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-red-900/40"><Trash2 size={16} /> Delete</button>
+              <button onClick={saveItemEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition">SAVE CHANGES</button>
             </div>
-
-            {/* Quick Refill Action */}
-            <button 
-                onClick={() => {
-                    const refillVal = parseInt(targetQtyInput) || 3;
-                    setEditingItem({...editingItem, quantity: refillVal}); 
-                }}
-                className="w-full mt-3 text-xs text-green-500 font-bold uppercase tracking-wider hover:text-green-400 py-2 border border-green-900/30 rounded bg-green-900/10"
-            >
-                Quick Action: Refill to Target
-            </button>
+            <button onClick={() => { const refillVal = parseInt(targetQtyInput) || 3; setEditingItem({...editingItem, quantity: refillVal}); }} className="w-full mt-3 text-xs text-green-500 font-bold uppercase tracking-wider hover:text-green-400 py-2 border border-green-900/30 rounded bg-green-900/10">Quick Action: Refill to Target</button>
           </div>
         </div>
       )}
-
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-24 right-6 px-6 py-3 rounded shadow-xl font-bold text-white z-[60] animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-blue-600"}`}>
-          {toast.msg}
-        </div>
-      )}
+      {toast && <div className={`fixed bottom-24 right-6 px-6 py-3 rounded shadow-xl font-bold text-white z-[60] animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-blue-600"}`}>{toast.msg}</div>}
     </div>
   );
 }
