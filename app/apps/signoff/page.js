@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { 
   PenTool, Save, RotateCcw, Download, Printer, 
-  FileText, Calendar, User, Trash2, CheckCircle2, Loader2, X 
+  FileText, Calendar, User, Trash2, CheckCircle2, Loader2, X, Lock 
 } from "lucide-react";
 import Header from "../../components/Header";
 import SignatureCanvas from "react-signature-canvas";
@@ -12,6 +12,7 @@ import SignatureCanvas from "react-signature-canvas";
 export default function SignOff() {
   const supabase = createClient();
   const sigPad = useRef({});
+  const containerRef = useRef(null);
   
   // STATE
   const [activeTab, setActiveTab] = useState("NEW"); // "NEW" or "HISTORY"
@@ -23,7 +24,10 @@ export default function SignOff() {
   const [clientName, setClientName] = useState("");
   const [projectName, setProjectName] = useState("");
   const [contractBody, setContractBody] = useState("");
-  const [isSigned, setIsSigned] = useState(false); // Generic "Signed" state
+  
+  // STATUS STATE
+  const [isSigned, setIsSigned] = useState(false); // Database Saved State
+  const [hasSigned, setHasSigned] = useState(false); // Temporary "Wet Ink" State (Locks Form)
   const [savedSignature, setSavedSignature] = useState(null); 
 
   // TEMPLATES
@@ -49,8 +53,17 @@ export default function SignOff() {
   };
 
   // --- SIGNATURE LOGIC ---
+  
+  // Triggered when user lifts finger
+  const handleSignatureEnd = () => {
+      if (!sigPad.current.isEmpty()) {
+          setHasSigned(true); // Lock the form
+      }
+  };
+
   const clearSignature = () => {
     sigPad.current.clear();
+    setHasSigned(false); // Unlock the form
     setIsSigned(false);
     setSavedSignature(null);
   };
@@ -88,6 +101,7 @@ export default function SignOff() {
         setContracts([newContract, ...contracts]);
         setSavedSignature(publicUrl);
         setIsSigned(true);
+        setHasSigned(false); // Reset temp state as it is now permanently saved
     } else {
         alert("Error saving: " + error.message);
     }
@@ -155,11 +169,16 @@ export default function SignOff() {
                             </div>
                         </div>
 
-                        {/* Inputs */}
+                        {/* Inputs - LOCKED if Signed OR hasSigned (Wet Ink) */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
                                 <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Client / Recipient</label>
-                                {isSigned ? <p className="font-bold text-lg">{clientName}</p> : (
+                                {isSigned || hasSigned ? (
+                                    <div className="font-bold text-lg border-b border-gray-300 py-2 flex justify-between items-center">
+                                        {clientName}
+                                        {hasSigned && !isSigned && <Lock size={14} className="text-gray-400"/>}
+                                    </div>
+                                ) : (
                                     <input 
                                         className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
                                         placeholder="Enter Name..."
@@ -170,7 +189,12 @@ export default function SignOff() {
                             </div>
                             <div>
                                 <label className="block text-xs font-bold uppercase mb-1 text-gray-500">Project / Title</label>
-                                {isSigned ? <p className="font-bold text-lg">{projectName}</p> : (
+                                {isSigned || hasSigned ? (
+                                    <div className="font-bold text-lg border-b border-gray-300 py-2 flex justify-between items-center">
+                                        {projectName}
+                                        {hasSigned && !isSigned && <Lock size={14} className="text-gray-400"/>}
+                                    </div>
+                                ) : (
                                     <input 
                                         className="w-full bg-white border-b-2 border-gray-300 p-2 font-bold focus:border-[#FF6700] outline-none transition" 
                                         placeholder="e.g. Work Authorization"
@@ -181,8 +205,8 @@ export default function SignOff() {
                             </div>
                         </div>
 
-                        {/* Templates (Hidden if Signed) */}
-                        {!isSigned && (
+                        {/* Templates (Hidden if Signed OR hasSigned) */}
+                        {!isSigned && !hasSigned && (
                             <div className="flex gap-2 mb-4 overflow-x-auto no-print pb-2">
                                 {TEMPLATES.map(t => (
                                     <button key={t.label} onClick={() => applyTemplate(t.text)} className="whitespace-nowrap px-3 py-1 bg-white border border-gray-300 rounded text-xs font-bold hover:bg-gray-100 transition">
@@ -192,11 +216,18 @@ export default function SignOff() {
                             </div>
                         )}
 
-                        {/* Body */}
-                        <div className="mb-8">
+                        {/* Body - LOCKED if Signed OR hasSigned */}
+                        <div className="mb-8 relative">
                             <label className="block text-xs font-bold uppercase mb-2 text-gray-500">Terms / Details</label>
-                            {isSigned ? (
-                                <div className="whitespace-pre-wrap font-mono text-sm bg-white p-4 border rounded">{contractBody}</div>
+                            {isSigned || hasSigned ? (
+                                <div className="whitespace-pre-wrap font-mono text-sm bg-white p-4 border rounded relative">
+                                    {contractBody}
+                                    {hasSigned && !isSigned && (
+                                        <div className="absolute top-2 right-2 text-red-500/50 flex items-center gap-1 text-[10px] font-bold uppercase no-print">
+                                            <Lock size={12}/> Locked
+                                        </div>
+                                    )}
+                                </div>
                             ) : (
                                 <textarea 
                                     className="w-full h-64 bg-white border border-gray-300 rounded p-4 font-mono text-sm focus:border-[#FF6700] outline-none resize-none shadow-inner"
@@ -217,27 +248,36 @@ export default function SignOff() {
                                 {isSigned ? (
                                     <img src={savedSignature} alt="Signature" className="h-24 object-contain border-b border-black w-1/2" />
                                 ) : (
-                                    <div className="relative border-2 border-dashed border-gray-400 rounded bg-white hover:border-[#FF6700] transition">
+                                    <div ref={containerRef} className="relative border-2 border-dashed border-gray-400 rounded bg-white hover:border-[#FF6700] transition">
                                         <SignatureCanvas 
                                             ref={sigPad}
                                             penColor="black"
+                                            onEnd={handleSignatureEnd}
                                             velocityFilterWeight={0.7} 
                                             minWidth={1.5}
                                             maxWidth={3.5}
                                             canvasProps={{
-                                                className: "w-full h-40 rounded cursor-crosshair"
+                                                className: "w-full rounded cursor-crosshair",
+                                                style: { width: '100%', height: '160px' } 
                                             }} 
                                         />
-                                        <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print" title="Clear">
+                                        <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print" title="Clear Signature & Unlock Form">
                                             <RotateCcw size={16}/>
                                         </button>
-                                        <div className="absolute bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none uppercase font-bold tracking-widest no-print">Sign Above</div>
+                                        {!hasSigned && <div className="absolute bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none uppercase font-bold tracking-widest no-print">Sign Above</div>}
                                     </div>
                                 )}
                                 
                                 <p className="text-xs font-bold mt-2 uppercase tracking-wider">{clientName || "Signed By"}</p>
                             </div>
                         </div>
+                    </div>
+
+                    {/* BRANDING FOOTER */}
+                    <div className="mt-12 text-center opacity-40">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                             POWERED BY FIELDDESKOPS
+                        </p>
                     </div>
 
                 </div>
@@ -254,7 +294,7 @@ export default function SignOff() {
                             <button onClick={printContract} className="flex-1 bg-white text-black font-bold py-4 rounded-xl shadow-lg hover:bg-gray-200 transition flex items-center justify-center gap-2">
                                 <Printer size={24}/> PRINT / PDF
                             </button>
-                            <button onClick={() => { setIsSigned(false); setSavedSignature(null); }} className="px-6 bg-[#333] text-white rounded-xl font-bold hover:bg-red-600 transition">
+                            <button onClick={() => { setIsSigned(false); setHasSigned(false); setSavedSignature(null); }} className="px-6 bg-[#333] text-white rounded-xl font-bold hover:bg-red-600 transition">
                                 NEW
                             </button>
                         </div>

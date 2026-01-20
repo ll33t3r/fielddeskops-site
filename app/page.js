@@ -5,7 +5,8 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, Clock, ShieldAlert, 
   AlertTriangle, Wrench, Users, LogOut, Plus, Loader2, X, 
-  FilePlus, UserPlus, Play, RefreshCw, Trash2, CheckCircle2
+  FilePlus, UserPlus, Play, RefreshCw, Trash2, CheckCircle2,
+  Sun, Moon
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,21 +19,35 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("HELLO");
   const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, alerts: 0 });
+  const [theme, setTheme] = useState("dark"); // Theme State
   
   // POPUPS
   const [showSpeedDial, setShowSpeedDial] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [alertList, setAlertList] = useState([]); 
-  const [refreshing, setRefreshing] = useState(false); // For the manual scan button
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    // 1. Greeting Logic
+    // 1. Theme Logic (Load from Memory)
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    setTheme(savedTheme);
+    document.documentElement.setAttribute("data-theme", savedTheme);
+
+    // 2. Greeting Logic
     const h = new Date().getHours();
     setGreeting(h < 12 ? "GOOD MORNING" : h < 18 ? "GOOD AFTERNOON" : "GOOD EVENING");
     
-    // 2. Initial Data Load
+    // 3. Initial Data Load
     loadDashboardData();
   }, []);
+
+  // --- THEME TOGGLE ---
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+  };
 
   const loadDashboardData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -43,11 +58,11 @@ export default function Dashboard() {
     const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.sale_price) || 0), 0) : 0;
     const jobs = bids ? bids.length : 0;
 
-    // B. Alerts (The Ghost Buster)
+    // B. Alerts
     const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
     const { data: subs } = await supabase.from("subcontractors").select("company_name, insurance_expiry");
 
-    // Recalculate Stock Alerts (Live Data)
+    // Stock Alerts
     const stockAlerts = inventory?.filter(i => i.quantity < i.min_quantity).map(i => ({ 
         id: "stock-" + Math.random(), 
         type: "STOCK", 
@@ -58,7 +73,7 @@ export default function Dashboard() {
         border: "border-red-500"
     })) || [];
     
-    // Recalculate Sub Alerts (Live Data)
+    // Sub Alerts
     const subAlerts = subs?.filter(s => s.insurance_expiry && new Date(s.insurance_expiry) < new Date()).map(s => ({ 
         id: "sub-" + Math.random(), 
         type: "INSURANCE", 
@@ -78,7 +93,7 @@ export default function Dashboard() {
   const manualRefresh = async () => {
     setRefreshing(true);
     await loadDashboardData();
-    setTimeout(() => setRefreshing(false), 800); // Visual feedback delay
+    setTimeout(() => setRefreshing(false), 800);
   };
 
   const dismissAlert = (index) => {
@@ -89,7 +104,7 @@ export default function Dashboard() {
   };
 
   const clearAllAlerts = () => {
-    if(!confirm("Clear all alerts from the dashboard? (They will reappear if issues persist on next scan)")) return;
+    if(!confirm("Clear all alerts?")) return;
     setAlertList([]);
     setMetrics(prev => ({ ...prev, alerts: 0 }));
     setShowAlerts(false);
@@ -97,40 +112,42 @@ export default function Dashboard() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.replace("/auth/login"); };
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black">
-      <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap");
-        .font-oswald { font-family: "Oswald", sans-serif; }
-        .glass-panel { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .glass-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(5px); }
-      `}</style>
-
+    <div className="min-h-screen bg-background text-foreground font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors duration-300">
+      
       {/* HEADER */}
       <header className="px-5 pt-8 pb-4">
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-bold text-[10px] tracking-[0.2em] uppercase mb-1">FIELDDESKOPS</p>
-                <h1 className="text-3xl font-oswald font-bold text-white tracking-wide">{greeting}.</h1>
+                <h1 className="text-3xl font-oswald font-bold tracking-wide">{greeting}.</h1>
             </div>
-            <button onClick={handleLogout} className="glass-btn p-2 rounded-full hover:bg-red-500/20 hover:text-red-500 transition"><LogOut size={18}/></button>
+            <div className="flex gap-2">
+                {/* THEME TOGGLE */}
+                <button onClick={toggleTheme} className="glass-btn p-2 rounded-full hover:text-[#FF6700] transition text-gray-400">
+                    {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
+                </button>
+                <button onClick={handleLogout} className="glass-btn p-2 rounded-full hover:bg-red-500/20 hover:text-red-500 transition text-gray-400">
+                    <LogOut size={18}/>
+                </button>
+            </div>
         </div>
 
         {/* METRICS BAR */}
         <div className="grid grid-cols-3 gap-3 mt-6">
             <div className="glass-panel rounded-xl p-3 text-center">
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Revenue</p>
+                <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">Revenue</p>
                 <p className="text-[#22c55e] font-oswald text-lg tracking-tight">${metrics.revenue.toLocaleString()}</p>
             </div>
             <div className="glass-panel rounded-xl p-3 text-center">
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Jobs</p>
-                <p className="text-white font-oswald text-lg tracking-tight">{metrics.jobs}</p>
+                <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">Jobs</p>
+                <p className="font-oswald text-lg tracking-tight">{metrics.jobs}</p>
             </div>
             <button onClick={() => setShowAlerts(true)} className={`glass-panel rounded-xl p-3 text-center transition active:scale-95 relative ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : ""}`}>
                 {metrics.alerts > 0 && <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>}
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">System</p>
+                <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">System</p>
                 <div className="flex items-center justify-center gap-1">
                     {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500"/>}
                     <p className={`font-oswald text-lg tracking-tight ${metrics.alerts > 0 ? "text-red-500" : "text-gray-400"}`}>{metrics.alerts > 0 ? metrics.alerts + " ALERTS" : "OK"}</p>
@@ -150,6 +167,13 @@ export default function Dashboard() {
             <AppCard href="/apps/safetybrief" label="SAFETYBRIEF" sub="Compliance" icon={<ShieldAlert size={20}/>} />
             <AppCard href="/apps/toolshed" label="TOOLSHED" sub="Asset Tracker" icon={<Wrench size={20}/>} />
             <AppCard href="/apps/subhub" label="SUBHUB" sub="Subcontractors" icon={<Users size={20}/>} />
+         </div>
+
+         {/* BRANDING FOOTER */}
+         <div className="mt-12 mb-6 text-center opacity-30 pointer-events-none">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                POWERED BY FIELDDESKOPS
+            </p>
          </div>
       </main>
 
@@ -182,7 +206,7 @@ export default function Dashboard() {
       {/* ALERTS MODAL */}
       {showAlerts && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-            <div className="bg-[#1a1a1a] border border-[#333] w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
+            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
                 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
@@ -202,7 +226,7 @@ export default function Dashboard() {
                     {alertList.length === 0 ? (
                         <div className="text-center py-8">
                             <CheckCircle2 size={32} className="mx-auto text-green-500 mb-2 opacity-50"/>
-                            <p className="text-gray-500 text-sm">All systems operational.</p>
+                            <p className="text-industrial-muted text-sm">All systems operational.</p>
                         </div>
                     ) : (
                         alertList.map((alert, i) => (
@@ -244,12 +268,12 @@ function AppCard({ href, label, sub, icon, color }) {
         <Link href={href} className="glass-panel p-4 rounded-xl hover:bg-white/5 active:scale-95 transition-all group relative overflow-hidden">
             <div className="absolute top-0 right-0 p-12 bg-gradient-to-br from-white/5 to-transparent rounded-full translate-x-4 -translate-y-4 group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform duration-500 pointer-events-none"></div>
             <div className="flex justify-between items-start mb-3 relative z-10">
-                <div className={`p-2.5 rounded-lg transition-colors ${color === "orange" ? "bg-[#FF6700] text-black" : "glass-btn text-gray-300 group-hover:text-white group-hover:border-[#FF6700]/50"}`}>
+                <div className={`p-2.5 rounded-lg transition-colors ${color === "orange" ? "bg-[#FF6700] text-black" : "glass-btn text-industrial-muted group-hover:text-foreground group-hover:border-[#FF6700]/50"}`}>
                     {icon}
                 </div>
             </div>
-            <h2 className="text-sm font-oswald font-bold text-gray-200 group-hover:text-[#FF6700] transition-colors">{label}</h2>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">{sub}</p>
+            <h2 className="text-sm font-oswald font-bold group-hover:text-[#FF6700] transition-colors">{label}</h2>
+            <p className="text-[10px] text-industrial-muted uppercase tracking-wide">{sub}</p>
         </Link>
     );
 }
