@@ -107,27 +107,22 @@ export default function SafetyBrief() {
   };
 
   return (
-    <div className="min-h-screen bg-industrial-bg text-white font-inter pb-24">
-      <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400 ;600&family=Oswald:wght@500;700&display=swap");
-        .font-oswald { font-family: "Oswald", sans-serif; }
-      `}</style>
-
+    <div className="min-h-screen bg-background text-foreground font-inter pb-32">
       {/* HEADER */}
       <Header title="SAFETYBRIEF" backLink="/" />
 
-      <main className="max-w-xl mx-auto px-6 space-y-6">
+      <main className="max-w-xl mx-auto px-6 space-y-6 pt-4">
         
         {/* === FORM CARD === */}
-        <div className="glass-panel rounded-xl p-5 shadow-xl">
+        <div className="glass-panel rounded-xl p-5 shadow-xl bg-industrial-card border border-industrial-border">
             
             {/* Job Select */}
             <div className="mb-4">
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Job Site</label>
+                <label className="text-xs font-bold text-industrial-muted uppercase block mb-1">Job Site</label>
                 <select 
                     value={selectedJob} 
                     onChange={(e) => setSelectedJob(e.target.value)}
-                    className="input-field rounded-lg p-3 w-full mb-2"
+                    className="input-field rounded-lg p-3 w-full mb-2 text-foreground"
                 >
                     <option value="">-- Select Job --</option>
                     {jobs.map(j => <option key={j} value={j}>{j}</option>)}
@@ -149,13 +144,13 @@ export default function SafetyBrief() {
 
             {/* Topic Tabs */}
             <div className="mb-4">
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Briefing Topic</label>
-                <div className="grid grid-cols-4 gap-1 bg-[#1a1a1a] p-1 rounded-lg border border-industrial-border">
+                <label className="text-xs font-bold text-industrial-muted uppercase block mb-1">Briefing Topic</label>
+                <div className="grid grid-cols-4 gap-1 bg-industrial-bg p-1 rounded-lg border border-industrial-border">
                     {Object.keys(TOPICS).map(t => (
                         <button 
                             key={t}
                             onClick={() => setSelectedTopic(t)}
-                            className={`text-[10px] font-bold py-2 rounded ${selectedTopic === t ? "bg-industrial-orange text-black" : "text-gray-400 hover:bg-[#333]"}`}
+                            className={`text-[10px] font-bold py-2 rounded transition-colors ${selectedTopic === t ? "bg-[#FF6700] text-black shadow-md" : "text-industrial-muted hover:bg-industrial-card hover:text-foreground"}`}
                         >
                             {t}
                         </button>
@@ -165,12 +160,12 @@ export default function SafetyBrief() {
 
             {/* Checklist */}
             <div className="mb-6 space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase block">Verification List</label>
+                <label className="text-xs font-bold text-industrial-muted uppercase block">Verification List</label>
                 {TOPICS[selectedTopic].map((item, i) => (
                     <div 
                         key={i} 
                         onClick={() => handleToggle(item)}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${checklist[item] ? "bg-green-900/20 border-green-600 text-green-400" : "bg-[#1a1a1a] border-industrial-border text-gray-400 hover:border-industrial-orange"}`}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${checklist[item] ? "bg-green-500/10 border-green-500/50 text-green-500" : "bg-industrial-bg border-industrial-border text-industrial-muted hover:border-[#FF6700]/50"}`}
                     >
                         {checklist[item] ? <CheckCircle size={20} className="text-green-500" /> : <div className="w-5 h-5 rounded-full border-2 border-industrial-border"></div>}
                         <span className="text-sm font-medium">{item}</span>
@@ -180,9 +175,9 @@ export default function SafetyBrief() {
 
             {/* Crew Present */}
             <div className="mb-6">
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Crew Present (Sign-in)</label>
+                <label className="text-xs font-bold text-industrial-muted uppercase block mb-1">Crew Present (Sign-in)</label>
                 <div className="relative">
-                    <Users size={18} className="absolute left-3 top-3 text-gray-500"/>
+                    <Users size={18} className="absolute left-3 top-3 text-industrial-muted"/>
                     <input 
                         type="text" 
                         value={attendees}
@@ -195,7 +190,7 @@ export default function SafetyBrief() {
 
             <button 
                 onClick={saveLog}
-                className="w-full bg-industrial-orange text-black font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] font-oswald text-lg py-4 rounded-xl flex items-center justify-center gap-2 hover:translate-y-[-2px] transition-all"
+                className="w-full bg-[#FF6700] text-black font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] font-oswald text-lg py-4 rounded-xl flex items-center justify-center gap-2 hover:scale-[1.02] transition-all"
             >
                 <Save size={20}/> LOG BRIEFING
             </button>
@@ -203,21 +198,28 @@ export default function SafetyBrief() {
 
         {/* === HISTORY === */}
         <div>
-            <h2 className="font-oswald text-lg text-gray-400 mb-3">RECENT LOGS</h2>
+            <h2 className="font-oswald text-lg text-industrial-muted mb-3">RECENT LOGS</h2>
             <div className="space-y-3">
                 {history.map(log => (
-                    <div key={log.id} className="glass-panel rounded-xl p-4 flex justify-between items-center">
+                    <div key={log.id} className="glass-panel rounded-xl p-4 flex justify-between items-center group">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-white text-sm">{log.topic}</span>
-                                <span className="text-[10px] bg-[#333] px-2 py-0.5 rounded text-gray-400">{new Date(log.created_at).toLocaleDateString()}</span>
+                                <span className="font-bold text-foreground text-sm">{log.topic}</span>
+                                <span className="text-[10px] bg-industrial-bg border border-industrial-border px-2 py-0.5 rounded text-industrial-muted">{new Date(log.created_at).toLocaleDateString()}</span>
                             </div>
-                            <p className="text-xs text-gray-500">{log.job_name}</p>
+                            <p className="text-xs text-industrial-muted">{log.job_name}</p>
                         </div>
                         <CheckSquare size={18} className="text-green-600"/>
                     </div>
                 ))}
             </div>
+        </div>
+
+        {/* BRANDING FOOTER */}
+        <div className="mt-12 text-center opacity-40">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                POWERED BY FIELDDESKOPS
+            </p>
         </div>
 
       </main>

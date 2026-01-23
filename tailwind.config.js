@@ -8,20 +8,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        // Mapped to CSS Variables for Auto-Switching
+        background: "var(--bg-main)", 
+        foreground: "var(--text-main)",
+        
         industrial: {
-          bg: "#1a1a1a",       // Dark Asphalt
-          card: "#262626",     // Gunmetal
-          border: "#404040",   // Dark Grey
-          orange: "#FF6700",   // Safety Orange
-          green: "#22c55e",    // Profit Green
-          red: "#ef4444",      // Loss Red
+          bg: "var(--bg-main)",        // Dynamic: Black -> Silver
+          card: "var(--glass-bg)",     // Dynamic: Dark Glass -> Frosted Ice
+          border: "var(--glass-border)",// Dynamic: Faint -> Icy Edge
+          text: "var(--text-main)",    // Dynamic: White -> Gunmetal
+          muted: "var(--text-muted)",  // Dynamic: Gray -> Dark Gray
+          
+          // Constants (These stay the same in both modes)
+          orange: "var(--color-primary)", // #FF6700
+          green: "#22c55e",
+          red: "#ef4444",
         }
       },
       fontFamily: {
-        oswald: ["var(--font-oswald)", "sans-serif"],
-        inter: ["var(--font-inter)", "sans-serif"],
+        oswald: ["Oswald", "sans-serif"], // Direct font name fallback
+        inter: ["Inter", "sans-serif"],
       },
     },
   },

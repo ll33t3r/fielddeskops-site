@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
-import { Trash2, Save, FileText, Share, Settings, ChevronDown, Loader2, Menu, X } from "lucide-react";
+import { Trash2, Save, FileText, Share, Settings, ChevronDown, Loader2, Menu, X, ArrowLeft } from "lucide-react";
 import Header from "../../components/Header";
 
 export default function ProfitLock() {
@@ -15,7 +15,7 @@ export default function ProfitLock() {
   const [laborHours, setLaborHours] = useState(0);
   
   // UI STATE
-  const [showMenu, setShowMenu] = useState(false); // Controls the Sidebar
+  const [showMenu, setShowMenu] = useState(false); 
 
   // HIDDEN VARIABLES (Defaults)
   const [hourlyRate, setHourlyRate] = useState(75);
@@ -104,7 +104,7 @@ export default function ProfitLock() {
     setMarkupPercent(bid.markup);
     setIsInvoiceMode(false);
     setShowSettings(false);
-    setShowMenu(false); // Close menu on select
+    setShowMenu(false); 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -120,16 +120,28 @@ export default function ProfitLock() {
   
   // SHARE / PRINT HANDLER
   const handleShare = async () => { 
-    window.print(); 
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: `Invoice: ${jobName}`,
+                text: `Invoice for ${jobName} - Total: $${finalBid.toFixed(2)}`,
+                url: window.location.href // Ideally this would be a public link, but for now sharing the context
+            });
+        } catch (err) {
+            window.print(); // Fallback to print if share fails/cancelled
+        }
+    } else {
+        window.print(); 
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter pb-20 relative overflow-x-hidden">
+    <div className="min-h-screen bg-background text-foreground font-inter pb-20 relative overflow-x-hidden">
       <style jsx global>{`
         @media print {
             body * { visibility: hidden; }
             #invoice-area, #invoice-area * { visibility: visible; }
-            #invoice-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; color: black; }
+            #invoice-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; color: black; box-shadow: none; }
             .no-print { display: none !important; }
         }
       `}</style>
@@ -140,29 +152,29 @@ export default function ProfitLock() {
       {/* === PRIVACY MENU BUTTON === */}
       <button 
         onClick={() => setShowMenu(true)} 
-        className="absolute top-5 right-5 z-40 p-2 bg-white/10 rounded-full hover:bg-white/20 transition no-print"
+        className="absolute top-5 right-5 z-40 p-2 bg-white/10 rounded-full hover:bg-white/20 transition no-print text-foreground"
       >
         <Menu size={24} />
       </button>
 
       {/* === SIDEBAR DRAWER (HISTORY) === */}
-      <div className={`fixed inset-y-0 right-0 w-80 bg-[#1a1a1a] border-l border-white/10 shadow-2xl transform transition-transform duration-300 z-50 ${showMenu ? "translate-x-0" : "translate-x-full"} no-print`}>
+      <div className={`fixed inset-y-0 right-0 w-80 bg-industrial-card border-l border-industrial-border shadow-2xl transform transition-transform duration-300 z-50 ${showMenu ? "translate-x-0" : "translate-x-full"} no-print`}>
         <div className="p-6 h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="font-oswald font-bold text-xl text-[#FF6700] uppercase flex items-center gap-2"><Save size={18}/> Saved Bids</h2>
-                <button onClick={() => setShowMenu(false)} className="text-gray-500 hover:text-white"><X/></button>
+                <button onClick={() => setShowMenu(false)} className="text-industrial-muted hover:text-foreground"><X/></button>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                 {bidHistory.length === 0 ? (
-                  <p className="text-gray-500 text-xs italic text-center py-10">No saved history.</p>
+                  <p className="text-industrial-muted text-xs italic text-center py-10">No saved history.</p>
                 ) : (
                   bidHistory.map((bid, idx) => (
-                    <div key={bid.id} onClick={() => loadBid(bid)} className="bg-white/5 border border-white/5 rounded-lg p-3 cursor-pointer hover:bg-white/10 hover:border-[#FF6700]/50 transition group relative">
+                    <div key={bid.id} onClick={() => loadBid(bid)} className="bg-white/5 border border-industrial-border rounded-lg p-3 cursor-pointer hover:bg-white/10 hover:border-[#FF6700]/50 transition group relative">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="font-bold text-white text-sm truncate w-40">{bid.jobName || "No Name"}</p>
-                            <p className="text-[10px] text-gray-500">{bid.date}</p>
+                            <p className="font-bold text-foreground text-sm truncate w-40">{bid.jobName || "No Name"}</p>
+                            <p className="text-[10px] text-industrial-muted">{bid.date}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-green-400 font-oswald font-bold">{bid.finalPrice}</p>
@@ -176,7 +188,7 @@ export default function ProfitLock() {
                 )}
             </div>
             
-            <div className="mt-4 pt-4 border-t border-white/10 text-center opacity-30 text-[10px] uppercase font-bold tracking-widest">
+            <div className="mt-4 pt-4 border-t border-industrial-border text-center opacity-30 text-[10px] uppercase font-bold tracking-widest text-industrial-muted">
                 FieldDeskOps Protected
             </div>
         </div>
@@ -188,13 +200,13 @@ export default function ProfitLock() {
         <div className="flex gap-2 no-print mb-6">
             <button 
                 onClick={() => setIsInvoiceMode(false)}
-                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'glass-btn text-gray-500'}`}
+                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'glass-btn text-industrial-muted'}`}
             >
                 CALCULATOR
             </button>
             <button 
                 onClick={() => setIsInvoiceMode(true)}
-                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-white text-black' : 'glass-btn text-gray-500'}`}
+                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-white text-black shadow-lg' : 'glass-btn text-industrial-muted'}`}
             >
                 <FileText size={16} /> INVOICE
             </button>
@@ -206,31 +218,31 @@ export default function ProfitLock() {
                 
                 {/* Job Name */}
                 <div>
-                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Job Name</label>
+                  <label className="block text-xs font-bold uppercase text-industrial-muted mb-1">Job Name</label>
                   <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith - Water Heater" className="input-field rounded-lg p-3 w-full font-bold" />
                 </div>
 
                 {/* Materials & Labor Grid (Transparent) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Materials ($)</label>
+                      <label className="block text-xs font-bold uppercase text-industrial-muted mb-1">Materials ($)</label>
                       <input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} min="0" step="0.01" className="input-field rounded-lg p-3 w-full" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Labor Hours</label>
+                      <label className="block text-xs font-bold uppercase text-industrial-muted mb-1">Labor Hours</label>
                       <input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} min="0" step="0.5" className="input-field rounded-lg p-3 w-full" />
                     </div>
                 </div>
 
                 {/* FINAL PRICE (Clean, No "Profit" labels) */}
-                <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-6 text-center">
-                    <p className="text-xs text-gray-500 uppercase tracking-widest mb-1 font-bold">ESTIMATED TOTAL</p>
-                    <p className="text-5xl font-oswald font-bold text-white tracking-wide">${finalBid.toFixed(2)}</p>
+                <div className="bg-industrial-card border border-industrial-border rounded-xl p-6 text-center">
+                    <p className="text-xs text-industrial-muted uppercase tracking-widest mb-1 font-bold">ESTIMATED TOTAL</p>
+                    <p className="text-5xl font-oswald font-bold text-foreground tracking-wide">${finalBid.toFixed(2)}</p>
                 </div>
 
                 {/* --- THE SECRET SETTINGS MENU --- */}
                 <div className="bg-black/20 rounded-lg overflow-hidden border border-white/5">
-                    <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition text-gray-400">
+                    <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition text-industrial-muted">
                       <span className="font-bold text-xs uppercase flex items-center gap-2"><Settings size={14} /> Settings</span>
                       <ChevronDown size={16} className={`transition-transform ${showSettings ? 'rotate-180' : ''}`} />
                     </button>
@@ -277,68 +289,69 @@ export default function ProfitLock() {
 
         {/* VIEW 2: CLIENT INVOICE */}
         {isInvoiceMode && (
-            <div id="invoice-area" className="bg-white text-black rounded-xl p-8 shadow-2xl min-h-[600px] flex flex-col relative animate-in fade-in">
-                
-                {/* Invoice Header */}
-                <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-200">
-                  <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p>
-                    <h1 className="text-3xl font-oswald font-bold text-gray-900">{jobName || "Draft Project"}</h1>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Date Issued</p>
-                    <p className="font-bold">{new Date().toLocaleDateString()}</p>
-                  </div>
+            <div className="animate-in fade-in">
+                {/* The Paper (Keep White/Black for print consistency) */}
+                <div id="invoice-area" className="bg-white text-black rounded-xl p-8 shadow-2xl min-h-[600px] flex flex-col relative mb-24">
+                    
+                    {/* Invoice Header */}
+                    <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-200">
+                    <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p>
+                        <h1 className="text-3xl font-oswald font-bold text-gray-900">{jobName || "Draft Project"}</h1>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-xs text-gray-500">Date Issued</p>
+                        <p className="font-bold">{new Date().toLocaleDateString()}</p>
+                    </div>
+                    </div>
+
+                    {/* Line Items */}
+                    <table className="w-full mb-8 flex-1">
+                        <thead>
+                            <tr className="border-b-2 border-black">
+                                <th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th>
+                                <th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody className="text-sm">
+                            <tr className="border-b border-gray-100">
+                                <td className="py-4 font-medium">Materials & Supplies</td>
+                                <td className="py-4 text-right">${materials.toFixed(2)}</td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                                <td className="py-4 font-medium">Labor & Services</td>
+                                <td className="py-4 text-right">${(finalBid - materials).toFixed(2)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    {/* Total */}
+                    <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end">
+                    <span className="text-sm font-bold text-gray-600 uppercase">Total Due</span>
+                    <span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span>
+                    </div>
+
+                    <div className="mt-8 text-center text-xs text-gray-400">
+                        <p>Thank you for your business.</p>
+                    </div>
                 </div>
 
-                {/* Line Items */}
-                <table className="w-full mb-8 flex-1">
-                    <thead>
-                        <tr className="border-b-2 border-black">
-                            <th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th>
-                            <th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                        <tr className="border-b border-gray-100">
-                            <td className="py-4 font-medium">Materials & Supplies</td>
-                            <td className="py-4 text-right">${materials.toFixed(2)}</td>
-                        </tr>
-                        <tr className="border-b border-gray-100">
-                            <td className="py-4 font-medium">Labor & Services</td>
-                            <td className="py-4 text-right">${(finalBid - materials).toFixed(2)}</td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                {/* Total */}
-                <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end">
-                  <span className="text-sm font-bold text-gray-600 uppercase">Total Due</span>
-                  <span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span>
+                {/* Floating Action Bar (Outside the Invoice) */}
+                <div className="fixed bottom-0 left-0 w-full p-4 bg-industrial-card border-t border-industrial-border no-print z-50 flex gap-3 justify-center shadow-[0_-5px_20px_rgba(0,0,0,0.3)]">
+                    <button onClick={() => setIsInvoiceMode(false)} className="bg-white/10 text-foreground px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-white/20">
+                        <ArrowLeft size={18} /> EDIT
+                    </button>
+                    <button onClick={handleShare} className="bg-[#FF6700] text-black px-8 py-3 rounded-full font-bold shadow-lg hover:scale-105 transition flex items-center gap-2">
+                        <Share size={18} /> SHARE / PRINT
+                    </button>
                 </div>
-
-                <div className="mt-8 text-center text-xs text-gray-400">
-                    <p>Thank you for your business.</p>
-                </div>
-
-                {/* BRANDING FOOTER FOR INVOICE */}
-                <div className="mt-8 text-center opacity-30">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                        POWERED BY FIELDDESKOPS
-                    </p>
-                </div>
-
-                {/* SHARE Button */}
-                <button onClick={handleShare} className="absolute top-8 right-8 no-print bg-[#FF6700] text-black px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 hover:scale-105 transition active:scale-95">
-                    <Share size={18} /> Share Invoice
-                </button>
             </div>
         )}
 
         {/* BRANDING FOOTER (MAIN APP) */}
         {!isInvoiceMode && (
              <div className="mt-12 text-center opacity-40">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
                     POWERED BY FIELDDESKOPS
                 </p>
             </div>

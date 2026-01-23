@@ -15,7 +15,7 @@ export default function ToolShed() {
   const [assets, setAssets] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [defaultVanId, setDefaultVanId] = useState(null); // REQUIRED FOR SYNC
+  const [defaultVanId, setDefaultVanId] = useState(null); 
   
   // UI STATE
   const [showAddModal, setShowAddModal] = useState(false);
@@ -100,10 +100,10 @@ export default function ToolShed() {
         }
     }
 
-    // 2. Insert Record (NOW WITH VAN ID)
+    // 2. Insert Record
     const { data, error } = await supabase.from("assets").insert({
         user_id: user.id,
-        van_id: defaultVanId, // <--- CRITICAL FIX FOR SYNC
+        van_id: defaultVanId, 
         name: newTool.name,
         brand: newTool.brand,
         serial_number: newTool.serial,
@@ -142,10 +142,10 @@ export default function ToolShed() {
     return matchesStatus && matchesSearch;
   });
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter pb-24">
+    <div className="min-h-screen bg-background text-foreground font-inter pb-24">
       <Header title="TOOLSHED" backLink="/" />
 
       <main className="max-w-xl mx-auto px-6 space-y-6 pt-4">
@@ -153,17 +153,17 @@ export default function ToolShed() {
         {/* TOP STATS BAR */}
         <div className="grid grid-cols-3 gap-2">
             {[
-                { label: "ALL TOOLS", key: "ALL", count: assets.length, color: "text-white" },
+                { label: "ALL TOOLS", key: "ALL", count: assets.length, color: "text-foreground" },
                 { label: "CHECKED OUT", key: "CHECKED_OUT", count: assets.filter(a => a.status === "CHECKED_OUT").length, color: "text-blue-400" },
                 { label: "BROKEN", key: "BROKEN", count: assets.filter(a => a.status === "BROKEN").length, color: "text-red-500" }
             ].map(stat => (
                 <button 
                     key={stat.key} 
                     onClick={() => setFilter(stat.key)} 
-                    className={`glass-panel p-3 rounded-lg text-center transition active:scale-95 ${filter === stat.key ? "border-[#FF6700] bg-[#FF6700]/10" : "hover:bg-white/5"}`}
+                    className={`glass-panel p-3 rounded-lg text-center transition active:scale-95 ${filter === stat.key ? "border-[#FF6700] bg-[#FF6700]/10" : "hover:bg-industrial-card"}`}
                 >
                     <p className={`text-2xl font-oswald font-bold ${stat.color}`}>{stat.count}</p>
-                    <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">{stat.label}</p>
+                    <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">{stat.label}</p>
                 </button>
             ))}
         </div>
@@ -171,7 +171,7 @@ export default function ToolShed() {
         {/* TOOLBAR */}
         <div className="flex gap-2">
             <div className="relative flex-1">
-                <Search size={18} className="absolute left-3 top-3.5 text-gray-500" />
+                <Search size={18} className="absolute left-3 top-3.5 text-industrial-muted" />
                 <input 
                     type="text" 
                     placeholder="Search tools..." 
@@ -180,7 +180,7 @@ export default function ToolShed() {
                     className="input-field rounded-lg pl-10 pr-4 py-3 w-full"
                 />
             </div>
-            <button onClick={() => setShowTeamModal(true)} className="bg-[#333] hover:bg-white hover:text-black text-white font-bold px-4 rounded-lg flex items-center justify-center transition border border-white/10">
+            <button onClick={() => setShowTeamModal(true)} className="bg-industrial-card hover:bg-white hover:text-black text-foreground font-bold px-4 rounded-lg flex items-center justify-center transition border border-industrial-border">
                 <Users size={20}/>
             </button>
             <button onClick={() => setShowAddModal(true)} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition">
@@ -191,7 +191,7 @@ export default function ToolShed() {
         {/* ASSET LIST */}
         <div className="space-y-3 pb-20">
             {filteredAssets.length === 0 ? (
-              <div className="text-center py-10 text-gray-500">
+              <div className="text-center py-10 text-industrial-muted">
                 <Wrench size={40} className="mx-auto mb-2 opacity-20"/>
                 <p className="text-sm">No tools found.</p>
               </div>
@@ -200,18 +200,18 @@ export default function ToolShed() {
                 <div key={asset.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${asset.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === asset.id ? "ring-1 ring-[#FF6700]" : ""}`}>
                     
                     <div className="flex gap-4 cursor-pointer" onClick={() => setSelectedAsset(selectedAsset === asset.id ? null : asset.id)}>
-                        <div className="w-16 h-16 rounded-lg bg-black/40 flex-shrink-0 border border-white/10 flex items-center justify-center overflow-hidden">
-                            {asset.photo_url ? <img src={asset.photo_url} alt={asset.name} className="w-full h-full object-cover" /> : <Wrench size={20} className="text-gray-600"/>}
+                        <div className="w-16 h-16 rounded-lg bg-black/20 flex-shrink-0 border border-industrial-border flex items-center justify-center overflow-hidden">
+                            {asset.photo_url ? <img src={asset.photo_url} alt={asset.name} className="w-full h-full object-cover" /> : <Wrench size={20} className="text-industrial-muted"/>}
                         </div>
 
                         <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start">
-                                <h3 className="font-bold text-lg leading-tight truncate pr-2 text-white">{asset.name}</h3>
+                                <h3 className="font-bold text-lg leading-tight truncate pr-2 text-foreground">{asset.name}</h3>
                                 {asset.status === "IN_VAN" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN VAN</span>}
                                 {asset.status === "CHECKED_OUT" && <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded">OUT</span>}
                                 {asset.status === "BROKEN" && <span className="text-[10px] font-bold bg-red-500/20 text-red-500 px-2 py-1 rounded">BROKEN</span>}
                             </div>
-                            <p className="text-xs text-gray-400 mt-1">{asset.brand} {asset.serial_number && `• S/N: ${asset.serial_number}`}</p>
+                            <p className="text-xs text-industrial-muted mt-1">{asset.brand} {asset.serial_number && `• S/N: ${asset.serial_number}`}</p>
                             
                             {asset.status === "CHECKED_OUT" && asset.assigned_to && (
                                 <p className="text-xs text-blue-400 mt-1 flex items-center gap-1">
@@ -223,22 +223,22 @@ export default function ToolShed() {
 
                     {/* ACTIONS */}
                     {selectedAsset === asset.id && (
-                        <div className="mt-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-2">
+                        <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
                             {asset.status === "IN_VAN" ? (
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
-                                        <select onChange={(e) => { if(e.target.value) updateStatus(asset.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none appearance-none focus:border-[#FF6700]">
+                                        <select onChange={(e) => { if(e.target.value) updateStatus(asset.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-industrial-bg border border-industrial-border rounded-lg px-3 py-2 text-sm text-foreground outline-none appearance-none focus:border-[#FF6700]">
                                             <option value="">Select Technician...</option>
                                             {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                         </select>
-                                        <ChevronDown size={14} className="absolute right-3 top-3 text-gray-500 pointer-events-none"/>
+                                        <ChevronDown size={14} className="absolute right-3 top-3 text-industrial-muted pointer-events-none"/>
                                     </div>
                                     <button onClick={() => updateStatus(asset.id, "BROKEN")} className="px-3 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40"><AlertTriangle size={18}/></button>
                                 </div>
                             ) : (
                                 <div className="flex gap-2">
-                                    <button onClick={() => updateStatus(asset.id, "IN_VAN")} className="flex-1 bg-[#333] hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition">RETURN TO VAN</button>
-                                    <button onClick={() => deleteAsset(asset.id)} className="px-3 py-2 text-gray-500 hover:text-white transition"><Trash2 size={18}/></button>
+                                    <button onClick={() => updateStatus(asset.id, "IN_VAN")} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO VAN</button>
+                                    <button onClick={() => deleteAsset(asset.id)} className="px-3 py-2 text-industrial-muted hover:text-foreground transition"><Trash2 size={18}/></button>
                                 </div>
                             )}
                         </div>
@@ -247,23 +247,31 @@ export default function ToolShed() {
               ))
             )}
         </div>
+
+        {/* BRANDING FOOTER */}
+        <div className="mt-12 text-center opacity-40">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                POWERED BY FIELDDESKOPS
+            </p>
+        </div>
+
       </main>
 
       {/* TEAM MODAL */}
       {showTeamModal && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
-                <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
-                <h2 className="font-oswald font-bold text-xl mb-6 text-white flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
+             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
+                <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
+                <h2 className="font-oswald font-bold text-xl mb-6 text-foreground flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
                 <div className="flex gap-2 mb-6">
                     <input placeholder="Enter Name (e.g. Mike)" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="input-field rounded-lg p-2 flex-1"/>
                     <button onClick={addTeamMember} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg"><Plus/></button>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                    {teamMembers.length === 0 ? <p className="text-gray-500 text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
+                    {teamMembers.length === 0 ? <p className="text-industrial-muted text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
                         <div key={m.id} className="bg-white/5 border border-white/5 p-3 rounded-lg flex justify-between items-center">
-                            <span className="font-bold text-sm text-gray-200">{m.name}</span>
-                            <button onClick={() => deleteTeamMember(m.id)} className="text-gray-500 hover:text-red-500"><Trash2 size={14}/></button>
+                            <span className="font-bold text-sm text-foreground">{m.name}</span>
+                            <button onClick={() => deleteTeamMember(m.id)} className="text-industrial-muted hover:text-red-500"><Trash2 size={14}/></button>
                         </div>
                     ))}
                 </div>
@@ -274,8 +282,8 @@ export default function ToolShed() {
       {/* ADD TOOL MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
-                <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
+            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
+                <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
                 <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">REGISTER TOOL</h2>
                 
                 {/* PHOTO */}
@@ -286,9 +294,9 @@ export default function ToolShed() {
                             <button onClick={() => { setPhotoPreview(null); setNewPhoto(null); }} className="absolute top-2 right-2 bg-red-500 p-1.5 rounded-full text-white shadow-lg"><X size={14}/></button>
                         </div>
                     ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:border-[#FF6700] hover:bg-white/5 transition">
-                            <Camera size={24} className="text-gray-400 mb-2"/>
-                            <span className="text-xs text-gray-500 font-bold uppercase">Tap to Take Photo</span>
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-industrial-border rounded-xl cursor-pointer hover:border-[#FF6700] hover:bg-white/5 transition">
+                            <Camera size={24} className="text-industrial-muted mb-2"/>
+                            <span className="text-xs text-industrial-muted font-bold uppercase">Tap to Take Photo</span>
                             <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect}/>
                         </label>
                     )}

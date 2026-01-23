@@ -21,7 +21,7 @@ export default function CrewClock() {
   
   const [selectedJob, setSelectedJob] = useState("General Shop Time");
   const [elapsed, setElapsed] = useState(0);
-  const [gpsStatus, setGpsStatus] = useState("WAITING"); // <--- FIXED THIS LINE
+  const [gpsStatus, setGpsStatus] = useState("WAITING");
   const [gpsError, setGpsError] = useState("");
 
   /* ----  EFFECTS  ---- */
@@ -142,21 +142,21 @@ export default function CrewClock() {
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter pb-20">
+    <div className="min-h-screen bg-background text-foreground font-inter pb-20">
       <Header title="CREWCLOCK" backLink="/" />
 
       <main className="max-w-xl mx-auto px-6 space-y-6 pt-4">
         
         {/* BIG CLOCK */}
-        <div className={`glass-panel rounded-2xl p-8 border-2 transition-all shadow-2xl relative overflow-hidden ${activeSession ? "border-[#22c55e] bg-green-900/10" : "border-white/10"}`}>
+        <div className={`glass-panel rounded-2xl p-8 border-2 transition-all shadow-2xl relative overflow-hidden ${activeSession ? "border-[#22c55e] bg-green-900/10" : "border-industrial-border"}`}>
           {activeSession ? (
             <>
               <p className="text-sm font-bold text-[#22c55e] uppercase tracking-widest mb-2 animate-pulse text-center">● On The Clock</p>
-              <div className="text-6xl font-oswald font-bold text-white mb-2 tabular-nums text-center">{formatTime(elapsed)}</div>
-              <p className="text-gray-400 text-lg flex items-center justify-center gap-2 mb-6"><Briefcase size={16} /> {activeSession.job_name}</p>
+              <div className="text-6xl font-oswald font-bold text-foreground mb-2 tabular-nums text-center">{formatTime(elapsed)}</div>
+              <p className="text-industrial-muted text-lg flex items-center justify-center gap-2 mb-6"><Briefcase size={16} /> {activeSession.job_name}</p>
 
               {/* Location Badge */}
               <div className="flex justify-center mb-6">
@@ -177,13 +177,13 @@ export default function CrewClock() {
             </>
           ) : (
             <>
-              <p className="text-gray-500 text-sm uppercase tracking-widest mb-6 text-center">Ready to Work?</p>
+              <p className="text-industrial-muted text-sm uppercase tracking-widest mb-6 text-center">Ready to Work?</p>
 
               <div className="mb-6 input-field rounded-lg p-2 flex items-center gap-2">
                 <Briefcase size={18} className="text-[#FF6700] ml-2" />
-                <select value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)} className="bg-transparent w-full text-white outline-none py-2 text-sm">
-                  <option value="General Shop Time">General Shop Time</option>
-                  {jobs.map((j) => <option key={j} value={j}>{j}</option>)}
+                <select value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)} className="bg-transparent w-full text-foreground outline-none py-2 text-sm">
+                  <option value="General Shop Time" className="text-black">General Shop Time</option>
+                  {jobs.map((j) => <option key={j} value={j} className="text-black">{j}</option>)}
                 </select>
               </div>
 
@@ -203,18 +203,18 @@ export default function CrewClock() {
 
         {/* === HISTORY === */}
         <div>
-          <h2 className="font-oswald text-lg text-gray-400 mb-3 flex items-center gap-2"><History size={18} /> RECENT ACTIVITY</h2>
+          <h2 className="font-oswald text-lg text-industrial-muted mb-3 flex items-center gap-2"><History size={18} /> RECENT ACTIVITY</h2>
           <div className="space-y-3">
             {history.map((log) => (
               <div key={log.id} className="glass-panel rounded-xl p-4 flex justify-between items-center group hover:border-[#FF6700] transition">
                 <div>
-                  <p className="font-bold text-white flex items-center gap-2">
+                  <p className="font-bold text-foreground flex items-center gap-2">
                     {log.job_name}
                     {!log.gps_verified && <AlertTriangle size={12} className="text-red-500" title="No GPS" />}
                   </p>
-                  <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
+                  <div className="text-xs text-industrial-muted flex items-center gap-2 mt-1">
                     <span>{new Date(log.start_time).toLocaleDateString()}</span>
-                    <span className="text-[#333]">|</span>
+                    <span className="text-industrial-border">|</span>
                     {log.start_lat ? (
                       <a href={`http://maps.google.com/?q=${log.start_lat},${log.start_lng}`} target="_blank" className="flex items-center gap-1 text-blue-400 hover:text-blue-300 hover:underline">
                         <MapPin size={10} /> Map
@@ -226,12 +226,20 @@ export default function CrewClock() {
                 </div>
                 <div className="text-right">
                   <span className="block font-oswald text-xl text-[#FF6700]">{log.duration_minutes}m</span>
-                  <span className="text-[10px] text-gray-500 uppercase">Duration</span>
+                  <span className="text-[10px] text-industrial-muted uppercase">Duration</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
+
+        {/* BRANDING FOOTER */}
+        <div className="mt-12 text-center opacity-40">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                POWERED BY FIELDDESKOPS
+            </p>
+        </div>
+
       </main>
     </div>
   );

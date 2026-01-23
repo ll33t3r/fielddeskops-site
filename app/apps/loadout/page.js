@@ -172,7 +172,6 @@ export default function LoadOut() {
         const { error: uploadError } = await supabase.storage.from("tool-photos").upload(fileName, newPhoto);
         if (uploadError) {
             console.log("Upload Error:", uploadError);
-            // We continue even if photo fails, just warn user
             showToast("Photo failed, saving tool anyway...", "error");
         } else {
             const { data } = supabase.storage.from("tool-photos").getPublicUrl(fileName);
@@ -281,52 +280,52 @@ export default function LoadOut() {
       return matchSearch && matchFilter;
   });
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter pb-32">
+    <div className="min-h-screen bg-background text-foreground font-inter pb-32">
       <Header title="LOADOUT" backLink="/" />
 
       <main className="max-w-6xl mx-auto px-6 pt-4">
         
         {/* TOP BAR */}
-        <div className="flex items-center justify-between mb-4 bg-[#1a1a1a] border border-white/10 p-3 rounded-xl relative z-20">
+        <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-20">
             <div className="relative w-full">
                 <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
                     <div className="flex items-center gap-3">
                         <Truck className="text-[#FF6700]" size={20} />
-                        {currentVan ? currentVan.name : "Loading..."}
+                        <span className="text-foreground">{currentVan ? currentVan.name : "Loading..."}</span>
                     </div>
-                    <Settings size={20} className={`text-gray-400 transition-transform ${showSettings ? "rotate-90 text-white" : ""}`}/>
+                    <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
 
                 {/* MENU */}
                 {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in bg-[#0a0a0a] border border-white/10">
+                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 glass-panel rounded-xl shadow-2xl z-50 p-4 animate-in fade-in bg-industrial-card border border-industrial-border">
                         {activeTab === "STOCK" && (
-                            <div className="mb-4 pb-4 border-b border-white/10">
-                                <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
-                                <button onClick={() => { setIsEditMode(!isEditMode); setShowSettings(false); }} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] text-black" : "bg-white/5"}`}>
+                            <div className="mb-4 pb-4 border-b border-industrial-border">
+                                <label className="text-xs text-industrial-muted font-bold uppercase mb-2 block">Interface</label>
+                                <button onClick={() => { setIsEditMode(!isEditMode); setShowSettings(false); }} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-industrial-border text-foreground"}`}>
                                     <span className="font-bold text-sm flex items-center gap-2">{isEditMode ? <Eye/> : <EyeOff/>} {isEditMode ? "EDITING ON" : "STANDARD"}</span>
                                 </button>
                             </div>
                         )}
-                        <div className="mb-4 pb-4 border-b border-white/10">
-                            <label className="text-xs text-gray-500 font-bold uppercase mb-1">Vehicle Name</label>
+                        <div className="mb-4 pb-4 border-b border-industrial-border">
+                            <label className="text-xs text-industrial-muted font-bold uppercase mb-1">Vehicle Name</label>
                             <div className="flex gap-2">
-                                <input value={renameVanName} onChange={e => setRenameVanName(e.target.value)} className="input-field rounded p-2 text-sm flex-1" />
+                                <input value={renameVanName} onChange={e => setRenameVanName(e.target.value)} className="input-field rounded p-2 text-sm flex-1 text-foreground" />
                                 <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2/></button>
                             </div>
                         </div>
-                        <div className="mb-4 pb-4 border-b border-white/10 space-y-2">
-                            <label className="text-xs text-gray-500 font-bold uppercase">Switch Vehicle</label>
+                        <div className="mb-4 pb-4 border-b border-industrial-border space-y-2">
+                            <label className="text-xs text-industrial-muted font-bold uppercase">Switch Vehicle</label>
                             {vans.map(v => (
-                                <button key={v.id} onClick={() => switchVan(v.id)} className={`w-full text-left text-sm p-2 rounded hover:bg-white/5 ${v.id === currentVan.id ? "text-[#FF6700] bg-[#FF6700]/10" : "text-gray-400"}`}>{v.name}</button>
+                                <button key={v.id} onClick={() => switchVan(v.id)} className={`w-full text-left text-sm p-2 rounded hover:bg-white/5 ${v.id === currentVan.id ? "text-[#FF6700] bg-[#FF6700]/10" : "text-industrial-muted"}`}>{v.name}</button>
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
-                        <div className="space-y-2 pb-4 border-b border-white/10">
-                            <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-300 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
+                        <div className="space-y-2 pb-4 border-b border-industrial-border">
+                            <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-industrial-muted p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
                         </div>
                         <div className="pt-2"><button onClick={handleDeleteVan} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2"><Trash2 size={14}/> Delete Vehicle</button></div>
@@ -336,11 +335,11 @@ export default function LoadOut() {
         </div>
 
         {/* TABS */}
-        <div className="flex bg-[#1a1a1a] p-1 rounded-xl mb-6 border border-white/10">
-            <button onClick={() => setActiveTab("STOCK")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
+        <div className="flex bg-industrial-bg p-1 rounded-xl mb-6 border border-industrial-border">
+            <button onClick={() => setActiveTab("STOCK")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-industrial-muted hover:text-foreground"}`}>
                 <LayoutGrid size={18}/> STOCK
             </button>
-            <button onClick={() => setActiveTab("TOOLS")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "TOOLS" ? "bg-white text-black shadow-lg" : "text-gray-500 hover:text-white"}`}>
+            <button onClick={() => setActiveTab("TOOLS")} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "TOOLS" ? "bg-white text-black shadow-lg" : "text-industrial-muted hover:text-foreground"}`}>
                 <Wrench size={18}/> TOOLS
             </button>
         </div>
@@ -350,7 +349,7 @@ export default function LoadOut() {
             <div className="animate-in fade-in slide-in-from-left-4">
                 <form onSubmit={addStockItem} className="flex gap-2 mb-6">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                        <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
                         <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Add stock item..." className="input-field rounded-lg pl-10 pr-4 py-3 w-full" />
                     </div>
                     <button type="submit" className="bg-[#FF6700] text-black font-bold rounded-lg w-14 flex items-center justify-center hover:scale-105 transition"><Plus /></button>
@@ -360,6 +359,7 @@ export default function LoadOut() {
                     {items.map((item) => (
                         <div key={item.id} onClick={() => { if(isEditMode) openStockEdit(item); }} style={{ backgroundColor: item.color || "#262626" }} className={`relative h-36 rounded-xl p-4 flex flex-col justify-between shadow-lg transition-transform border border-white/5 ${isEditMode ? "cursor-pointer hover:scale-105 ring-2 ring-white" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}>
                             <div className="flex justify-between items-start">
+                                {/* Force white text on colored cards for readability */}
                                 <h3 className="font-oswald font-bold text-lg leading-tight truncate text-white w-24">{item.name}</h3>
                                 {isEditMode ? <Edit3 size={16} className="text-white/80"/> : item.quantity < (item.min_quantity || 3) && <AlertTriangle size={16} className="text-red-500 animate-pulse" />}
                             </div>
@@ -385,21 +385,21 @@ export default function LoadOut() {
             <div className="animate-in fade-in slide-in-from-right-4">
                 <div className="flex gap-2 mb-6">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-3.5 text-gray-500" size={18} />
+                        <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-lg pl-10 pr-4 py-3 w-full" />
                     </div>
-                    <button onClick={() => setShowTeamModal(true)} className="bg-[#333] hover:bg-white hover:text-black text-white font-bold px-4 rounded-lg flex items-center justify-center border border-white/10"><Users size={20}/></button>
+                    <button onClick={() => setShowTeamModal(true)} className="bg-industrial-card hover:bg-white hover:text-black text-foreground font-bold px-4 rounded-lg flex items-center justify-center border border-industrial-border"><Users size={20}/></button>
                     <button onClick={() => setShowAddTool(true)} className="bg-white text-black font-bold px-4 rounded-lg flex items-center justify-center hover:scale-105 transition"><Plus size={24}/></button>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 mb-6">
                     {[{k:"ALL", l:"All Tools"}, {k:"OUT", l:"Checked Out"}, {k:"BROKEN", l:"Broken"}].map(f => (
-                        <button key={f.k} onClick={() => setToolFilter(f.k)} className={`p-2 rounded text-xs font-bold border transition ${toolFilter === f.k ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-white/10 text-gray-400"}`}>{f.l}</button>
+                        <button key={f.k} onClick={() => setToolFilter(f.k)} className={`p-2 rounded text-xs font-bold border transition ${toolFilter === f.k ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-industrial-border text-industrial-muted"}`}>{f.l}</button>
                     ))}
                 </div>
 
                 <div className="space-y-3 pb-20">
-                    {filteredTools.length === 0 ? <div className="text-center py-10 text-gray-500">No tools found.</div> : filteredTools.map(tool => (
+                    {filteredTools.length === 0 ? <div className="text-center py-10 text-industrial-muted">No tools found.</div> : filteredTools.map(tool => (
                         <div key={tool.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${tool.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === tool.id ? "ring-1 ring-[#FF6700]" : ""}`}>
                             <div className="flex gap-4 cursor-pointer" onClick={() => setSelectedAsset(selectedAsset === tool.id ? null : tool.id)}>
                                 <div className="w-16 h-16 rounded-lg bg-black/40 flex-shrink-0 border border-white/10 flex items-center justify-center overflow-hidden">
@@ -407,40 +407,47 @@ export default function LoadOut() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start">
-                                        <h3 className="font-bold text-lg leading-tight truncate pr-2 text-white">{tool.name}</h3>
+                                        <h3 className="font-bold text-lg leading-tight truncate pr-2 text-foreground">{tool.name}</h3>
                                         {tool.status === "IN_VAN" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN VAN</span>}
                                         {tool.status === "CHECKED_OUT" && <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded">OUT</span>}
                                         {tool.status === "BROKEN" && <span className="text-[10px] font-bold bg-red-500/20 text-red-500 px-2 py-1 rounded">BROKEN</span>}
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-1">{tool.brand} {tool.serial_number && `• S/N: ${tool.serial_number}`}</p>
+                                    <p className="text-xs text-industrial-muted mt-1">{tool.brand} {tool.serial_number && `• S/N: ${tool.serial_number}`}</p>
                                     {tool.status === "CHECKED_OUT" && tool.assigned_to && (
                                         <p className="text-xs text-blue-400 mt-1 flex items-center gap-1"><User size={12}/> {teamMembers.find(m => m.id === tool.assigned_to)?.name || "Unknown"}</p>
                                     )}
                                 </div>
                             </div>
                             {selectedAsset === tool.id && (
-                                <div className="mt-4 pt-4 border-t border-white/10 animate-in slide-in-from-top-2">
+                                <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
                                     {tool.status === "IN_VAN" ? (
                                         <div className="flex gap-2">
                                             <div className="relative flex-1">
-                                                <select onChange={(e) => { if(e.target.value) updateToolStatus(tool.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none appearance-none focus:border-[#FF6700]">
+                                                <select onChange={(e) => { if(e.target.value) updateToolStatus(tool.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-industrial-card border border-industrial-border rounded-lg px-3 py-2 text-sm text-foreground outline-none appearance-none focus:border-[#FF6700]">
                                                     <option value="">Select Technician...</option>
                                                     {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                                 </select>
-                                                <ChevronDown size={14} className="absolute right-3 top-3 text-gray-500 pointer-events-none"/>
+                                                <ChevronDown size={14} className="absolute right-3 top-3 text-industrial-muted pointer-events-none"/>
                                             </div>
                                             <button onClick={() => updateToolStatus(tool.id, "BROKEN")} className="px-3 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40"><AlertTriangle size={18}/></button>
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={() => updateToolStatus(tool.id, "IN_VAN")} className="flex-1 bg-[#333] hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition">RETURN TO VAN</button>
-                                            <button onClick={() => deleteTool(tool.id)} className="px-3 py-2 text-gray-500 hover:text-white transition"><Trash2 size={18}/></button>
+                                            <button onClick={() => updateToolStatus(tool.id, "IN_VAN")} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO VAN</button>
+                                            <button onClick={() => deleteTool(tool.id)} className="px-3 py-2 text-industrial-muted hover:text-foreground transition"><Trash2 size={18}/></button>
                                         </div>
                                     )}
                                 </div>
                             )}
                         </div>
                     ))}
+                </div>
+
+                {/* BRANDING FOOTER */}
+                <div className="mt-12 text-center opacity-40">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                        POWERED BY FIELDDESKOPS
+                    </p>
                 </div>
             </div>
         )}
@@ -450,10 +457,10 @@ export default function LoadOut() {
       {/* MODALS */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
-            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
+            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X /></button>
             <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700] flex items-center gap-2"><Edit3 size={20}/> EDIT STOCK</h2>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Item Name</label>
+            <label className="text-xs font-bold text-industrial-muted uppercase mb-1 block">Item Name</label>
             <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="input-field rounded-lg mb-4 w-full p-3 font-bold text-lg" />
             <div className="mb-6 bg-white/5 p-4 rounded-lg border border-white/5">
                 <div className="flex justify-between items-center mb-2">
@@ -465,7 +472,7 @@ export default function LoadOut() {
                     <div className="flex-1 text-xs text-gray-500 leading-tight">Enter a number. The alert triggers if quantity drops below this.</div>
                 </div>
             </div>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Card Color</label>
+            <label className="text-xs font-bold text-industrial-muted uppercase mb-2 block">Card Color</label>
             <div className="grid grid-cols-6 gap-2 mb-6">
               {colors.map((c) => (
                 <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg transition-transform hover:scale-110 ${editingItem.color === c.hex ? "ring-2 ring-white scale-110" : "opacity-40 hover:opacity-100"}`} />
@@ -482,8 +489,8 @@ export default function LoadOut() {
 
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
-                <button onClick={() => setShowAddTool(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
+            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
+                <button onClick={() => setShowAddTool(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
                 <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">REGISTER TOOL</h2>
                 <div className="mb-4">
                     {photoPreview ? (
@@ -492,9 +499,9 @@ export default function LoadOut() {
                             <button onClick={() => { setPhotoPreview(null); setNewPhoto(null); }} className="absolute top-2 right-2 bg-red-500 p-1.5 rounded-full text-white shadow-lg"><X size={14}/></button>
                         </div>
                     ) : (
-                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:border-[#FF6700] hover:bg-white/5 transition">
-                            <Camera size={24} className="text-gray-400 mb-2"/>
-                            <span className="text-xs text-gray-500 font-bold uppercase">Tap to Take Photo</span>
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-industrial-border rounded-xl cursor-pointer hover:border-[#FF6700] hover:bg-white/5 transition">
+                            <Camera size={24} className="text-industrial-muted mb-2"/>
+                            <span className="text-xs text-industrial-muted font-bold uppercase">Tap to Take Photo</span>
                             <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect}/>
                         </label>
                     )}
@@ -515,18 +522,18 @@ export default function LoadOut() {
 
       {showTeamModal && (
         <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-white/10 bg-[#121212]">
-                <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
-                <h2 className="font-oswald font-bold text-xl mb-6 text-white flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
+             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
+                <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
+                <h2 className="font-oswald font-bold text-xl mb-6 text-foreground flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
                 <div className="flex gap-2 mb-6">
                     <input placeholder="Enter Name (e.g. Mike)" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="input-field rounded-lg p-2 flex-1"/>
                     <button onClick={addTeamMember} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg"><Plus/></button>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-                    {teamMembers.length === 0 ? <p className="text-gray-500 text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
+                    {teamMembers.length === 0 ? <p className="text-industrial-muted text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
                         <div key={m.id} className="bg-white/5 border border-white/5 p-3 rounded-lg flex justify-between items-center">
-                            <span className="font-bold text-sm text-gray-200">{m.name}</span>
-                            <button onClick={() => deleteTeamMember(m.id)} className="text-gray-500 hover:text-red-500"><Trash2 size={14}/></button>
+                            <span className="font-bold text-sm text-foreground">{m.name}</span>
+                            <button onClick={() => deleteTeamMember(m.id)} className="text-industrial-muted hover:text-red-500"><Trash2 size={14}/></button>
                         </div>
                     ))}
                 </div>
