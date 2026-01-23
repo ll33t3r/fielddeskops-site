@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, Clock, ShieldAlert, 
   AlertTriangle, Wrench, Users, LogOut, Plus, Loader2, X, 
-  FilePlus, UserPlus, Play, RefreshCw, Trash2, CheckCircle2,
+  FilePlus, Play, RefreshCw, Trash2, CheckCircle2,
   Sun, Moon
 } from "lucide-react";
 import Link from "next/link";
@@ -122,14 +122,14 @@ export default function Dashboard() {
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-bold text-[10px] tracking-[0.2em] uppercase mb-1">FIELDDESKOPS</p>
-                <h1 className="text-3xl font-oswald font-bold tracking-wide">{greeting}.</h1>
+                <h1 className="text-3xl font-oswald font-bold tracking-wide text-foreground">{greeting}.</h1>
             </div>
             <div className="flex gap-2">
                 {/* THEME TOGGLE */}
-                <button onClick={toggleTheme} className="glass-btn p-2 rounded-full hover:text-[#FF6700] transition text-gray-400">
-                    {theme === ''dark'' ? <Sun size={18}/> : <Moon size={18}/>}
+                <button onClick={toggleTheme} className="glass-btn p-2 rounded-full hover:text-[#FF6700] transition text-industrial-muted">
+                    {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
                 </button>
-                <button onClick={handleLogout} className="glass-btn p-2 rounded-full hover:bg-red-500/20 hover:text-red-500 transition text-gray-400">
+                <button onClick={handleLogout} className="glass-btn p-2 rounded-full hover:bg-red-500/20 hover:text-red-500 transition text-industrial-muted">
                     <LogOut size={18}/>
                 </button>
             </div>
@@ -143,14 +143,14 @@ export default function Dashboard() {
             </div>
             <div className="glass-panel rounded-xl p-3 text-center">
                 <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">Jobs</p>
-                <p className="font-oswald text-lg tracking-tight">{metrics.jobs}</p>
+                <p className="font-oswald text-lg tracking-tight text-foreground">{metrics.jobs}</p>
             </div>
             <button onClick={() => setShowAlerts(true)} className={`glass-panel rounded-xl p-3 text-center transition active:scale-95 relative ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : ""}`}>
                 {metrics.alerts > 0 && <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>}
                 <p className="text-[10px] text-industrial-muted uppercase font-bold tracking-wider">System</p>
                 <div className="flex items-center justify-center gap-1">
                     {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500"/>}
-                    <p className={`font-oswald text-lg tracking-tight ${metrics.alerts > 0 ? "text-red-500" : "text-gray-400"}`}>{metrics.alerts > 0 ? metrics.alerts + " ALERTS" : "OK"}</p>
+                    <p className={`font-oswald text-lg tracking-tight ${metrics.alerts > 0 ? "text-red-500" : "text-industrial-muted"}`}>{metrics.alerts > 0 ? metrics.alerts + " ALERTS" : "OK"}</p>
                 </div>
             </button>
         </div>
