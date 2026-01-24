@@ -1,5 +1,5 @@
 ﻿import Link from 'next/link';
-// Removed unused LogoutButton import to prevent errors
+import LogoutButton from '@/components/LogoutButton'; // Fixed import path to use @ shortcut
 
 export default function Dashboard() {
   const apps = [
@@ -7,7 +7,7 @@ export default function Dashboard() {
       name: 'ProfitLock',
       description: 'Bid Calculator & Quote Manager',
       icon: '💰',
-      href: '/jobs/new', // LINKED: Pointing this to our 'New Job' page for now
+      href: '/jobs/new', // Temporary Link so it works
     },
     {
       name: 'LoadOut',
@@ -28,10 +28,10 @@ export default function Dashboard() {
       href: '/apps/signoff',
     },
     {
-      name: 'Rolodex', // Renamed CrewClock to Rolodex temporarily so you can find your customers
+      name: 'Rolodex',
       description: 'Customer Management',
       icon: '👥', 
-      href: '/customers', // LINKED: Pointing to our existing Customer list
+      href: '/customers',
     },
   ];
 
@@ -55,13 +55,8 @@ export default function Dashboard() {
             >
               Account
             </Link>
-            {/* Fixed link to point to /login */}
-            <Link 
-              href='/login'
-              className='px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors text-white'
-            >
-              Sign Out
-            </Link>
+            {/* Using the new Component we just made */}
+            <LogoutButton />
           </div>
         </div>
       </header>
@@ -107,12 +102,12 @@ export default function Dashboard() {
             <Link
               key={app.name}
               href={app.href}
-              className='group relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-6 border border-gray-700 hover:border-primary transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/20'
+              className='group relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-6 border border-gray-700 hover:border-orange-500 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-orange-500/20'
             >
               <div className='relative z-10'>
                 <div className='flex items-center justify-between mb-4'>
                   <span className='text-4xl'>{app.icon}</span>
-                  <span className='text-primary font-semibold'>→</span>
+                  <span className='text-orange-500 font-semibold'>→</span>
                 </div>
                 
                 <h3 className='text-xl font-bold text-white mb-2'>
@@ -127,14 +122,14 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
-
+      
       {/* Recent Activity */}
       <div className='bg-gray-800/30 backdrop-blur-sm rounded-2xl p-6 border border-gray-700'>
         <h2 className='text-2xl font-bold text-white mb-6'>Recent Activity</h2>
         <div className='space-y-4'>
           <div className='flex items-center justify-between p-4 bg-gray-800/50 rounded-lg'>
             <div className='flex items-center space-x-4'>
-              <div className='w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center'>
+              <div className='w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center'>
                 <span>💰</span>
               </div>
               <div>
@@ -142,20 +137,7 @@ export default function Dashboard() {
                 <p className='text-sm text-gray-400'>ProfitLock • 2 hours ago</p>
               </div>
             </div>
-            <span className='text-primary font-medium'>,450</span>
-          </div>
-          
-          <div className='flex items-center justify-between p-4 bg-gray-800/50 rounded-lg'>
-            <div className='flex items-center space-x-4'>
-              <div className='w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center'>
-                <span>🚚</span>
-              </div>
-              <div>
-                <p className='font-medium text-white'>Inventory Updated</p>
-                <p className='text-sm text-gray-400'>LoadOut • 5 hours ago</p>
-              </div>
-            </div>
-            <span className='text-blue-400 font-medium'>+12 items</span>
+            <span className='text-orange-500 font-medium'>,450</span>
           </div>
         </div>
       </div>
