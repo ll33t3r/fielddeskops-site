@@ -1,29 +1,47 @@
-﻿import { Inter, Oswald } from "next/font/google";
-import "./globals.css";
+﻿import { Inter } from 'next/font/google'
+import './globals.css'
 
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const oswald = Oswald({ 
-  subsets: ["latin"],
-  variable: "--font-oswald", 
-  display: "swap",
-});
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: "FieldDeskOps",
-  description: "The Digital Toolbelt",
-};
+  title: 'FieldDeskOps - Digital Toolbelt for Tradesmen',
+  description: 'Your all-in-one digital toolbelt for field service operations.',
+}
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${oswald.variable} bg-[#1a1a1a] text-white antialiased`}>
-        {children}
+    <html lang="en" className="dark">
+      <body className={\\ bg-gray-900 text-white\}>
+        {/* Simple header that works */}
+        <nav className="bg-gray-900 border-b border-gray-800 p-4">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <span className="font-bold text-white">F</span>
+              </div>
+              <span className="font-bold text-xl">FieldDeskOps</span>
+            </div>
+            <div className="space-x-4">
+              <a href="/dashboard" className="text-gray-300 hover:text-white">Dashboard</a>
+              <a href="/auth/login" className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg">Login</a>
+            </div>
+          </div>
+        </nav>
+        
+        <main>{children}</main>
+        
+        <footer className="bg-gray-900 border-t border-gray-800 mt-auto p-8">
+          <div className="max-w-7xl mx-auto text-center">
+            <div className="flex items-center justify-center space-x-2 mb-4">
+              <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
+                <span className="font-bold text-white text-sm">F</span>
+              </div>
+              <span className="font-bold text-white">FieldDeskOps</span>
+            </div>
+            <p className="text-gray-400 text-sm">© 2024 FieldDeskOps. Built for tradesmen.</p>
+          </div>
+        </footer>
       </body>
     </html>
-  );
+  )
 }

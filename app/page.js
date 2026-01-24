@@ -67,7 +67,7 @@ export default function Dashboard() {
         id: 'stock-' + Math.random(), 
         type: 'STOCK', 
         title: 'LOW STOCK',
-        msg: \: \ / \,
+        msg: 'Quantity Low',
         color: 'text-red-500',
         bg: 'bg-red-500/10',
         border: 'border-red-500'
@@ -78,7 +78,7 @@ export default function Dashboard() {
         id: 'sub-' + Math.random(), 
         type: 'INSURANCE', 
         title: 'EXPIRED',
-        msg: \ Ins. Expired,
+        msg: 'Ins. Expired',
         color: 'text-orange-500',
         bg: 'bg-orange-500/10',
         border: 'border-orange-500'
@@ -145,12 +145,12 @@ export default function Dashboard() {
                 <p className='text-[10px] text-gray-400 uppercase font-bold tracking-wider'>Jobs</p>
                 <p className='font-bold text-lg tracking-tight text-white'>{metrics.jobs}</p>
             </div>
-            <button onClick={() => setShowAlerts(true)} className={g-gray-800/50 border border-gray-700 rounded-xl p-3 text-center transition active:scale-95 relative \}>
+            <button onClick={() => setShowAlerts(true)} className='bg-gray-800/50 border border-gray-700 rounded-xl p-3 text-center transition active:scale-95 relative'>
                 {metrics.alerts > 0 && <span className='absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse'></span>}
                 <p className='text-[10px] text-gray-400 uppercase font-bold tracking-wider'>System</p>
                 <div className='flex items-center justify-center gap-1'>
                     {metrics.alerts > 0 && <AlertTriangle size={14} className='text-red-500'/>}
-                    <p className={ont-bold text-lg tracking-tight \}>{metrics.alerts > 0 ? metrics.alerts + ' ALERTS' : 'OK'}</p>
+                    <p className='font-bold text-lg tracking-tight'>{metrics.alerts > 0 ? metrics.alerts + ' ALERTS' : 'OK'}</p>
                 </div>
             </button>
         </div>
@@ -202,7 +202,7 @@ export default function Dashboard() {
         )}
         <button 
             onClick={() => setShowSpeedDial(!showSpeedDial)}
-            className={w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(255,103,0,0.3)] transition-all duration-300 \}
+            className='w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(255,103,0,0.3)] transition-all duration-300'
         >
             <Plus size={32} strokeWidth={2.5} />
         </button>
@@ -235,9 +235,9 @@ export default function Dashboard() {
                         </div>
                     ) : (
                         alertList.map((alert, i) => (
-                            <div key={alert.id} className={order-l-4 \ \ p-3 rounded flex justify-between items-start group}>
+                            <div key={alert.id} className='border-l-4 p-3 rounded flex justify-between items-start group'>
                                 <div>
-                                    <p className={	ext-xs font-bold \}>{alert.title}</p>
+                                    <p className='text-xs font-bold'>{alert.title}</p>
                                     <p className='text-sm text-white'>{alert.msg}</p>
                                 </div>
                                 <button onClick={() => dismissAlert(i)} className='text-gray-500 hover:text-white p-1'>
@@ -273,7 +273,7 @@ function AppCard({ href, label, sub, icon, color }) {
         <Link href={href} className='bg-gray-800/40 border border-gray-700/50 p-4 rounded-xl hover:bg-gray-800 active:scale-95 transition-all group relative overflow-hidden backdrop-blur-sm'>
             <div className='absolute top-0 right-0 p-12 bg-gradient-to-br from-white/5 to-transparent rounded-full translate-x-4 -translate-y-4 group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform duration-500 pointer-events-none'></div>
             <div className='flex justify-between items-start mb-3 relative z-10'>
-                <div className={p-2.5 rounded-lg transition-colors \}>
+                <div className='p-2.5 rounded-lg transition-colors'>
                     {icon}
                 </div>
             </div>
