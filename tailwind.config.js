@@ -1,5 +1,6 @@
-﻿/** @type {import('tailwindcss').Config} */
-module.exports = {
+﻿import type { Config } from "tailwindcss";
+
+const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,28 +9,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Mapped to CSS Variables for Auto-Switching
-        background: "var(--bg-main)", 
-        foreground: "var(--text-main)",
-        
-        industrial: {
-          bg: "var(--bg-main)",        // Dynamic: Black -> Silver
-          card: "var(--glass-bg)",     // Dynamic: Dark Glass -> Frosted Ice
-          border: "var(--glass-border)",// Dynamic: Faint -> Icy Edge
-          text: "var(--text-main)",    // Dynamic: White -> Gunmetal
-          muted: "var(--text-muted)",  // Dynamic: Gray -> Dark Gray
-          
-          // Constants (These stay the same in both modes)
-          orange: "var(--color-primary)", // #FF6700
-          green: "#22c55e",
-          red: "#ef4444",
-        }
+        // We define 'primary' as Orange to match your hover states
+        primary: "#f97316", // Orange-500
       },
-      fontFamily: {
-        oswald: ["Oswald", "sans-serif"], // Direct font name fallback
-        inter: ["Inter", "sans-serif"],
+      backgroundImage: {
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
     },
   },
   plugins: [],
 };
+export default config;
