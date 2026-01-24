@@ -1,6 +1,5 @@
-﻿import type { Config } from "tailwindcss";
-
-const config: Config = {
+﻿/** @type {import('tailwindcss').Config} */
+module.exports = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,15 +8,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // We define 'primary' as Orange to match your hover states
-        primary: "#f97316", // Orange-500
+        primary: '#FF6700', // Safety Orange
+        industrial: {
+           bg: 'var(--bg-main)',
+           card: 'var(--bg-card)',
+           text: 'var(--text-main)',
+           border: 'var(--border-color)',
+        }
       },
-      backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+      fontFamily: {
+        oswald: ["Oswald", "sans-serif"],
+        inter: ["Inter", "sans-serif"],
       },
     },
   },
   plugins: [],
 };
-export default config;

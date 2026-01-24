@@ -1,17 +1,17 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr' // Import directly
+import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
-import { Loader2, ShieldCheck, Bug } from 'lucide-react'
+import { Loader2, Bug } from 'lucide-react'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
-  const [debugLog, setDebugLog] = useState([]) // Log to screen
+  const [debugLog, setDebugLog] = useState([])
   const router = useRouter()
 
-  // HARDCODED CLIENT - NO VARIABLES NEEDED
+  // HARDCODED CLIENT
   const supabase = createBrowserClient(
     'https://itfjpyzywllsjipjtfrk.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZmpweXp5d2xsc2ppcGp0ZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MjQ4OTgsImV4cCI6MjA4NDEwMDg5OH0.1K8LEPwpQnXPd1AIsshvada-vg37SoHOxfw5DIkYcA8'
@@ -35,7 +35,6 @@ export default function LoginPage() {
 
     try {
       addLog('Sending request to Supabase...')
-      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -47,7 +46,6 @@ export default function LoginPage() {
       } else {
         addLog('✅ SUCCESS! Session created.')
         addLog('Redirecting to Dashboard...')
-        // Force browser redirect (Brute force)
         window.location.href = '/'
       }
     } catch (err) {
@@ -95,7 +93,6 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* ON-SCREEN DEBUG LOG */}
           <div className="bg-black/50 p-3 rounded text-xs font-mono text-green-400 min-h-[60px] border border-gray-800">
             {debugLog.length === 0 ? 'Waiting for input...' : debugLog.map((log, i) => (
               <div key={i}>{log}</div>

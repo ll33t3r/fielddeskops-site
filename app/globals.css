@@ -2,140 +2,61 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
-/* 1. Load fonts */
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
-/* FIELDDESKOPS DESIGN SYSTEM (Theme Engine) */
-
 :root {
-  /* --- SHARED COLORS --- */
-  --color-primary: #FF6700; /* Safety Orange (Stays constant) */
-  
   /* --- DARK THEME (Default / Stealth) --- */
   --bg-main: #121212;
+  --bg-card: rgba(30, 30, 30, 0.6);
   --text-main: #ffffff;
-  --text-muted: #9ca3af; /* Gray-400 */
+  --text-sub: #9ca3af; /* Gray 400 */
+  --border-color: rgba(255, 255, 255, 0.08);
+  --shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
   
-  /* Glass Variables */
-  --glass-bg: rgba(30, 30, 30, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: rgba(0, 0, 0, 0.3);
-  
-  /* Input Variables */
-  --input-bg: rgba(0, 0, 0, 0.3);
-  --input-border: rgba(255, 255, 255, 0.1);
-  
-  /* Gradients */
-  --grad-1: rgba(255, 103, 0, 0.15); /* Orange Glow */
-  --grad-2: rgba(255, 255, 255, 0.05); /* White Glow */
+  --color-primary: #FF6700;
 }
 
 [data-theme='light'] {
-  /* --- LIGHT THEME (Frosted Ice) --- */
-  --bg-main: #E5E7EB; /* Cool Silver/Gray (Not pure white) */
-  --text-main: #111827; /* Gunmetal (Not pure black) */
-  --text-muted: #4b5563; /* Gray-600 */
-  
-  /* Glass Variables (Milky/Frosted) */
-  --glass-bg: rgba(255, 255, 255, 0.65); /* High opacity white */
-  --glass-border: rgba(255, 255, 255, 0.5); /* Icy edge */
-  --glass-shadow: rgba(0, 0, 0, 0.05);
-  
-  /* Input Variables */
-  --input-bg: rgba(255, 255, 255, 0.8);
-  --input-border: rgba(0, 0, 0, 0.1);
-  
-  /* Gradients (Subtle Day Glow) */
-  --grad-1: rgba(255, 103, 0, 0.08); /* Faint Orange */
-  --grad-2: rgba(255, 255, 255, 0.8); /* White Highlight */
+  /* --- ROOFER MODE (High Contrast / Anti-Glare) --- */
+  --bg-main: #d4d4d4;       /* Concrete Gray (Not white, cuts glare) */
+  --bg-card: #ffffff;       /* Pure White Cards */
+  --text-main: #000000;     /* Pitch Black Text */
+  --text-sub: #171717;      /* Dark Gray Subtext (High Viz) */
+  --border-color: #000000;  /* SOLID BLACK BORDERS */
+  --shadow: 4px 4px 0px #000000; /* Hard Drop Shadow */
 }
 
-/* --- BASE STYLES --- */
-
+/* BASE STYLES */
 body {
   background-color: var(--bg-main);
-  /* Dynamic Gradient based on Theme */
-  background-image: 
-    radial-gradient(circle at 50% 0%, var(--grad-1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, var(--grad-2) 0%, transparent 30%);
   color: var(--text-main);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Heading font override */
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Oswald', sans-serif;
-}
+h1, h2, h3, h4, h5, h6 { font-family: 'Oswald', sans-serif; }
 
-/* --- UTILITY CLASSES --- */
+/* REUSABLE CLASSES */
 
-/* 1. The Frost Glass Panel (Dynamic) */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 4px 30px var(--glass-shadow);
-  transition: background 0.3s, border-color 0.3s;
-}
-
-/* 2. The Interactive Glass Button (Dynamic) */
-.glass-btn {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+/* The Card Container */
+.industrial-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   color: var(--text-main);
-  backdrop-filter: blur(4px);
+  box-shadow: var(--shadow);
   transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.glass-btn:hover {
-  background: var(--color-primary);
-  color: #000; /* Always black text on orange hover */
-  border-color: var(--color-primary);
-}
-.glass-btn:active {
-  transform: scale(0.96);
 }
 
-/* 3. The "Action" Input Fields (Dynamic) */
-.input-field {
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  color: var(--text-main);
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.3s;
-}
-.input-field:focus {
-  border-color: var(--color-primary);
-  outline: none;
-  box-shadow: 0 0 15px rgba(255, 103, 0, 0.1);
-}
-/* Ensure placeholder text is readable in both modes */
-.input-field::placeholder {
-  color: var(--text-muted);
+/* In Dark Mode only, apply the glass blur */
+[data-theme='dark'] .industrial-card {
+  backdrop-filter: blur(12px);
 }
 
-/* 4. The Neon Text Effect */
-.text-neon {
-  color: var(--color-primary);
-  text-shadow: 0 0 10px rgba(255, 103, 0, 0.4);
-}
-
-/* 5. Scrollbar Polish */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.1); 
-}
-::-webkit-scrollbar-thumb {
-  background: #555; 
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary); 
+/* Fix Text Colors specifically for Light Mode visibility */
+[data-theme='light'] .text-gray-300,
+[data-theme='light'] .text-gray-400,
+[data-theme='light'] .text-gray-500 {
+    color: var(--text-sub) !important;
+    font-weight: 600;
 }
