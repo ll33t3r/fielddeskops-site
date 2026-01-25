@@ -50,10 +50,8 @@ export default function SignOff() {
   const [hasSigned, setHasSigned] = useState(false);
   const [savedSignature, setSavedSignature] = useState(null);
 
-  // --- PARTS ORDER STATE ---
+  // --- PARTS & RETURN STATE ---
   const [partsList, setPartsList] = useState([{ name: "", model: "", qty: "1" }]);
-
-  // --- RETURN ORDER STATE ---
   const [returnReason, setReturnReason] = useState("");
   const [workDone, setWorkDone] = useState("");
   const [workRemaining, setWorkRemaining] = useState("");
@@ -62,15 +60,29 @@ export default function SignOff() {
 
   const vibrate = (p = 10) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p); };
 
-  // Memory: Contractor Identity
+  // --- PERSISTENCE: Memory ---
   useEffect(() => {
     const memory = localStorage.getItem("fdo_last_contractor");
     if (memory) setContractorName(memory);
   }, []);
 
+  // --- LOGIC FUNCTIONS ---
+  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
+
+  const clearSignature = () => {
+    if (sigPad.current.clear) {
+      sigPad.current.clear();
+      setHasSigned(false);
+      setIsSigned(false);
+      setSavedSignature(null);
+    }
+  };
+
+  const handleSignatureEnd = () => { if (!sigPad.current.isEmpty()) setHasSigned(true); };
+
   const loadProjectPhotos = async (jobName) => {
     if (!jobName || jobName === "SELECT PROJECT") return;
-    const { data } = await supabase.from("site_photos").select("image_url, tag, created_at").eq("job_name", jobName).order('created_at', { ascending: false });
+    const { data } = await supabase.from("site_photos").select("image_url, tag").eq("job_name", jobName).order('created_at', { ascending: false });
     if (data) setAllJobPhotos(data);
   };
 
@@ -102,6 +114,7 @@ export default function SignOff() {
         { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [CUSTOMER], authorize [CONTRACTOR] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
         { id: 'd2', label: "LIABILITY WAIVER", body: "[CONTRACTOR] is not responsible for damages resulting from pre-existing conditions discovered during work.", is_pinned: true },
         { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [CONTRACTOR] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
+        { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [CONTRACTOR] by start time.", is_pinned: true },
         { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [CUSTOMER], confirm that [CONTRACTOR] has completed work to my satisfaction.", is_pinned: true }
     ];
     const merged = [...(dbTemplates || [])];
@@ -121,16 +134,6 @@ export default function SignOff() {
     return text;
   };
 
-  const clearSignature = () => {
-    if (sigPad.current.clear) {
-      sigPad.current.clear();
-      setHasSigned(false);
-      setIsSigned(false);
-    }
-  };
-
-  const handleSignatureEnd = () => { if (!sigPad.current.isEmpty()) setHasSigned(true); };
-
   const handlePhotoUpload = async (e) => {
       if (!e.target.files?.[0] || !selectedJob) return;
       setSaving(true);
@@ -141,7 +144,7 @@ export default function SignOff() {
       if (!upErr) {
           const publicUrl = supabase.storage.from("sitesnap").getPublicUrl(fileName).data.publicUrl;
           const { data: photoObj } = await supabase.from("site_photos").insert({
-              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "SignOff Attachment"
+              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "Attached via SignOff"
           }).select().single();
           if (photoObj) {
             setAllJobPhotos([photoObj, ...allJobPhotos]);
@@ -152,9 +155,33 @@ export default function SignOff() {
       setSaving(false);
   };
 
+  const togglePhotoSelection = (url) => {
+      vibrate(5);
+      setSelectedPhotos(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
+  };
+
+  const togglePin = async (templateId) => {
+      const pinnedCount = templates.filter(t => t.is_pinned).length;
+      const target = templates.find(t => t.id === templateId);
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Dashboard limit: 5 pinned.");
+      const newStatus = !target.is_pinned;
+      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
+      if (typeof templateId === 'string' && templateId.length > 5) {
+          await supabase.from("contract_templates").update({ is_pinned: newStatus }).eq("id", templateId);
+      }
+  };
+
+  const deleteTemplate = async (t) => {
+    if (t.is_pinned) return showToast("Unpin to enable deletion", "error");
+    if (!confirm("Delete template?")) return;
+    await supabase.from("contract_templates").delete().eq("id", t.id);
+    setTemplates(templates.filter(x => x.id !== t.id));
+    showToast("Template Removed", "success");
+  };
+
   const saveContract = async () => {
     const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
-    if (!clientName || !finalProjectName) return alert("Missing Client/Project.");
+    if (!clientName || !finalProjectName) return alert("Name & Project required.");
     
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -170,7 +197,6 @@ export default function SignOff() {
       publicUrl = supabase.storage.from("signatures").getPublicUrl(fileName).data.publicUrl;
     }
 
-    // Structured metadata for Parts/Return Orders
     const metadata = {
       type: docType,
       parts: docType === "PARTS" ? partsList : null,
@@ -189,28 +215,9 @@ export default function SignOff() {
         setIsCustomJob(false);
         setCustomJobName("");
         if (hasSigned) { setIsSigned(true); setSavedSignature(publicUrl); }
-        showToast(finalStatus === "SIGNED" ? "Signed & Saved" : "Draft Saved", "success");
+        showToast(finalStatus === "SIGNED" ? "Document Finalized" : "Draft Saved", "success");
     }
     setSaving(false);
-  };
-
-  const togglePin = async (templateId) => {
-      const pinnedCount = templates.filter(t => t.is_pinned).length;
-      const target = templates.find(t => t.id === templateId);
-      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 pinned.");
-      const newStatus = !target.is_pinned;
-      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
-      if (typeof templateId === 'string' && templateId.length > 5) {
-          await supabase.from("contract_templates").update({ is_pinned: newStatus }).eq("id", templateId);
-      }
-  };
-
-  const deleteTemplate = async (t) => {
-    if (t.is_pinned) return showToast("Unpin to enable deletion", "error");
-    if (!confirm("Delete template?")) return;
-    await supabase.from("contract_templates").delete().eq("id", t.id);
-    setTemplates(templates.filter(x => x.id !== t.id));
-    showToast("Template Removed", "success");
   };
 
   const saveNewTemplate = async () => {
@@ -219,10 +226,8 @@ export default function SignOff() {
     const { data } = await supabase.from("contract_templates").insert({
         user_id: user.id, label: editingTemplate.label.toUpperCase(), body: editingTemplate.body, is_pinned: false
     }).select().single();
-    if (data) { setTemplates([data, ...templates]); setEditingTemplate(null); showToast("Created", "success"); }
+    if (data) { setTemplates([data, ...templates]); setEditingTemplate(null); showToast("Template Added", "success"); }
   };
-
-  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
   const filteredJobs = recentJobs.filter(j => j.toLowerCase().includes(jobSearch.toLowerCase()));
   const filteredHistory = contracts.filter(c => 
@@ -237,31 +242,36 @@ export default function SignOff() {
       <div className="flex items-center justify-between px-6 pt-4 mb-4 no-print">
         <div className="flex items-center gap-4">
           <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors"><ArrowLeft size={28} /></Link>
-          <div><h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1><p className="text-xs opacity-60 font-bold tracking-widest uppercase">Digital Agreement</p></div>
+          <div>
+            <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1>
+            <p className="text-xs opacity-60 font-black uppercase">Agreement Suite</p>
+          </div>
         </div>
-        <button onClick={() => setShowSettings(true)} className="industrial-card p-3 rounded-xl text-[#FF6700] border border-[var(--border-color)] shadow-md"><Menu size={24} /></button>
+        <button onClick={() => setShowSettings(true)} className="industrial-card p-3 rounded-xl text-[#FF6700] border border-[var(--border-color)]">
+          <Menu size={24} />
+        </button>
       </div>
 
       <main className="max-w-4xl mx-auto px-6">
         
-        {/* JOB SELECTOR */}
+        {/* JOB SELECTOR (FIXED LIGHT MODE COLORS) */}
         <div className="relative mb-6 no-print">
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
                     <Plus className="text-[#FF6700]" size={20} />
-                    <input autoFocus placeholder="NEW PROJECT..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} onBlur={() => !customJobName && setIsCustomJob(false)} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
+                    <input autoFocus placeholder="NEW PROJECT..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
                     <button onClick={() => setIsCustomJob(false)}><X size={20}/></button>
                 </div>
             ) : (
-                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-sm transition-all">
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-sm">
                     <div className="flex items-center gap-3"><FolderOpen className="text-[#FF6700]" size={22} /><span className="font-bold uppercase tracking-wide truncate">{selectedJob || "SELECT PROJECT"}</span></div>
                     <ChevronDown size={20} className={isDropdownOpen ? "rotate-180" : ""} />
                 </button>
             )}
             {isDropdownOpen && !isCustomJob && (
-                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-100">
                     <div className="p-3 bg-[var(--bg-card)] border-b border-[var(--border-color)] flex items-center gap-2">
-                        <Search size={16} className="text-zinc-500" /><input placeholder="SEARCH..." value={jobSearch} onChange={e => setJobSearch(e.target.value)} className="bg-transparent outline-none text-xs font-black w-full uppercase" />
+                        <Search size={16} className="text-zinc-500" /><input placeholder="SEARCH..." value={jobSearch} onChange={e => setJobSearch(e.target.value)} className="bg-transparent outline-none text-xs font-black w-full uppercase text-[var(--text-main)]" />
                     </div>
                     <div className="max-h-64 overflow-y-auto p-2 space-y-1">
                         {filteredJobs.map(job => (
@@ -275,9 +285,9 @@ export default function SignOff() {
 
         {/* DOCUMENT TYPE SELECTOR */}
         {!isSigned && (
-          <div className="flex gap-1 bg-zinc-800/40 p-1 rounded-xl mb-4 border border-zinc-700/50 no-print">
+          <div className="flex gap-1 bg-[var(--bg-card)] p-1 rounded-xl mb-4 border border-[var(--border-color)] no-print">
             {["AGREEMENT", "PARTS", "RETURN"].map(type => (
-              <button key={type} onClick={() => setDocType(type)} className={`flex-1 py-2 text-[10px] font-black rounded-lg transition ${docType === type ? 'bg-[#FF6700] text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}>{type}</button>
+              <button key={type} onClick={() => setDocType(type)} className={`flex-1 py-2 text-[10px] font-black rounded-lg transition ${docType === type ? 'bg-[#FF6700] text-black shadow-lg' : 'text-zinc-500 hover:text-[var(--text-main)]'}`}>{type}</button>
             ))}
           </div>
         )}
@@ -289,7 +299,7 @@ export default function SignOff() {
                   <h1 className="text-3xl font-oswald font-bold uppercase">{docType === "AGREEMENT" ? "Agreement" : docType === "PARTS" ? "Parts Order" : "Return Order"}</h1>
                   <p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p>
                 </div>
-                {isSigned && <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] text-2xl font-oswald flex items-center gap-2"><CheckCircle2 size={24}/> SIGNED</div>}
+                {isSigned && <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] text-2xl font-oswald flex items-center gap-2 animate-in zoom-in duration-300"><CheckCircle2 size={24}/> SIGNED</div>}
             </div>
 
             <div className="space-y-6 flex-1">
@@ -300,11 +310,11 @@ export default function SignOff() {
                     </div>
                     <div className="border-b border-gray-200 pb-2 relative">
                         <label className="block text-[10px] font-black uppercase text-gray-400">Authorized Contractor</label>
-                        {isSigned ? <p className="font-bold text-lg uppercase py-1">{contractorName}</p> : <input value={contractorName} onChange={e => setContractorName(e.target.value.toUpperCase())} placeholder="COMPANY / LICENSE #" className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
+                        {isSigned ? <p className="font-bold text-lg uppercase py-1">{contractorName}</p> : <input value={contractorName} onChange={e => setContractorName(e.target.value.toUpperCase())} placeholder="COMPANY NAME / LICENSE #" className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
                     </div>
                 </div>
 
-                {/* CONDITIONAL RENDERING BY DOC TYPE */}
+                {/* FORM MODES */}
                 {docType === "AGREEMENT" && (
                   <div className="relative">
                       <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Scope & Terms</label>
@@ -321,47 +331,46 @@ export default function SignOff() {
 
                 {docType === "PARTS" && (
                   <div className="space-y-4">
-                    <label className="block text-[10px] font-black uppercase text-gray-400">Parts Required (Internal Use)</label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400">Parts Required (Internal)</label>
                     <div className="space-y-2">
                       {partsList.map((item, idx) => (
-                        <div key={idx} className="flex gap-2 items-end border-b border-gray-100 pb-2">
+                        <div key={idx} className="flex gap-2 items-end border-b border-gray-100 pb-2 animate-in slide-in-from-left duration-200">
                           <input placeholder="Part Name" className="flex-1 text-xs font-bold uppercase outline-none" value={item.name} onChange={e => { const nl = [...partsList]; nl[idx].name = e.target.value; setPartsList(nl); }} />
                           <input placeholder="Model #" className="flex-1 text-xs font-mono uppercase outline-none text-gray-500" value={item.model} onChange={e => { const nl = [...partsList]; nl[idx].model = e.target.value; setPartsList(nl); }} />
                           <input type="number" className="w-12 text-xs font-bold text-center outline-none bg-zinc-50 rounded" value={item.qty} onChange={e => { const nl = [...partsList]; nl[idx].qty = e.target.value; setPartsList(nl); }} />
                         </div>
                       ))}
-                      {!isSigned && <button onClick={() => setPartsList([...partsList, { name: "", model: "", qty: "1" }])} className="text-[9px] font-black text-[#FF6700] uppercase mt-2">+ Add Line Item</button>}
+                      {!isSigned && <button onClick={() => setPartsList([...partsList, { name: "", model: "", qty: "1" }])} className="text-[9px] font-black text-[#FF6700] uppercase mt-2 hover:underline">+ Add Part</button>}
                     </div>
                   </div>
                 )}
 
                 {docType === "RETURN" && (
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400">Reason for Return</label>
-                      <input className="w-full text-sm font-bold uppercase outline-none border-b border-gray-100 py-1" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="E.G. MISSING CAPACITOR / WEATHER..." />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400">Work Completed Today</label>
-                      <textarea className="w-full h-24 text-xs font-mono bg-zinc-50 p-3 rounded outline-none border border-dashed border-gray-200 mt-1" value={workDone} onChange={e => setWorkDone(e.target.value)} placeholder="What did you finish?" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 text-red-500">Work Remaining</label>
-                      <textarea className="w-full h-24 text-xs font-mono bg-red-50/30 p-3 rounded outline-none border border-dashed border-red-200 mt-1" value={workRemaining} onChange={e => setWorkRemaining(e.target.value)} placeholder="What needs to be done next visit?" />
-                    </div>
+                    <div><label className="block text-[10px] font-black uppercase text-gray-400">Reason for Return</label><input className="w-full text-sm font-bold uppercase outline-none border-b border-gray-100 py-1" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="E.G. MISSING CAPACITOR / WEATHER..." /></div>
+                    <div><label className="block text-[10px] font-black uppercase text-gray-400">Work Completed Today</label><textarea className="w-full h-24 text-xs font-mono bg-zinc-50 p-3 rounded outline-none border border-dashed border-gray-200 mt-1" value={workDone} onChange={e => setWorkDone(e.target.value)} placeholder="Summary of today's progress..." /></div>
+                    <div><label className="block text-[10px] font-black uppercase text-gray-400 text-red-500">Work Remaining</label><textarea className="w-full h-24 text-xs font-mono bg-red-50/30 p-3 rounded outline-none border border-dashed border-red-200 mt-1" value={workRemaining} onChange={e => setWorkRemaining(e.target.value)} placeholder="Detailed requirements for next visit..." /></div>
                   </div>
                 )}
 
                 <div className="mt-8 border-t border-gray-100 pt-6">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-3 flex items-center gap-2"><ImageIcon size={14}/> Evidence Attachments</label>
+                    <div className="flex justify-between items-center mb-3">
+                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> Evidence Attachments</label>
+                        {!isSigned && (
+                          <div className="flex gap-2">
+                            <button onClick={() => photoInputRef.current.click()} className="text-[10px] font-black text-[#FF6700] uppercase flex items-center gap-1"><Camera size={12}/> SNAP</button>
+                            <button onClick={() => setShowPhotoPicker(true)} className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1"><ImageIcon size={12}/> PICKER</button>
+                          </div>
+                        )}
+                        <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
+                    </div>
                     <div className="grid grid-cols-4 gap-3">
                         {selectedPhotos.map((url, i) => (
-                            <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm group">
+                            <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm group animate-in zoom-in duration-200">
                                 <img src={url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setZoomImage(url)} />
                                 {!isSigned && <button onClick={() => setSelectedPhotos(prev => prev.filter(u => u !== url))} className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full"><X size={10}/></button>}
                             </div>
                         ))}
-                        {!isSigned && <button onClick={() => setShowPhotoPicker(true)} className="aspect-square rounded border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center text-zinc-400 hover:text-[#FF6700] hover:border-[#FF6700] transition"><Plus size={20}/><span className="text-[8px] font-black">PICK</span></button>}
                     </div>
                 </div>
             </div>
@@ -379,7 +388,7 @@ export default function SignOff() {
 
         <div className="mt-8 flex gap-3 no-print">
             {!isSigned ? (
-                <button onClick={saveContract} disabled={saving} className={`flex-1 font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl uppercase ${hasSigned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-white opacity-60'}`}>
+                <button onClick={saveContract} disabled={saving} className={`flex-1 font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl uppercase ${hasSigned ? 'bg-[#FF6700] text-black shadow-[#FF6700]/20' : 'bg-zinc-800 text-white opacity-80'}`}>
                     {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} {hasSigned ? "Save & Sign" : "Save as Draft"}
                 </button>
             ) : (
@@ -388,21 +397,21 @@ export default function SignOff() {
                       const text = `FIELDDESKOPS: ${docType}\nJob: ${selectedJob}\nClient: ${clientName}\n\nStatus: SIGNED`;
                       if (navigator.share) navigator.share({ title: `Signed ${docType}`, text });
                       else { navigator.clipboard.writeText(text); showToast("Summary Copied", "success"); }
-                    }} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl uppercase"><Share size={24}/> Share</button>
-                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSelectedPhotos([]); setPartsList([{ name: "", model: "", qty: "1" }]); setDocType("AGREEMENT"); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
+                    }} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl uppercase hover:bg-blue-700"><Share size={24}/> Share</button>
+                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSelectedPhotos([]); setPartsList([{ name: "", model: "", qty: "1" }]); setDocType("AGREEMENT"); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl shadow-lg">NEW</button>
                 </div>
             )}
         </div>
       </main>
 
-      {/* SETTINGS DRAWER */}
+      {/* SETTINGS DRAWER (FIXED READABILITY) */}
       {showSettings && (
-          <div className="fixed inset-0 z-[60] animate-in fade-in">
-              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
-              <div className="absolute right-0 top-0 bottom-0 w-full sm:w-96 bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 animate-in slide-in-from-right shadow-2xl flex flex-col">
+          <div className="fixed inset-0 z-[60] animate-in fade-in duration-200">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+              <div className="absolute right-0 top-0 bottom-0 w-full sm:w-96 bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 animate-in slide-in-from-right duration-300 shadow-2xl flex flex-col">
                   <div className="flex justify-between items-center mb-6">
                       <h2 className="text-2xl font-oswald font-bold text-[#FF6700]">SETTINGS</h2>
-                      <button onClick={() => setShowSettings(false)} className="p-2 text-[var(--text-main)]"><X/></button>
+                      <button onClick={() => setShowSettings(false)} className="p-2 text-[var(--text-main)] hover:rotate-90 transition-transform"><X size={28}/></button>
                   </div>
                   <div className="flex border-b border-[var(--border-color)] mb-6">
                       <button onClick={() => setSettingsTab("HISTORY")} className={`flex-1 pb-3 font-black text-[10px] tracking-widest ${settingsTab === "HISTORY" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-500"}`}>HISTORY</button>
@@ -411,38 +420,47 @@ export default function SignOff() {
 
                   {settingsTab === "HISTORY" ? (
                       <div className="flex-1 flex flex-col min-h-0">
-                          <div className="mb-4 relative"><Search className="absolute left-3 top-2.5 text-zinc-500" size={14} /><input placeholder="SEARCH HISTORY..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-2.5 pl-9 rounded-lg text-[10px] font-black outline-none" /></div>
-                          <div className="flex-1 overflow-y-auto space-y-4">
+                          <div className="mb-4 relative">
+                            <Search className="absolute left-3 top-3 text-zinc-500" size={14} />
+                            <input placeholder="SEARCH HISTORY..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 pl-9 rounded-lg text-[10px] font-black outline-none text-[var(--text-main)] uppercase" />
+                          </div>
+                          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
                               {filteredHistory.map(c => (
-                                  <div key={c.id} className="industrial-card p-4 rounded-xl flex flex-col gap-2 relative">
-                                      <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-zinc-500"><Clock size={10} className="inline mr-1" /> {new Date(c.created_at).toLocaleString()}</span><span className={`text-[8px] font-black px-2 py-0.5 rounded ${c.status === 'SIGNED' ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-400'}`}>{c.status}</span></div>
+                                  <div key={c.id} className="industrial-card p-4 rounded-xl flex flex-col gap-2 border-[var(--border-color)]">
+                                      <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-2 text-[9px] font-black uppercase text-zinc-500"><Clock size={10}/> {new Date(c.created_at).toLocaleString()}</div>
+                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded ${c.status === 'SIGNED' ? 'bg-[#FF6700] text-black' : 'bg-[var(--bg-card)] text-zinc-400 border border-[var(--border-color)]'}`}>{c.status}</span>
+                                      </div>
                                       <span className="font-bold uppercase text-[#FF6700] truncate">{c.project_name}</span>
-                                      <div className="flex justify-between items-center"><span className="text-[10px] font-bold opacity-60 uppercase">{c.client_name}</span><Eye size={18} className="text-[#FF6700] cursor-pointer" onClick={() => { setClientName(c.client_name); setContractBody(c.contract_body); setSelectedJob(c.project_name); setSavedSignature(c.signature_url); setSelectedPhotos(c.evidence_urls || []); setIsSigned(c.status === 'SIGNED'); setShowSettings(false); }} /></div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-[10px] font-bold opacity-60 uppercase text-[var(--text-main)]">{c.client_name}</span>
+                                        <Eye size={18} className="text-[#FF6700] cursor-pointer hover:scale-110 transition" onClick={() => { setClientName(c.client_name); setContractBody(c.contract_body); setSelectedJob(c.project_name); setSavedSignature(c.signature_url); setSelectedPhotos(c.evidence_urls || []); setIsSigned(c.status === 'SIGNED'); setShowSettings(false); }} />
+                                      </div>
                                   </div>
                               ))}
                           </div>
                       </div>
                   ) : (
-                      <div className="space-y-4 overflow-y-auto">
-                          <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs">+ CUSTOM TEMPLATE</button>
+                      <div className="space-y-4 overflow-y-auto flex-1">
+                          <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/5 transition">+ NEW TEMPLATE</button>
                           {editingTemplate && (
-                              <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700]">
-                                  <input placeholder="TITLE..." value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none" />
+                              <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700] animate-in zoom-in-95 duration-200">
+                                  <input placeholder="TEMPLATE TITLE..." value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none text-[var(--text-main)]" />
                                   <div className="flex gap-2">
-                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CUSTOMER]"})} className="bg-zinc-800 text-white text-[8px] font-black px-2 py-1 rounded">+ CUSTOMER</button>
-                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CONTRACTOR]"})} className="bg-zinc-800 text-white text-[8px] font-black px-2 py-1 rounded">+ COMPANY</button>
+                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CUSTOMER]"})} className="bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-color)] text-[8px] font-black px-2 py-1 rounded shadow-sm hover:border-[#FF6700] transition">+ CUSTOMER</button>
+                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CONTRACTOR]"})} className="bg-[var(--bg-card)] text-[var(--text-main)] border border-[var(--border-color)] text-[8px] font-black px-2 py-1 rounded shadow-sm hover:border-[#FF6700] transition">+ COMPANY</button>
                                   </div>
-                                  <textarea placeholder="TERMS..." value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} className="w-full bg-transparent h-40 text-xs font-mono outline-none resize-none" />
+                                  <textarea placeholder="TERMS... use [CUSTOMER] to auto-insert names." value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} className="w-full bg-transparent h-40 text-xs font-mono outline-none resize-none text-[var(--text-main)]" />
                                   <div className="flex gap-2"><button onClick={saveNewTemplate} className="flex-1 bg-[#FF6700] text-black font-black py-2 rounded-lg text-xs">SAVE</button><button onClick={() => setEditingTemplate(null)} className="flex-1 bg-zinc-800 text-white font-black py-2 rounded-lg text-xs">CANCEL</button></div>
                               </div>
                           )}
                           {templates.map(t => (
-                              <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center ${t.is_pinned ? 'border-[#FF6700]' : ''}`}>
-                                  <div className="flex flex-col"><span className="font-bold uppercase text-[10px] truncate max-w-[120px]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
+                              <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center border-[var(--border-color)] ${t.is_pinned ? 'border-[#FF6700]' : ''}`}>
+                                  <div className="flex flex-col"><span className="font-bold uppercase text-[10px] truncate max-w-[120px] text-[var(--text-main)]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
                                   <div className="flex gap-1">
-                                      <button onClick={() => togglePin(t.id)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-500'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
-                                      <button onClick={() => deleteTemplate(t)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed opacity-50' : 'bg-red-900/20 text-red-500'}`}><Trash2 size={14}/></button>
-                                      <button onClick={() => { setContractBody(t.body); setShowSettings(false); }} className="p-1.5 bg-zinc-800 text-[#FF6700] rounded"><Copy size={14}/></button>
+                                      <button onClick={() => togglePin(t.id)} className={`p-2 rounded-lg transition-colors ${t.is_pinned ? 'bg-[#FF6700] text-black shadow-md' : 'bg-[var(--bg-card)] text-zinc-500 border border-[var(--border-color)]'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
+                                      <button onClick={() => deleteTemplate(t)} className={`p-2 rounded-lg transition-colors ${t.is_pinned ? 'opacity-20 cursor-not-allowed' : 'bg-red-50 dark:bg-red-900/20 text-red-500 border border-red-200 dark:border-red-900/50'}`}><Trash2 size={14}/></button>
+                                      <button onClick={() => { setContractBody(t.body); setShowSettings(false); }} className="p-2 bg-[var(--bg-card)] text-[#FF6700] border border-[#FF6700]/30 rounded-lg hover:bg-[#FF6700] hover:text-black transition-all shadow-sm"><Copy size={14}/></button>
                                   </div>
                               </div>
                           ))}
@@ -452,36 +470,43 @@ export default function SignOff() {
           </div>
       )}
 
-      {/* PHOTO PICKER MODAL */}
+      {/* PHOTO PICKER MODAL (FIXED READABILITY) */}
       {showPhotoPicker && (
-        <div className="fixed inset-0 z-[100] bg-[var(--bg-main)] flex flex-col animate-in slide-in-from-bottom">
-          <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center"><h2 className="text-xl font-oswald font-bold text-[#FF6700]">JOB PHOTO VAULT</h2><button onClick={() => setShowPhotoPicker(false)} className="p-2 text-[var(--text-main)]"><X size={32}/></button></div>
+        <div className="fixed inset-0 z-[100] bg-[var(--bg-main)] flex flex-col animate-in slide-in-from-bottom duration-300">
+          <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-card)]">
+            <h2 className="text-xl font-oswald font-bold text-[#FF6700]">JOB PHOTO VAULT</h2>
+            <button onClick={() => setShowPhotoPicker(false)} className="p-2 text-[var(--text-main)] hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"><X size={32}/></button>
+          </div>
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-4">
             {allJobPhotos.map((photo, i) => {
               const isPicked = selectedPhotos.includes(photo.image_url);
               return (
-                <div key={i} className={`relative aspect-[4/3] rounded-xl overflow-hidden border-4 transition-all ${isPicked ? 'border-[#FF6700]' : 'border-transparent'}`} onClick={() => togglePhotoSelection(photo.image_url)}>
+                <div key={i} className={`relative aspect-[4/3] rounded-xl overflow-hidden border-4 transition-all duration-200 ${isPicked ? 'border-[#FF6700] scale-95' : 'border-transparent'}`} onClick={() => togglePhotoSelection(photo.image_url)}>
                   <img src={photo.image_url} className="w-full h-full object-cover" />
                   <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">{photo.tag}</div>
-                  {isPicked && <div className="absolute inset-0 bg-[#FF6700]/20 flex items-center justify-center"><CheckCircle2 className="text-[#FF6700] bg-white rounded-full" size={40}/></div>}
-                  <button onClick={(e) => { e.stopPropagation(); setZoomImage(photo.image_url); }} className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg"><Maximize2 size={16}/></button>
+                  {isPicked && <div className="absolute inset-0 bg-[#FF6700]/20 flex items-center justify-center"><CheckCircle2 className="text-white bg-[#FF6700] rounded-full p-1" size={40}/></div>}
+                  <button onClick={(e) => { e.stopPropagation(); setZoomImage(photo.image_url); }} className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg hover:bg-[#FF6700] transition-colors"><Maximize2 size={16}/></button>
                 </div>
               );
             })}
           </div>
-          <div className="p-6 border-t border-[var(--border-color)]"><button onClick={() => setShowPhotoPicker(false)} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase">DONE SELECTING ({selectedPhotos.length})</button></div>
+          <div className="p-6 border-t border-[var(--border-color)] bg-[var(--bg-card)]">
+            <button onClick={() => setShowPhotoPicker(false)} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase shadow-lg active:scale-95 transition-transform">Done Selecting ({selectedPhotos.length})</button>
+          </div>
         </div>
       )}
 
       {/* ZOOM LIGHTBOX */}
       {zoomImage && (
         <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col animate-in zoom-in duration-150" onClick={() => setZoomImage(null)}>
-          <div className="p-6 flex justify-end"><button className="text-white p-2"><X size={40}/></button></div>
-          <div className="flex-1 flex items-center justify-center p-4"><img src={zoomImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" /></div>
+          <div className="p-6 flex justify-end"><button className="text-white p-2 hover:rotate-90 transition-transform"><X size={40}/></button></div>
+          <div className="flex-1 flex items-center justify-center p-4">
+            <img src={zoomImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl animate-in fade-in duration-300" />
+          </div>
         </div>
       )}
 
-      {toast && <div className={`fixed bottom-24 right-6 px-6 py-3 rounded font-black z-[100] shadow-2xl border-2 ${toast.type === "error" ? "bg-red-600 border-red-700" : "bg-green-600 border-green-700"} text-white`}>{toast.msg}</div>}
+      {toast && <div className={`fixed bottom-24 right-6 px-6 py-3 rounded font-black z-[100] shadow-2xl border-2 ${toast.type === "error" ? "bg-red-600 border-red-700" : "bg-green-600 border-green-700"} text-white animate-in slide-in-from-right`}>{toast.msg}</div>}
     </div>
   );
 }
