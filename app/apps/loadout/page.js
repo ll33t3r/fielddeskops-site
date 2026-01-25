@@ -34,9 +34,8 @@ export default function LoadOut() {
   // --- SWAP STATE (Replaces Drag & Drop) ---
   const [swapSourceIndex, setSwapSourceIndex] = useState(null);
   
-  // --- ADD MODAL STATE ---
+  // --- ADD MODAL STATE (Unified) ---
   const [showAddModal, setShowAddModal] = useState(false);
-  // Unified logic - batchRows handles single and bulk
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
   // --- TOOLS STATE ---
@@ -140,7 +139,7 @@ export default function LoadOut() {
           return;
       }
 
-      // Perform Swap
+      // Perform Swap (Optimistic)
       const newItems = [...items];
       const itemA = newItems[swapSourceIndex];
       const itemB = newItems[index];
@@ -151,28 +150,10 @@ export default function LoadOut() {
       setItems(newItems);
       setSwapSourceIndex(null);
       showToast("Items Swapped", "success");
-      
-      // Optional: Here you would save the new order to DB if you had a sort_order column
+      // Note: Add DB persistence here for sort_order in future updates
   };
 
-  // 2. STOCK ACTIONS
-  const addSingleStockItem = async () => {
-    if (!newItemName.trim()) return;
-    vibrate(20);
-    const { data: { user } } = await supabase.auth.getUser();
-    const tempId = Math.random();
-    const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
-    setItems([tempItem, ...items]);
-    setNewItemName("");
-    setShowAddModal(false);
-
-    const { data } = await supabase.from("inventory").insert({
-        user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
-    }).select().single();
-    if (data) setItems(prev => prev.map(i => i.id === tempId ? data : i));
-  };
-
-  // BATCH ACTIONS
+  // --- UNIFIED BATCH ADD LOGIC ---
   const handleBatchRowChange = (index, field, value) => {
       const newRows = [...batchRows];
       newRows[index][field] = value;
@@ -226,7 +207,7 @@ export default function LoadOut() {
   };
 
   const openStockEdit = (e, item) => {
-      e.stopPropagation(); // Prevent swap click
+      e.stopPropagation();
       vibrate();
       setEditingItem(item);
       setTargetQtyInput(item.min_quantity.toString());
@@ -396,7 +377,7 @@ export default function LoadOut() {
   return (
     <div className="min-h-screen bg-background text-foreground font-inter pb-32">
       
-      {/* CUSTOM HEADER: Inline to ensure correct color in Light Mode */}
+      {/* CUSTOM HEADER */}
       <div className="flex items-center gap-4 px-6 pt-4 mb-4">
         <Link href="/" className="p-2 rounded-lg hover:text-[#FF6700] transition-colors text-foreground border border-transparent hover:border-[#FF6700]/30">
           <ArrowLeft size={28} />
@@ -409,7 +390,7 @@ export default function LoadOut() {
 
       <main className="max-w-6xl mx-auto px-6 pt-2">
         
-        {/* TOP BAR - VAN SELECTOR */}
+        {/* TOP BAR */}
         <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-20">
             <div className="relative w-full">
                 <button onClick={() => { vibrate(); setShowSettings(!showSettings); }} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
@@ -445,13 +426,11 @@ export default function LoadOut() {
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
-                        
                         <div className="mb-4 pb-4 border-b border-gray-700">
                              <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
                                 <Users size={16}/> MANAGE TEAM
                              </button>
                         </div>
-
                         <div className="space-y-2 pb-4 border-b border-gray-700">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
@@ -462,7 +441,7 @@ export default function LoadOut() {
             </div>
         </div>
 
-        {/* TABS - CONSISTENT COLORS */}
+        {/* TABS */}
         <div className="flex bg-industrial-bg p-1 rounded-xl mb-6 border border-industrial-border">
             <button onClick={() => { vibrate(); setActiveTab("STOCK"); }} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-industrial-muted hover:text-foreground"}`}>
                 <LayoutGrid size={18}/> STOCK
@@ -488,7 +467,7 @@ export default function LoadOut() {
                             className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" 
                         />
                     </div>
-                    {/* ADD BUTTON OPENS UNIFIED MODAL */}
+                    {/* UNIFIED ADD BUTTON */}
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -535,13 +514,13 @@ export default function LoadOut() {
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
                 
-                {/* ACTION BAR (STICKY) - Identical to Stock */}
+                {/* ACTION BAR (STICKY) */}
                 <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
-                    {/* Add Tool Button (Identical Orange) */}
+                    {/* Add Tool Button */}
                     <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -608,7 +587,7 @@ export default function LoadOut() {
 
       </main>
 
-      {/* --- ADD ITEMS MODAL (SINGLE & BATCH CONSOLIDATED) --- */}
+      {/* --- ADD ITEMS MODAL (UNIFIED) --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
              <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
@@ -616,7 +595,6 @@ export default function LoadOut() {
                     <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2"><ListPlus size={24}/> ADD ITEMS</h2>
                     <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
                 </div>
-                {/* CONSOLIDATED LIST VIEW */}
                 <div className="flex-1 flex flex-col">
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
                         {batchRows.map((row, idx) => (
@@ -635,7 +613,7 @@ export default function LoadOut() {
         </div>
       )}
 
-      {/* TOOL MODAL - FIXED DARK INPUTS */}
+      {/* TOOL MODAL */}
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
