@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '../../../utils/supabase/client';
-import { Trash2, Save, FileText, Share, Settings, ChevronDown, Loader2, Menu, X, ArrowLeft } from 'lucide-react';
+import { Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Plus, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ProfitLock() {
@@ -11,14 +11,17 @@ export default function ProfitLock() {
   // STATE
   const [isInvoiceMode, setIsInvoiceMode] = useState(false);
   const [jobName, setJobName] = useState('');
-  const [materialsCost, setMaterialsCost] = useState(''); // Empty string for cleaner input
+  const [materialsCost, setMaterialsCost] = useState(''); 
   const [laborHours, setLaborHours] = useState('');
   
+  // DYNAMIC EXPENSES (Subs, Permits, etc.)
+  const [expenses, setExpenses] = useState([]); // [{id: 1, name: '', cost: ''}]
+
   // UI STATE
   const [showMenu, setShowMenu] = useState(false); 
   const [showSettings, setShowSettings] = useState(false);
 
-  // HIDDEN VARIABLES (Defaults)
+  // DEFAULTS
   const [hourlyRate, setHourlyRate] = useState(75);
   const [markupPercent, setMarkupPercent] = useState(20);
   
@@ -35,6 +38,7 @@ export default function ProfitLock() {
     const { data } = await supabase.from('bids').select('*').order('created_at', { ascending: false });
     if (data) {
         const mapped = data.map(bid => {
+            // Reconstruct costs
             const cost = Number(bid.materials) + (Number(bid.hours) * Number(bid.rate));
             const finalBid = Number(bid.sale_price);
             const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
@@ -55,20 +59,26 @@ export default function ProfitLock() {
     }
   };
 
-  // MATH ENGINE
-  const materials = parseFloat(materialsCost) || 0;
-  const hours = parseFloat(laborHours) || 0;
-  const rate = parseFloat(hourlyRate) || 75;
-  const markup = parseFloat(markupPercent) || 20;
+  // --- LOGIC ENGINE ---
   
-  const laborCost = hours * rate; // Internal Cost
-  const totalInternalCost = materials + laborCost;
+  // 1. Calculate Base Costs
+  const matCost = parseFloat(materialsCost) || 0;
+  const hrs = parseFloat(laborHours) || 0;
+  const rate = parseFloat(hourlyRate) || 75;
+  const laborCost = hrs * rate;
+  
+  // 2. Calculate Extra Expenses
+  const totalExpenses = expenses.reduce((acc, item) => acc + (parseFloat(item.cost) || 0), 0);
+
+  // 3. Totals
+  const totalInternalCost = matCost + laborCost + totalExpenses;
+  const markup = parseFloat(markupPercent) || 20;
   const markupAmount = totalInternalCost * (markup / 100);
   const finalBid = totalInternalCost + markupAmount;
   const netProfit = finalBid - totalInternalCost;
   const grossMargin = finalBid > 0 ? (netProfit / finalBid) * 100 : 0;
 
-  // METER LOGIC
+  // Meter Logic
   const getProfitMeterInfo = (margin) => {
     const visualWidth = Math.min(margin * 1.6, 100);
     if (margin < 20) return { color: '#ef4444', label: 'RISKY', width: visualWidth };
@@ -77,18 +87,39 @@ export default function ProfitLock() {
   };
   const meterInfo = getProfitMeterInfo(grossMargin);
 
-  // SAVE TO DB
+  // --- ACTIONS ---
+
+  const addExpense = () => {
+    setExpenses([...expenses, { id: Date.now(), name: '', cost: '' }]);
+  };
+
+  const updateExpense = (id, field, value) => {
+    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const removeExpense = (id) => {
+    setExpenses(expenses.filter(e => e.id !== id));
+  };
+
   const saveBid = async () => {
     if (!jobName.trim()) { showToast('Enter job name', 'error'); return; }
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
     
+    // NOTE: For now, we combine materials + expenses into the 'materials' column
+    // so the math in the database stays accurate without needing a schema migration today.
+    const combinedMaterials = matCost + totalExpenses;
+
     const { error } = await supabase.from('bids').insert({
       user_id: user.id,
       project_name: jobName,
-      materials, hours, rate, margin: markup,
-      sale_price: finalBid, profit: netProfit
+      materials: combinedMaterials, 
+      hours: hrs, 
+      rate: rate, 
+      margin: markup,
+      sale_price: finalBid, 
+      profit: netProfit
     });
     
     if (!error) { fetchBids(); showToast('✅ Bid Saved', 'success'); }
@@ -98,10 +129,11 @@ export default function ProfitLock() {
 
   const loadBid = (bid) => {
     setJobName(bid.jobName);
-    setMaterialsCost(bid.materials);
+    setMaterialsCost(bid.materials); // This will include expenses if loaded from history (limit of current DB)
     setLaborHours(bid.hours);
     setHourlyRate(bid.rate);
     setMarkupPercent(bid.markup);
+    setExpenses([]); // Reset expenses on load to avoid duplication logic for now
     setIsInvoiceMode(false);
     setShowSettings(false);
     setShowMenu(false); 
@@ -118,7 +150,6 @@ export default function ProfitLock() {
 
   const showToast = (msg, type) => { setToast({message: msg, type}); setTimeout(()=>setToast(null), 3000); };
   
-  // SHARE HANDLER (Native Only - No Print Fallback)
   const handleShare = async () => { 
     if (navigator.share) {
         try {
@@ -127,9 +158,7 @@ export default function ProfitLock() {
                 text: `Estimate for ${jobName} - Total: $${finalBid.toFixed(2)}`,
                 url: window.location.href 
             });
-        } catch (err) {
-            // User cancelled, do nothing
-        }
+        } catch (err) {}
     } else {
         showToast('Share not available on this device', 'error');
     }
@@ -149,86 +178,54 @@ export default function ProfitLock() {
         </div>
       </div>
 
-      {/* === MENU BUTTON === */}
-      <button 
-        onClick={() => setShowMenu(true)} 
-        className="absolute top-4 right-4 z-40 p-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full hover:border-[#FF6700] transition text-[var(--text-main)]"
-      >
+      {/* MENU BUTTON */}
+      <button onClick={() => setShowMenu(true)} className="absolute top-4 right-4 z-40 p-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full hover:border-[#FF6700] transition text-[var(--text-main)]">
         <Menu size={20} />
       </button>
 
-      {/* === SIDEBAR DRAWER (HISTORY) === */}
+      {/* SIDEBAR HISTORY */}
       <div className={`fixed inset-y-0 right-0 w-80 bg-[var(--bg-main)] border-l border-[var(--border-color)] shadow-2xl transform transition-transform duration-300 z-50 ${showMenu ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="p-6 h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="font-oswald font-bold text-xl text-[#FF6700] uppercase flex items-center gap-2"><Save size={18}/> Saved Bids</h2>
                 <button onClick={() => setShowMenu(false)} className="text-[var(--text-sub)] hover:text-[#FF6700]"><X/></button>
             </div>
-            
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-                {bidHistory.length === 0 ? (
-                  <p className="text-[var(--text-sub)] text-xs italic text-center py-10">No saved history.</p>
-                ) : (
+                {bidHistory.length === 0 ? <p className="text-[var(--text-sub)] text-xs italic text-center py-10">No saved history.</p> : 
                   bidHistory.map((bid, idx) => (
                     <div key={bid.id} onClick={() => loadBid(bid)} className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg p-3 cursor-pointer hover:border-[#FF6700] transition group relative">
                         <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-bold text-[var(--text-main)] text-sm truncate w-40">{bid.jobName || 'No Name'}</p>
-                            <p className="text-[10px] text-[var(--text-sub)]">{bid.date}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-green-500 font-oswald font-bold">{bid.finalPrice}</p>
-                          </div>
+                          <div><p className="font-bold text-[var(--text-main)] text-sm truncate w-40">{bid.jobName || 'No Name'}</p><p className="text-[10px] text-[var(--text-sub)]">{bid.date}</p></div>
+                          <div className="text-right"><p className="text-green-500 font-oswald font-bold">{bid.finalPrice}</p></div>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, idx); }} className="absolute -top-2 -right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg">
-                          <Trash2 size={12} />
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, idx); }} className="absolute -top-2 -right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><Trash2 size={12} /></button>
                     </div>
                   ))
-                )}
-            </div>
-            
-            <div className="mt-4 pt-4 border-t border-[var(--border-color)] text-center opacity-30 text-[10px] uppercase font-bold tracking-widest text-[var(--text-sub)]">
-                FieldDeskOps Protected
+                }
             </div>
         </div>
       </div>
 
         {/* TABS */}
         <div className="flex gap-2 mb-6">
-            <button 
-                onClick={() => setIsInvoiceMode(false)}
-                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}
-            >
-                CALCULATOR
-            </button>
-            <button 
-                onClick={() => setIsInvoiceMode(true)}
-                className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-[var(--text-main)] text-[var(--bg-main)] shadow-lg' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}
-            >
-                <FileText size={16} /> INVOICE
-            </button>
+            <button onClick={() => setIsInvoiceMode(false)} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}>CALCULATOR</button>
+            <button onClick={() => setIsInvoiceMode(true)} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-[var(--text-main)] text-[var(--bg-main)] shadow-lg' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}><FileText size={16} /> INVOICE</button>
         </div>
 
-        {/* VIEW 1: CALCULATOR (STEALTH MODE) */}
+        {/* --- CALCULATOR VIEW --- */}
         {!isInvoiceMode && (
             <div className="industrial-card rounded-xl p-6 space-y-6 animate-in fade-in relative">
                 
-                {/* Stealth Settings Trigger */}
-                <button 
-                    onClick={() => setShowSettings(!showSettings)} 
-                    className="absolute top-4 right-4 text-[var(--text-sub)] hover:text-[#FF6700] transition opacity-50 hover:opacity-100"
-                >
-                    <Settings size={18} />
-                </button>
+                {/* Stealth Settings */}
+                <button onClick={() => setShowSettings(!showSettings)} className="absolute top-4 right-4 text-[var(--text-sub)] hover:text-[#FF6700] transition opacity-50 hover:opacity-100"><Settings size={18} /></button>
 
                 {/* Job Name */}
                 <div>
                   <label className="block text-xs font-bold uppercase text-[var(--text-sub)] mb-1">Job Name</label>
-                  <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith - Water Heater" className="bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-4 w-full font-bold outline-none focus:border-[#FF6700] transition" />
+                  <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith - Renovation" className="bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-4 w-full font-bold outline-none focus:border-[#FF6700] transition" />
                 </div>
 
-                {/* Materials & Labor Grid */}
+                {/* Primary Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold uppercase text-[var(--text-sub)] mb-1">Materials ($)</label>
@@ -240,43 +237,39 @@ export default function ProfitLock() {
                     </div>
                 </div>
 
-                {/* --- THE SECRET SETTINGS MENU (Overlay) --- */}
+                {/* DYNAMIC EXPENSES */}
+                <div className="space-y-3">
+                   <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold uppercase text-[var(--text-sub)]">Other Expenses</label>
+                      <button onClick={addExpense} className="text-xs text-[#FF6700] font-bold flex items-center gap-1 hover:underline"><Plus size={14}/> ADD ITEM</button>
+                   </div>
+                   
+                   {expenses.map((item) => (
+                      <div key={item.id} className="flex gap-2 animate-in slide-in-from-left-2">
+                          <input type="text" placeholder="Description (e.g. Permit, Sub)" value={item.name} onChange={(e) => updateExpense(item.id, 'name', e.target.value)} className="flex-1 bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-3 text-sm outline-none focus:border-[#FF6700]" />
+                          <input type="number" placeholder="$0.00" value={item.cost} onChange={(e) => updateExpense(item.id, 'cost', e.target.value)} className="w-24 bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-3 text-sm outline-none focus:border-[#FF6700] font-mono" />
+                          <button onClick={() => removeExpense(item.id)} className="text-red-500 hover:text-red-400 p-2"><Trash2 size={18}/></button>
+                      </div>
+                   ))}
+                </div>
+
+                {/* Secret Settings Overlay */}
                 {showSettings && (
                     <div className="bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-4 space-y-4 animate-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center pb-2 border-b border-[var(--border-color)]">
-                            <span className="text-xs font-bold text-[#FF6700] uppercase">Calculations Config</span>
-                            <button onClick={() => setShowSettings(false)} className="text-[var(--text-sub)]"><X size={14}/></button>
-                        </div>
+                        <div className="flex justify-between items-center pb-2 border-b border-[var(--border-color)]"><span className="text-xs font-bold text-[#FF6700] uppercase">Calculations Config</span><button onClick={() => setShowSettings(false)} className="text-[var(--text-sub)]"><X size={14}/></button></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs text-[var(--text-sub)] mb-1">Hourly Rate ($)</label>
-                                <input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-[var(--text-sub)] mb-1">Markup %</label>
-                                <input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" />
-                            </div>
+                            <div><label className="block text-xs text-[var(--text-sub)] mb-1">Hourly Rate ($)</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" /></div>
+                            <div><label className="block text-xs text-[var(--text-sub)] mb-1">Markup %</label><input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" /></div>
                         </div>
-                        
-                        {/* Internal Data Visualizer */}
                         <div className="pt-2">
-                            <div className="flex justify-between text-xs text-[var(--text-sub)] mb-1">
-                                <span>Internal Cost:</span>
-                                <span>${totalInternalCost.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-bold text-green-500">
-                                <span>Net Profit:</span>
-                                <span>${netProfit.toFixed(2)} ({grossMargin.toFixed(0)}%)</span>
-                            </div>
-                            {/* Meter */}
-                            <div className="h-1 bg-gray-700 rounded-full overflow-hidden mt-2">
-                                <div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.width, 100)}%`, backgroundColor: meterInfo.color }}></div>
-                            </div>
+                            <div className="flex justify-between text-xs text-[var(--text-sub)] mb-1"><span>Internal Cost:</span><span>${totalInternalCost.toFixed(2)}</span></div>
+                            <div className="flex justify-between text-sm font-bold text-green-500"><span>Net Profit:</span><span>${netProfit.toFixed(2)} ({grossMargin.toFixed(0)}%)</span></div>
+                            <div className="h-1 bg-gray-700 rounded-full overflow-hidden mt-2"><div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.width, 100)}%`, backgroundColor: meterInfo.color }}></div></div>
                         </div>
                     </div>
                 )}
 
-                {/* FINAL PRICE */}
+                {/* TOTAL */}
                 <div className="bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-8 text-center shadow-inner">
                     <p className="text-xs text-[var(--text-sub)] uppercase tracking-widest mb-2 font-bold">ESTIMATED TOTAL</p>
                     <p className="text-5xl font-oswald font-bold text-[var(--text-main)] tracking-wide">${finalBid.toFixed(2)}</p>
@@ -288,82 +281,45 @@ export default function ProfitLock() {
             </div>
         )}
 
-        {/* VIEW 2: CLIENT INVOICE (Paper is always white) */}
+        {/* --- INVOICE VIEW --- */}
         {isInvoiceMode && (
             <div className="animate-in fade-in">
-                {/* The Paper - Always White for Client Consistency */}
                 <div className="bg-white text-black rounded-xl p-8 shadow-2xl min-h-[600px] flex flex-col relative mb-24 border border-gray-200">
-                    
-                    {/* Invoice Header */}
                     <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-200">
-                    <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p>
-                        <h1 className="text-3xl font-oswald font-bold text-gray-900 break-words max-w-[200px]">{jobName || 'Draft Project'}</h1>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-xs text-gray-500">Date Issued</p>
-                        <p className="font-bold">{new Date().toLocaleDateString()}</p>
-                    </div>
+                        <div><p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p><h1 className="text-3xl font-oswald font-bold text-gray-900 break-words max-w-[200px]">{jobName || 'Draft Project'}</h1></div>
+                        <div className="text-right"><p className="text-xs text-gray-500">Date Issued</p><p className="font-bold">{new Date().toLocaleDateString()}</p></div>
                     </div>
 
-                    {/* Line Items */}
                     <table className="w-full mb-8 flex-1">
-                        <thead>
-                            <tr className="border-b-2 border-black">
-                                <th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th>
-                                <th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th>
-                            </tr>
-                        </thead>
+                        <thead><tr className="border-b-2 border-black"><th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th><th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th></tr></thead>
                         <tbody className="text-sm">
-                            <tr className="border-b border-gray-100">
-                                <td className="py-4 font-medium">Materials & Supplies</td>
-                                <td className="py-4 text-right">${materials.toFixed(2)}</td>
-                            </tr>
-                            <tr className="border-b border-gray-100">
-                                <td className="py-4 font-medium">Labor & Services</td>
-                                <td className="py-4 text-right">${(finalBid - materials).toFixed(2)}</td>
-                            </tr>
+                            <tr className="border-b border-gray-100"><td className="py-4 font-medium">Materials & Supplies</td><td className="py-4 text-right">${matCost.toFixed(2)}</td></tr>
+                            <tr className="border-b border-gray-100"><td className="py-4 font-medium">Labor & Services</td><td className="py-4 text-right">${(finalBid - matCost - totalExpenses).toFixed(2)}</td></tr>
+                            {/* Dynamic Expenses on Invoice */}
+                            {expenses.map((item, i) => (
+                                item.name && (
+                                    <tr key={i} className="border-b border-gray-100 bg-gray-50">
+                                        <td className="py-4 font-medium pl-2">{item.name}</td>
+                                        <td className="py-4 text-right pr-2">${(parseFloat(item.cost) || 0).toFixed(2)}</td>
+                                    </tr>
+                                )
+                            ))}
                         </tbody>
                     </table>
 
-                    {/* Total */}
-                    <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end">
-                    <span className="text-sm font-bold text-gray-600 uppercase">Total Due</span>
-                    <span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span>
-                    </div>
-
-                    <div className="mt-8 text-center text-xs text-gray-400">
-                        <p>Thank you for your business.</p>
-                    </div>
+                    <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end"><span className="text-sm font-bold text-gray-600 uppercase">Total Due</span><span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span></div>
+                    <div className="mt-8 text-center text-xs text-gray-400"><p>Thank you for your business.</p></div>
                 </div>
 
-                {/* Floating Action Bar */}
                 <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex gap-3 z-50 shadow-2xl">
-                    <button onClick={() => setIsInvoiceMode(false)} className="bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-black transition border border-white/10">
-                        <ArrowLeft size={18} /> EDIT
-                    </button>
-                    <button onClick={handleShare} className="bg-[#FF6700] text-black px-8 py-3 rounded-full font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition flex items-center gap-2">
-                        <Share size={18} /> SHARE
-                    </button>
+                    <button onClick={() => setIsInvoiceMode(false)} className="bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-black transition border border-white/10"><ArrowLeft size={18} /> EDIT</button>
+                    <button onClick={handleShare} className="bg-[#FF6700] text-black px-8 py-3 rounded-full font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition flex items-center gap-2"><Share size={18} /> SHARE</button>
                 </div>
             </div>
         )}
 
-        {/* BRANDING FOOTER (MAIN APP) */}
-        {!isInvoiceMode && (
-             <div className="mt-12 text-center opacity-40">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-sub)]">
-                    POWERED BY FIELDDESKOPS
-                </p>
-            </div>
-        )}
-
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-bold animate-in slide-in-from-bottom-5 z-[60] ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-          {toast.message}
-        </div>
-      )}
+        {!isInvoiceMode && <div className="mt-12 text-center opacity-40"><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-sub)]">POWERED BY FIELDDESKOPS</p></div>}
+        {toast && <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-bold animate-in slide-in-from-bottom-5 z-[60] ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>{toast.message}</div>}
     </div>
   );
 }
