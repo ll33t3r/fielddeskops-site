@@ -28,7 +28,7 @@ export default function SiteSnap() {
 
   // --- FORM STATE ---
   const [jobs, setJobs] = useState([]); 
-  const [selectedJob, setSelectedJob] = useState("");
+  const [selectedJob, setSelectedJob] = useState(""); // This is the source of truth for the Header and Filter
   const [customJob, setCustomJob] = useState("");
   const [tag, setTag] = useState("BEFORE");
   const [notes, setNotes] = useState("");
@@ -40,7 +40,6 @@ export default function SiteSnap() {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // HAPTIC ENGINE
   const vibrate = (pattern = 10) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
         navigator.vibrate(pattern);
@@ -53,25 +52,37 @@ export default function SiteSnap() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch existing project names from bids to populate dropdown
+    // 1. Get Job names from Bids
     const { data: bids } = await supabase.from("bids").select("project_name").order("created_at", { ascending: false });
-    if (bids) {
-        const uniqueJobs = [...new Set(bids.map(b => b.project_name))];
-        setJobs(uniqueJobs);
-    }
-
+    
+    // 2. Get saved photos
     const { data: savedPhotos } = await supabase.from("site_photos").select("*").order("created_at", { ascending: false });
     if (savedPhotos) setPhotos(savedPhotos);
+
+    // 3. Create a unified unique list of job names
+    const bidJobs = bids ? bids.map(b => b.project_name) : [];
+    const photoJobs = savedPhotos ? savedPhotos.map(p => p.job_name) : [];
+    const combinedJobs = [...new Set([...bidJobs, ...photoJobs])];
+    setJobs(combinedJobs);
     
-    // Auto-select the most recent job worked on
+    // 4. Persistence: Set initial job
     if (savedPhotos && savedPhotos.length > 0) {
         setSelectedJob(savedPhotos[0].job_name);
+    } else if (combinedJobs.length > 0) {
+        setSelectedJob(combinedJobs[0]);
     }
     
     setLoading(false);
   };
 
-  // --- SMART SELECTION ACTIONS ---
+  // --- UI ACTIONS ---
+  const handleJobChange = (val) => {
+      vibrate();
+      setSelectedJob(val);
+      setCustomJob(""); // Reset custom whenever dropdown is used
+      setSelectedIndices([]);
+  };
+
   const toggleSelection = (index) => {
     vibrate(15);
     setSelectedIndices(prev => 
@@ -82,32 +93,15 @@ export default function SiteSnap() {
   const handleDeleteSelected = async () => {
     if (!confirm(`Delete ${selectedIndices.length} items?`)) return;
     vibrate(50);
-    const idsToDelete = selectedIndices.map(idx => filteredPhotos[idx].id);
+    const idsToDelete = filteredPhotos.filter((_, idx) => selectedIndices.includes(idx)).map(p => p.id);
     const { error } = await supabase.from("site_photos").delete().in("id", idsToDelete);
     if (!error) {
       setPhotos(prev => prev.filter(p => !idsToDelete.includes(p.id)));
       setSelectedIndices([]);
-      showToast("Photos Deleted", "success");
+      showToast("Deleted", "success");
     }
   };
 
-  const handleSwapSelected = () => {
-    if (selectedIndices.length !== 2) return;
-    vibrate(30);
-    const newPhotos = [...photos];
-    const indexA = selectedIndices[0];
-    const indexB = selectedIndices[1];
-    
-    const temp = newPhotos[indexA];
-    newPhotos[indexA] = newPhotos[indexB];
-    newPhotos[indexB] = temp;
-    
-    setPhotos(newPhotos);
-    setSelectedIndices([]);
-    showToast("Positions Swapped", "success");
-  };
-
-  // --- UPLOAD LOGIC ---
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -125,9 +119,11 @@ export default function SiteSnap() {
   };
 
   const savePhoto = async () => {
-    const finalJobName = customJob || selectedJob;
-    if (!finalJobName || finalJobName === "custom") return alert("Enter a Job Name");
-    if (!fileToUpload) return alert("Capture or select a file");
+    const isNewJob = selectedJob === "custom";
+    const finalJobName = isNewJob ? customJob.trim() : selectedJob;
+
+    if (!finalJobName) return alert("Please enter a Job Name");
+    if (!fileToUpload) return alert("Select a file first");
 
     setUploading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -152,31 +148,24 @@ export default function SiteSnap() {
       setPreview(null);
       setFileToUpload(null);
       setNotes("");
-      showToast("Saved to Job", "success");
+      
+      // FIX: If it was a new job, lock it in and add to list
+      if (isNewJob) {
+          if (!jobs.includes(finalJobName)) setJobs([finalJobName, ...jobs]);
+          setSelectedJob(finalJobName);
+          setCustomJob("");
+      }
+      
+      showToast("Saved", "success");
     }
     setUploading(false);
   };
 
-  const handleShareReport = async () => {
-    const activePhotos = photos.filter(p => p.job_name === selectedJob);
-    let text = `📸 FIELD REPORT: ${selectedJob}\nDate: ${new Date().toLocaleDateString()}\n\n`;
-    activePhotos.forEach(p => {
-        text += `[${p.tag}] ${p.notes || "No notes"}\nView: ${p.image_url}\n\n`;
-    });
-
-    if (navigator.share) {
-      await navigator.share({ title: `Report: ${selectedJob}`, text: text });
-    } else {
-      navigator.clipboard.writeText(text);
-      showToast("Report Summary Copied", "success");
-    }
-  };
-
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
-  // --- FILTERED VIEWS ---
+  // --- DYNAMIC FILTERING ---
   const filteredPhotos = photos.filter(p => p.job_name === selectedJob);
-  const uniqueJobsFromPhotos = [...new Set(photos.map(p => p.job_name))];
+  const displayTitle = selectedJob === "custom" ? (customJob || "New Job") : selectedJob;
 
   return (
     <div className={`min-h-screen bg-background text-foreground font-inter pb-32 ${showReportModal || fullScreenImage ? "overflow-hidden h-screen" : ""}`}>
@@ -204,14 +193,20 @@ export default function SiteSnap() {
             <FolderOpen className="text-[#FF6700] shrink-0" size={20} />
             <select 
                 value={selectedJob} 
-                onChange={(e) => { vibrate(); setSelectedJob(e.target.value); setSelectedIndices([]); }}
+                onChange={(e) => handleJobChange(e.target.value)}
                 className="bg-transparent text-foreground font-bold uppercase outline-none w-full appearance-none cursor-pointer"
             >
                 {jobs.map(j => <option key={j} value={j} className="bg-zinc-900">{j}</option>)}
                 <option value="custom" className="bg-zinc-900">+ New Job Name</option>
             </select>
             {selectedJob === "custom" && (
-                <input autoFocus placeholder="Enter Job Name" value={customJob} onChange={e => setCustomJob(e.target.value)} className="absolute inset-0 bg-zinc-900 rounded-xl px-10 text-white font-bold uppercase border border-[#FF6700]" />
+                <input 
+                    autoFocus 
+                    placeholder="Type Job Name..." 
+                    value={customJob} 
+                    onChange={e => setCustomJob(e.target.value.toUpperCase())} 
+                    className="absolute inset-0 bg-zinc-900 rounded-xl px-10 text-white font-bold uppercase border border-[#FF6700] outline-none" 
+                />
             )}
         </div>
 
@@ -243,7 +238,7 @@ export default function SiteSnap() {
                     {fileType === "pdf" ? (
                         <div className="h-full flex flex-col items-center justify-center text-red-500">
                             <FileDigit size={48} />
-                            <span className="font-bold text-xs mt-2">PDF ATTACHED</span>
+                            <span className="font-bold text-xs mt-2">PDF READY</span>
                         </div>
                     ) : (
                         <img src={preview} className="w-full h-full object-cover" />
@@ -262,7 +257,9 @@ export default function SiteSnap() {
 
         {/* GALLERY CONTROLS */}
         <div className="flex justify-between items-end mb-4">
-            <h2 className="text-xl font-oswald font-bold uppercase tracking-tight text-foreground">{selectedJob} ({filteredPhotos.length})</h2>
+            <h2 className="text-xl font-oswald font-bold uppercase tracking-tight text-foreground truncate max-w-[60%]">
+                {displayTitle} ({filteredPhotos.length})
+            </h2>
             <div className="flex gap-2">
                 <button onClick={() => { vibrate(); setIsEditMode(!isEditMode); setSelectedIndices([]); }} className={`p-2 rounded-lg border transition ${isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-industrial-card border-white/5 text-industrial-muted"}`}>
                     <CheckCircle2 size={18} />
@@ -276,7 +273,7 @@ export default function SiteSnap() {
         {/* MAIN GRID */}
         <div className="grid grid-cols-3 gap-3 pb-32">
             {filteredPhotos.length === 0 ? (
-                <div className="col-span-3 text-center py-10 text-industrial-muted opacity-40 italic">Snap a photo to begin.</div>
+                <div className="col-span-3 text-center py-10 text-industrial-muted opacity-40 italic">No photos found for this job.</div>
             ) : filteredPhotos.map((p, idx) => {
                 const isSelected = selectedIndices.includes(idx);
                 const isItemPdf = p.image_url.toLowerCase().includes(".pdf");
@@ -311,11 +308,6 @@ export default function SiteSnap() {
                 <div className="max-w-md mx-auto flex items-center justify-between gap-4">
                     <div className="text-white font-bold text-sm">{selectedIndices.length} Selected</div>
                     <div className="flex gap-2">
-                        {selectedIndices.length === 2 && (
-                            <button onClick={handleSwapSelected} className="bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold flex items-center gap-2">
-                                <ArrowRightLeft size={18}/> Swap
-                            </button>
-                        )}
                         <button onClick={handleDeleteSelected} className="bg-red-900/30 text-red-500 border border-red-500/30 px-4 py-2 rounded-lg font-bold flex items-center gap-2">
                             <Trash2 size={18}/> Delete
                         </button>
@@ -326,21 +318,21 @@ export default function SiteSnap() {
 
       </main>
 
-      {/* ARCHIVE DRAWER */}
+      {/* ARCHIVE DRAWER - FIXED SELECTION LOGIC */}
       {showArchive && (
           <div className="fixed inset-0 z-[60] animate-in fade-in">
               <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowArchive(false)} />
-              <div className="absolute right-0 top-0 bottom-0 w-80 bg-[#121212] border-l border-white/5 p-6 animate-in slide-in-from-right">
+              <div className="absolute right-0 top-0 bottom-0 w-80 bg-[#121212] border-l border-white/5 p-6 animate-in slide-in-from-right shadow-2xl">
                   <div className="flex justify-between items-center mb-8">
                       <h2 className="text-xl font-oswald font-bold text-[#FF6700]">JOB ARCHIVE</h2>
                       <button onClick={() => setShowArchive(false)} className="text-industrial-muted hover:text-white"><X /></button>
                   </div>
                   <div className="space-y-3 overflow-y-auto max-h-[85vh]">
-                      {uniqueJobsFromPhotos.map(job => (
+                      {jobs.length === 0 ? <p className="text-center opacity-20 py-10 italic">Archive empty</p> : jobs.map(job => (
                           <button 
                             key={job} 
-                            onClick={() => { vibrate(); setSelectedJob(job); setShowArchive(false); }}
-                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedJob === job ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-white/5 text-industrial-muted"}`}
+                            onClick={() => { vibrate(); setSelectedJob(job); setCustomJob(""); setShowArchive(false); setSelectedIndices([]); }}
+                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedJob === job ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-white/5 text-industrial-muted hover:bg-white/10"}`}
                           >
                               <span className="font-bold uppercase text-sm truncate">{job}</span>
                           </button>
@@ -352,54 +344,26 @@ export default function SiteSnap() {
 
       {/* INSPECT OVERLAY */}
       {fullScreenImage && (
-          <div className="fixed inset-0 z-[100] bg-black flex flex-col p-4 animate-in zoom-in">
-              <div className="flex justify-between items-center mb-4">
+          <div className="fixed inset-0 z-[100] bg-black flex flex-col animate-in zoom-in">
+              <div className="flex justify-between items-center p-6">
                   <div className="text-white">
-                      <h3 className="font-bold uppercase">{fullScreenImage.job_name}</h3>
-                      <p className="text-xs opacity-60">{fullScreenImage.tag}</p>
+                      <h3 className="font-bold uppercase text-xl">{fullScreenImage.job_name}</h3>
+                      <p className="text-xs opacity-60 tracking-widest">{fullScreenImage.tag} • {new Date(fullScreenImage.created_at).toLocaleDateString()}</p>
                   </div>
                   <button onClick={() => setFullScreenImage(null)} className="p-3 bg-white/10 rounded-full text-white"><X size={28}/></button>
               </div>
-              <div className="flex-1 flex items-center justify-center">
-                  <img src={fullScreenImage.image_url} className="max-w-full max-h-full object-contain rounded-xl" />
+              <div className="flex-1 flex items-center justify-center p-4">
+                  {fullScreenImage.image_url.toLowerCase().includes(".pdf") ? (
+                       <iframe src={fullScreenImage.image_url} className="w-full h-full rounded-xl bg-white" />
+                  ) : (
+                       <img src={fullScreenImage.image_url} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+                  )}
               </div>
               {fullScreenImage.notes && (
-                  <div className="mt-4 p-4 bg-zinc-900 rounded-xl border border-white/10">
-                      <p className="text-white italic text-sm text-center">"{fullScreenImage.notes}"</p>
+                  <div className="p-8 bg-zinc-900/80 backdrop-blur-md border-t border-white/10">
+                      <p className="text-white italic text-lg text-center">"{fullScreenImage.notes}"</p>
                   </div>
               )}
-          </div>
-      )}
-
-      {/* REPORT MODAL */}
-      {showReportModal && (
-          <div className="fixed inset-0 z-[70] bg-white text-black p-8 overflow-auto animate-in fade-in">
-              <div className="max-w-3xl mx-auto pb-20">
-                  <div className="flex justify-between items-end border-b-4 border-[#FF6700] pb-6 mb-8">
-                      <div>
-                          <h1 className="text-4xl font-oswald font-bold">SITE REPORT</h1>
-                          <p className="text-zinc-500 uppercase font-bold tracking-widest text-sm">PROJECT: {selectedJob}</p>
-                      </div>
-                      <button onClick={() => setShowReportModal(false)} className="bg-black text-white p-3 rounded-xl no-print"><X /></button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-6">
-                      {filteredPhotos.map(p => (
-                          <div key={p.id} className="border border-zinc-200 p-2 rounded-lg break-inside-avoid">
-                              <img src={p.image_url} className="w-full h-48 object-cover rounded mb-2" />
-                              <div className="flex justify-between text-[10px] font-bold">
-                                  <span className="text-[#FF6700]">{p.tag}</span>
-                                  <span className="text-zinc-400">{new Date(p.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <p className="text-xs italic text-zinc-700 mt-1">"{p.notes || "No notes."}"</p>
-                          </div>
-                      ))}
-                  </div>
-                  <div className="fixed bottom-8 left-0 w-full no-print px-8">
-                      <button onClick={handleShareReport} className="w-full bg-[#FF6700] text-black font-bold py-4 rounded-2xl shadow-2xl hover:scale-105 transition flex items-center justify-center gap-2 text-xl">
-                          <Share size={24} /> SEND REPORT
-                      </button>
-                  </div>
-              </div>
           </div>
       )}
 
