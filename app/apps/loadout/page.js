@@ -492,13 +492,16 @@ export default function LoadOut() {
                                 ${isEditMode ? "ring-2 ring-white cursor-grab active:cursor-grabbing hover:scale-95 transition-transform" : ""} 
                                 ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
                         >
+                            {/* TOP */}
                             <div className="p-3 flex justify-between items-start h-[30%]">
                                 <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
                                 {isEditMode ? <GripVertical size={16} className="text-white/50" /> : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
                             </div>
+                            {/* MIDDLE */}
                             <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
                                 <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
                             </div>
+                            {/* BOTTOM */}
                             {!isEditMode && (
                                 <div className="flex h-[35%] border-t border-white/10">
                                     <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
@@ -508,6 +511,12 @@ export default function LoadOut() {
                             {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">DRAG TO MOVE</div>}
                         </div>
                     ))}
+                </div>
+
+                <div className="mt-12 text-center opacity-40">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+                    </p>
                 </div>
             </div>
         )}
@@ -522,6 +531,7 @@ export default function LoadOut() {
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
+                    {/* Add Tool Button (Identical Orange) */}
                     <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -577,14 +587,14 @@ export default function LoadOut() {
                         </div>
                     ))}
                 </div>
+
+                <div className="mt-12 text-center opacity-40">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+                    </p>
+                </div>
             </div>
         )}
-
-        <div className="mt-12 text-center opacity-40">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
-                POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
-            </p>
-        </div>
 
       </main>
 
