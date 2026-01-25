@@ -18,8 +18,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("HELLO");
   const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, lowStockCount: 0 });
-  const [alertItems, setAlertItems] = useState([]); // Stores the actual items
-  const [showAlerts, setShowAlerts] = useState(false); // Controls modal
+  const [alertItems, setAlertItems] = useState([]); 
+  const [showAlerts, setShowAlerts] = useState(false); 
   const [theme, setTheme] = useState("dark");
   
   useEffect(() => {
@@ -56,7 +56,6 @@ export default function Dashboard() {
     const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
     let lowItems = [];
     if (inventory) {
-        // Filter items where Quantity < Target (default 3)
         lowItems = inventory.filter(i => i.quantity < (i.min_quantity || 3));
     }
 
@@ -91,19 +90,14 @@ export default function Dashboard() {
 
         {/* METRICS BAR */}
         <div className="grid grid-cols-3 gap-4 mt-6">
-            {/* 1. Revenue */}
             <div className="industrial-card rounded-xl p-3 text-center">
                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Revenue</p>
                 <p className="text-[#22c55e] font-bold text-lg tracking-tight">${metrics.revenue.toLocaleString()}</p>
             </div>
-            
-            {/* 2. Jobs */}
             <div className="industrial-card rounded-xl p-3 text-center">
                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Jobs</p>
                 <p className="font-bold text-lg tracking-tight text-foreground">{metrics.jobs}</p>
             </div>
-
-            {/* 3. SYSTEM ALERTS (Clickable) */}
             <button 
                 onClick={() => metrics.lowStockCount > 0 && setShowAlerts(true)}
                 disabled={metrics.lowStockCount === 0}
@@ -125,7 +119,6 @@ export default function Dashboard() {
                         </>
                     )}
                 </div>
-                {/* Visual Hint to click if active */}
                 {metrics.lowStockCount > 0 && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500/50"><ChevronRight size={14}/></div>}
             </button>
         </div>
@@ -141,19 +134,17 @@ export default function Dashboard() {
          </div>
       </main>
 
-      {/* FOOTER */}
+      {/* FOOTER - BRANDED */}
       <div className="pb-4 text-center shrink-0">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600 opacity-40">
-                POWERED BY FIELDDESKOPS
+                POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
             </p>
       </div>
 
-      {/* --- ALERT MODAL --- */}
+      {/* ALERT MODAL */}
       {showAlerts && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-red-900/50 bg-[#0a0a0a]">
-                
-                {/* Header */}
                 <div className="flex justify-between items-center mb-6 border-b border-red-900/30 pb-4">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-red-500/10 rounded-full">
@@ -166,8 +157,6 @@ export default function Dashboard() {
                     </div>
                     <button onClick={() => setShowAlerts(false)} className="text-gray-500 hover:text-white transition"><X size={24}/></button>
                 </div>
-
-                {/* List */}
                 <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar mb-6">
                     {alertItems.map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between p-3 bg-red-900/5 border border-red-900/20 rounded-lg">
@@ -182,20 +171,16 @@ export default function Dashboard() {
                         </div>
                     ))}
                 </div>
-
-                {/* Action */}
                 <Link href="/apps/loadout" className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition shadow-[0_0_20px_rgba(220,38,38,0.4)]">
                     <ShoppingCart size={18}/> GO TO LOADOUT
                 </Link>
             </div>
         </div>
       )}
-
     </div>
   );
 }
 
-// Reusable Card Component
 function AppCard({ href, label, sub, icon, color, alert }) {
     return (
         <Link href={href} className={`
@@ -204,15 +189,11 @@ function AppCard({ href, label, sub, icon, color, alert }) {
             hover:bg-gray-800/80 active:scale-95 border-2 
             ${alert ? "border-red-500/50 bg-red-900/10" : "border-transparent hover:border-gray-700"}
         `}>
-            {/* Background Glow */}
             <div className="absolute top-0 right-0 p-20 bg-gradient-to-br from-white/5 to-transparent rounded-full translate-x-10 -translate-y-10 pointer-events-none"></div>
-            
             <div className={`mb-3 p-4 rounded-full bg-black/20 ${color} transition-colors duration-300 relative`}>
                 {icon}
-                {/* Notification Dot on App Icon */}
                 {alert && <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]"></span>}
             </div>
-            
             <h2 className="text-lg md:text-2xl font-bold tracking-widest mb-1 group-hover:text-white transition-colors text-foreground">{label}</h2>
             <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-bold">{sub}</p>
         </Link>

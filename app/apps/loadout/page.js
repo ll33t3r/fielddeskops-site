@@ -6,7 +6,7 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical
 } from "lucide-react";
 import Header from "../../components/Header";
 
@@ -26,11 +26,14 @@ export default function LoadOut() {
 
   // --- STOCK STATE ---
   const [items, setItems] = useState([]);
-  const [stockSearch, setStockSearch] = useState(""); // NEW: Search State
+  const [stockSearch, setStockSearch] = useState(""); 
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
   
+  // --- DRAG & DROP STATE ---
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+
   // --- ADD MODAL STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMode, setAddMode] = useState("SINGLE"); 
@@ -122,6 +125,37 @@ export default function LoadOut() {
     }
   };
 
+  // --- DRAG & DROP LOGIC ---
+  const handleDragStart = (e, index) => {
+      setDraggedItemIndex(index);
+      e.dataTransfer.effectAllowed = "move";
+      // Transparent ghost image if desired, otherwise default is fine
+  };
+
+  const handleDragOver = (e, index) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e, dropIndex) => {
+      e.preventDefault();
+      if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
+
+      const newItems = [...items];
+      const draggedItem = newItems[draggedItemIndex];
+      
+      // Remove dragged item
+      newItems.splice(draggedItemIndex, 1);
+      // Insert at new position
+      newItems.splice(dropIndex, 0, draggedItem);
+      
+      setItems(newItems);
+      setDraggedItemIndex(null);
+      vibrate(20);
+      showToast("Order Updated", "success");
+      // Note: To persist this, we would need to update a 'sort_order' column in DB for all affected rows.
+  };
+
   // 2. STOCK ACTIONS
   const addSingleStockItem = async () => {
     if (!newItemName.trim()) return;
@@ -172,12 +206,12 @@ export default function LoadOut() {
             quantity: 1, min_quantity: parseInt(row.qty) || 3, color: THEME_ORANGE 
           });
       }
-      fetchVanData(currentVan.id); // Refresh for IDs
+      fetchVanData(currentVan.id); 
       showToast(`${validRows.length} Items Added`, "success");
   };
 
   const updateStockQty = async (id, currentQty, change) => {
-    vibrate(5);
+    vibrate(5); 
     const newQty = Math.max(0, Number(currentQty) + change);
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
     await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
@@ -335,7 +369,7 @@ export default function LoadOut() {
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
-  // --- FILTERS (Now includes Stock!) ---
+  // FILTERS
   const filteredTools = tools.filter(t => {
       const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
       const matchFilter = toolFilter === "ALL" || 
@@ -417,32 +451,42 @@ export default function LoadOut() {
             <div className="animate-in fade-in slide-in-from-left-4">
                 
                 {/* HERO SEARCH & ADD */}
-                <div className="flex gap-2 mb-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
+                <div className="flex gap-2 mb-4 h-14">
+                    <div className="relative flex-1 h-full">
+                        <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input 
                             type="text" 
                             placeholder="Filter stock..." 
                             value={stockSearch} 
                             onChange={(e) => setStockSearch(e.target.value)} 
-                            className="input-field rounded-xl pl-10 pr-4 py-3 w-full bg-industrial-card border-none" 
+                            className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg" 
                         />
                     </div>
-                    {/* ENHANCED ADD BUTTON */}
-                    <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-white text-black h-full px-5 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg">
-                        <Plus size={28} />
+                    {/* ENHANCED ADD BUTTON - FLUSH & ORANGE */}
+                    <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
+                        <Plus size={32} />
                     </button>
                 </div>
 
                 {/* THE CONTROL DECK GRID (3 Columns) */}
                 <div className="grid grid-cols-3 gap-3 pb-20 select-none">
-                    {filteredItems.map((item) => (
-                        <div key={item.id} onClick={() => { if(isEditMode) { vibrate(); openStockEdit(item); }}} style={{ backgroundColor: item.color || "#262626" }} className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 ${isEditMode ? "ring-2 ring-white cursor-pointer" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}>
-                            
+                    {filteredItems.map((item, index) => (
+                        <div 
+                            key={item.id} 
+                            onClick={() => { if(isEditMode) { vibrate(); openStockEdit(item); }}} 
+                            onDragStart={(e) => isEditMode && handleDragStart(e, index)}
+                            onDragOver={(e) => isEditMode && handleDragOver(e, index)}
+                            onDrop={(e) => isEditMode && handleDrop(e, index)}
+                            draggable={isEditMode}
+                            style={{ backgroundColor: item.color || "#262626" }} 
+                            className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 
+                                ${isEditMode ? "ring-2 ring-white cursor-grab active:cursor-grabbing hover:scale-95 transition-transform" : ""} 
+                                ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
+                        >
                             {/* TOP: INFO */}
                             <div className="p-3 flex justify-between items-start h-[30%]">
                                 <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
-                                {item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>}
+                                {isEditMode ? <GripVertical size={16} className="text-white/50" /> : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
                             </div>
 
                             {/* MIDDLE: QUANTITY */}
@@ -462,9 +506,16 @@ export default function LoadOut() {
                                 </div>
                             )}
                             
-                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">EDIT</div>}
+                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">DRAG TO MOVE</div>}
                         </div>
                     ))}
+                </div>
+
+                {/* BRANDED FOOTER */}
+                <div className="mt-12 text-center opacity-40">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+                    </p>
                 </div>
             </div>
         )}
@@ -533,7 +584,9 @@ export default function LoadOut() {
                 </div>
 
                 <div className="mt-12 text-center opacity-40">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">POWERED BY FIELDDESKOPS</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+                    </p>
                 </div>
             </div>
         )}
