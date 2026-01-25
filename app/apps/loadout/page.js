@@ -32,10 +32,9 @@ export default function LoadOut() {
   const [targetQtyInput, setTargetQtyInput] = useState("");
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   
-  // --- ADD MODAL STATE ---
+  // --- ADD MODAL STATE (Consolidated) ---
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addMode, setAddMode] = useState("SINGLE"); 
-  const [newItemName, setNewItemName] = useState(""); 
+  // Removed "addMode" and "newItemName" - we now use batchRows for everything.
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
   // --- TOOLS STATE ---
@@ -150,24 +149,7 @@ export default function LoadOut() {
       showToast("Order Updated", "success");
   };
 
-  // 2. STOCK ACTIONS
-  const addSingleStockItem = async () => {
-    if (!newItemName.trim()) return;
-    vibrate(20);
-    const { data: { user } } = await supabase.auth.getUser();
-    const tempId = Math.random();
-    const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
-    setItems([tempItem, ...items]);
-    setNewItemName("");
-    setShowAddModal(false);
-
-    const { data } = await supabase.from("inventory").insert({
-        user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
-    }).select().single();
-    if (data) setItems(prev => prev.map(i => i.id === tempId ? data : i));
-  };
-
-  // BATCH ACTIONS
+  // --- UNIFIED ADD LOGIC ---
   const handleBatchRowChange = (index, field, value) => {
       const newRows = [...batchRows];
       newRows[index][field] = value;
@@ -179,19 +161,31 @@ export default function LoadOut() {
       setBatchRows([...batchRows, { name: "", qty: 3 }]);
   };
 
+  const removeBatchRow = (index) => {
+      if (batchRows.length === 1) return;
+      const newRows = [...batchRows];
+      newRows.splice(index, 1);
+      setBatchRows(newRows);
+  };
+
   const saveBatch = async () => {
       vibrate(20);
       const validRows = batchRows.filter(r => r.name.trim() !== "");
       if(validRows.length === 0) return;
       
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // Optimistic Update
       const newItems = validRows.map(r => ({
           id: Math.random(), name: r.name, quantity: 1, min_quantity: parseInt(r.qty) || 3, color: THEME_ORANGE
       }));
       setItems([...newItems, ...items]);
+      
+      // Reset Modal
       setBatchRows([{ name: "", qty: 3 }]);
       setShowAddModal(false);
 
+      // DB Writes
       for (const row of validRows) {
           await supabase.from("inventory").insert({
             user_id: user.id, van_id: currentVan.id, name: row.name, 
@@ -446,7 +440,7 @@ export default function LoadOut() {
             </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS - CONSISTENT COLORS */}
         <div className="flex bg-industrial-bg p-1 rounded-xl mb-6 border border-industrial-border">
             <button onClick={() => { vibrate(); setActiveTab("STOCK"); }} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-industrial-muted hover:text-foreground"}`}>
                 <LayoutGrid size={18}/> STOCK
@@ -472,6 +466,7 @@ export default function LoadOut() {
                             className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" 
                         />
                     </div>
+                    {/* ADD BUTTON OPENS UNIFIED MODAL */}
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -492,13 +487,16 @@ export default function LoadOut() {
                                 ${isEditMode ? "ring-2 ring-white cursor-grab active:cursor-grabbing hover:scale-95 transition-transform" : ""} 
                                 ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
                         >
+                            {/* TOP */}
                             <div className="p-3 flex justify-between items-start h-[30%]">
                                 <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
                                 {isEditMode ? <GripVertical size={16} className="text-white/50" /> : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
                             </div>
+                            {/* MIDDLE */}
                             <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
                                 <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
                             </div>
+                            {/* BOTTOM */}
                             {!isEditMode && (
                                 <div className="flex h-[35%] border-t border-white/10">
                                     <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
@@ -589,39 +587,29 @@ export default function LoadOut() {
 
       </main>
 
-      {/* --- ADD ITEMS MODAL --- */}
+      {/* --- ADD ITEMS MODAL (SINGLE & BATCH CONSOLIDATED) --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
              <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
                 <div className="flex justify-between items-center mb-6 shrink-0">
-                    <div className="flex gap-4">
-                        <button onClick={() => setAddMode("SINGLE")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "SINGLE" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>SINGLE</button>
-                        <button onClick={() => setAddMode("BULK")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "BULK" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>BULK LIST</button>
-                    </div>
+                    <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2"><ListPlus size={24}/> ADD ITEMS</h2>
                     <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
                 </div>
-                {addMode === "SINGLE" && (
-                    <div className="flex-1 flex flex-col gap-4">
-                        <label className="text-xs text-gray-500 font-bold uppercase">Item Name</label>
-                        <input autoFocus placeholder="e.g. Wire Nuts" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="bg-black/40 border border-gray-700 rounded-xl p-4 text-xl text-white outline-none focus:border-[#FF6700]" />
-                        <button onClick={addSingleStockItem} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl mt-auto hover:scale-[1.02] transition">ADD TO VAN</button>
+                {/* CONSOLIDATED LIST VIEW */}
+                <div className="flex-1 flex flex-col">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
+                        {batchRows.map((row, idx) => (
+                            <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2">
+                                <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
+                                <input placeholder="Item Name (e.g. Wire Nuts)" value={row.name} onChange={(e) => handleBatchRowChange(idx, "name", e.target.value)} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
+                                <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => handleBatchRowChange(idx, "qty", e.target.value)} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
+                                {batchRows.length > 1 && <button onClick={() => removeBatchRow(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>}
+                            </div>
+                        ))}
+                        <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
                     </div>
-                )}
-                {addMode === "BULK" && (
-                    <div className="flex-1 flex flex-col">
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
-                            {batchRows.map((row, idx) => (
-                                <div key={idx} className="flex gap-2 items-center">
-                                    <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
-                                    <input placeholder="Item Name" value={row.name} onChange={(e) => { const n = [...batchRows]; n[idx].name = e.target.value; setBatchRows(n); }} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
-                                    <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => { const n = [...batchRows]; n[idx].qty = e.target.value; setBatchRows(n); }} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
-                                </div>
-                            ))}
-                            <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
-                        </div>
-                        <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ITEMS</button>
-                    </div>
-                )}
+                    <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ITEMS</button>
+                </div>
              </div>
         </div>
       )}
