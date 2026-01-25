@@ -6,7 +6,7 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil
 } from "lucide-react";
 import Link from "next/link";
 
@@ -31,10 +31,10 @@ export default function LoadOut() {
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
   
-  // --- SWAP STATE (Replaces Drag & Drop) ---
-  const [swapSourceIndex, setSwapSourceIndex] = useState(null);
+  // --- SMART SELECTION STATE ---
+  const [selectedIndices, setSelectedIndices] = useState([]); // Stores indexes of selected cards
   
-  // --- ADD MODAL STATE (Unified - No Modes) ---
+  // --- ADD MODAL STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
@@ -114,34 +114,54 @@ export default function LoadOut() {
     }
   };
 
-  // --- SWAP LOGIC (The "Patch") ---
-  const handleSwapClick = (index) => {
-      vibrate(20);
-      
-      // If nothing selected, select this one
-      if (swapSourceIndex === null) {
-          setSwapSourceIndex(index);
-          return;
+  // --- SMART SELECTION LOGIC ---
+  const toggleSelection = (index) => {
+      vibrate(15);
+      if (selectedIndices.includes(index)) {
+          setSelectedIndices(prev => prev.filter(i => i !== index));
+      } else {
+          setSelectedIndices(prev => [...prev, index]);
       }
+  };
 
-      // If clicking self, deselect
-      if (swapSourceIndex === index) {
-          setSwapSourceIndex(null);
-          return;
-      }
-
-      // Perform Swap (Optimistic)
+  const handleSwapSelected = () => {
+      if (selectedIndices.length !== 2) return;
+      vibrate(30);
       const newItems = [...items];
-      const itemA = newItems[swapSourceIndex];
-      const itemB = newItems[index];
-
-      newItems[swapSourceIndex] = itemB;
-      newItems[index] = itemA;
-
+      const indexA = selectedIndices[0];
+      const indexB = selectedIndices[1];
+      
+      const temp = newItems[indexA];
+      newItems[indexA] = newItems[indexB];
+      newItems[indexB] = temp;
+      
       setItems(newItems);
-      setSwapSourceIndex(null);
+      setSelectedIndices([]);
       showToast("Items Swapped", "success");
-      // Note: Add DB persistence here for sort_order in future updates
+      // Add DB persistence here in future
+  };
+
+  const handleDeleteSelected = async () => {
+      if (!confirm(`Delete ${selectedIndices.length} items?`)) return;
+      vibrate(50);
+      
+      // Get IDs to delete from DB
+      const idsToDelete = selectedIndices.map(idx => items[idx].id);
+      
+      // Update UI
+      const newItems = items.filter((_, idx) => !selectedIndices.includes(idx));
+      setItems(newItems);
+      setSelectedIndices([]);
+      
+      // DB Delete
+      await supabase.from("inventory").delete().in("id", idsToDelete);
+      showToast("Deleted", "success");
+  };
+
+  const handleEditSelected = () => {
+      if (selectedIndices.length !== 1) return;
+      openStockEdit(null, items[selectedIndices[0]]);
+      setSelectedIndices([]);
   };
 
   // --- UNIFIED BATCH ADD LOGIC ---
@@ -198,7 +218,7 @@ export default function LoadOut() {
   };
 
   const openStockEdit = (e, item) => {
-      e.stopPropagation();
+      if(e) e.stopPropagation();
       vibrate();
       setEditingItem(item);
       setTargetQtyInput(item.min_quantity.toString());
@@ -354,7 +374,7 @@ export default function LoadOut() {
   const filteredTools = tools.filter(t => {
       const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
       const matchFilter = toolFilter === "ALL" || 
-                          (toolFilter === "OUT" && t.status === "CHECKED_OUT") ||
+                          (toolFilter === "OUT" && t.status === "CHECKED_OUT") || 
                           (toolFilter === "BROKEN" && t.status === "BROKEN");
       return matchSearch && matchFilter;
   });
@@ -381,8 +401,8 @@ export default function LoadOut() {
 
       <main className="max-w-6xl mx-auto px-6 pt-2">
         
-        {/* TOP BAR */}
-        <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-20">
+        {/* TOP BAR - VAN SELECTOR (Z-40 to fix stacking) */}
+        <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-40">
             <div className="relative w-full">
                 <button onClick={() => { vibrate(); setShowSettings(!showSettings); }} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
                     <div className="flex items-center gap-3">
@@ -392,13 +412,13 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
 
-                {/* SETTINGS MENU (Z-INDEX 50 to Fix Overlap) */}
+                {/* SETTINGS MENU (Z-50) */}
                 {showSettings && (
                     <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
                             <div className="mb-4 pb-4 border-b border-gray-700">
                                 <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
-                                <button onClick={() => { vibrate(); setIsEditMode(!isEditMode); setShowSettings(false); }} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-gray-600 text-white"}`}>
+                                <button onClick={() => { vibrate(); setIsEditMode(!isEditMode); setShowSettings(false); setSelectedIndices([]); }} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-gray-600 text-white"}`}>
                                     <span className="font-bold text-sm flex items-center gap-2">{isEditMode ? <Eye/> : <EyeOff/>} {isEditMode ? "EDITING ON" : "STANDARD"}</span>
                                 </button>
                             </div>
@@ -417,13 +437,11 @@ export default function LoadOut() {
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
-                        
                         <div className="mb-4 pb-4 border-b border-gray-700">
                              <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
                                 <Users size={16}/> MANAGE TEAM
                              </button>
                         </div>
-
                         <div className="space-y-2 pb-4 border-b border-gray-700">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
@@ -448,7 +466,7 @@ export default function LoadOut() {
         {activeTab === "STOCK" && (
             <div className="animate-in fade-in slide-in-from-left-4">
                 
-                {/* ACTION BAR (STICKY Z-30) */}
+                {/* ACTION BAR (STICKY Z-30 - Lower than Menu) */}
                 <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
@@ -460,45 +478,49 @@ export default function LoadOut() {
                             className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" 
                         />
                     </div>
-                    {/* UNIFIED ADD BUTTON */}
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
                 </div>
 
                 {/* THE CONTROL DECK GRID */}
-                <div className="grid grid-cols-3 gap-3 pb-20 select-none">
-                    {filteredItems.map((item, index) => (
-                        <div 
-                            key={item.id} 
-                            onClick={() => { if(isEditMode) handleSwapClick(index); }} 
-                            style={{ backgroundColor: item.color || "#262626" }} 
-                            className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 
-                                ${isEditMode ? "cursor-pointer active:scale-95 transition-transform" : ""}
-                                ${swapSourceIndex === index ? "ring-4 ring-[#FF6700] scale-95" : (isEditMode ? "ring-2 ring-white" : "")} 
-                                ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
-                        >
-                            {/* TOP */}
-                            <div className="p-3 flex justify-between items-start h-[30%]">
-                                <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
-                                {isEditMode ? (
-                                    <button onClick={(e) => openStockEdit(e, item)} className="p-1 bg-black/50 rounded hover:bg-[#FF6700] hover:text-black text-white transition"><Edit3 size={14}/></button>
-                                ) : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
-                            </div>
-                            {/* MIDDLE */}
-                            <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
-                                <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
-                            </div>
-                            {/* BOTTOM */}
-                            {!isEditMode && (
-                                <div className="flex h-[35%] border-t border-white/10">
-                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors"><Plus size={24} /></button>
+                <div className="grid grid-cols-3 gap-3 pb-24 select-none">
+                    {filteredItems.map((item, index) => {
+                        const isSelected = selectedIndices.includes(index);
+                        return (
+                            <div 
+                                key={item.id} 
+                                onClick={() => { if(isEditMode) toggleSelection(index); }} 
+                                style={{ backgroundColor: item.color || "#262626" }} 
+                                className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 
+                                    ${isEditMode ? "cursor-pointer active:scale-95 transition-transform" : ""}
+                                    ${isSelected ? "ring-4 ring-[#FF6700] scale-95" : (isEditMode ? "ring-2 ring-white/20" : "")} 
+                                    ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
+                            >
+                                {/* TOP */}
+                                <div className="p-3 flex justify-between items-start h-[30%]">
+                                    <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
+                                    {isEditMode && isSelected && <div className="w-3 h-3 bg-[#FF6700] rounded-full shadow-[0_0_10px_#FF6700]"></div>}
+                                    {!isEditMode && item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>}
                                 </div>
-                            )}
-                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">{swapSourceIndex === index ? "SELECTED" : "TAP TO SWAP"}</div>}
-                        </div>
-                    ))}
+                                {/* MIDDLE */}
+                                <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
+                                    <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
+                                </div>
+                                {/* BOTTOM */}
+                                {!isEditMode ? (
+                                    <div className="flex h-[35%] border-t border-white/10">
+                                        <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors"><Plus size={24} /></button>
+                                    </div>
+                                ) : (
+                                   <div className={`absolute inset-x-0 bottom-0 h-[35%] flex items-center justify-center text-[10px] font-bold uppercase ${isSelected ? "bg-[#FF6700] text-black" : "bg-black/50 text-white"}`}>
+                                      {isSelected ? "SELECTED" : "TAP TO SELECT"}
+                                   </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         )}
@@ -506,25 +528,20 @@ export default function LoadOut() {
         {/* TAB 2: TOOLS */}
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
-                
-                {/* ACTION BAR (STICKY) */}
                 <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
-                    {/* Add Tool Button */}
                     <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
                 </div>
-
                 <div className="grid grid-cols-3 gap-2 mb-6">
                     {[{k:"ALL", l:"All Tools"}, {k:"OUT", l:"Checked Out"}, {k:"BROKEN", l:"Broken"}].map(f => (
                         <button key={f.k} onClick={() => { vibrate(); setToolFilter(f.k); }} className={`p-2 rounded text-xs font-bold border transition ${toolFilter === f.k ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-industrial-border text-industrial-muted"}`}>{f.l}</button>
                     ))}
                 </div>
-
                 <div className="space-y-3 pb-20">
                     {filteredTools.length === 0 ? <div className="text-center py-10 text-industrial-muted">No tools found.</div> : filteredTools.map(tool => (
                         <div key={tool.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${tool.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === tool.id ? "ring-1 ring-[#FF6700]" : ""}`}>
@@ -580,7 +597,31 @@ export default function LoadOut() {
 
       </main>
 
-      {/* --- ADD ITEMS MODAL (UNIFIED) --- */}
+      {/* --- SMART ACTION BAR (BOTTOM) --- */}
+      {isEditMode && selectedIndices.length > 0 && (
+          <div className="fixed bottom-0 left-0 w-full z-50 bg-[#121212] border-t border-gray-800 p-4 animate-in slide-in-from-bottom">
+              <div className="max-w-md mx-auto flex items-center justify-between gap-4">
+                  <div className="text-white font-bold text-sm">{selectedIndices.length} Selected</div>
+                  <div className="flex gap-2">
+                      {selectedIndices.length === 1 && (
+                          <button onClick={handleEditSelected} className="bg-gray-800 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-gray-700">
+                              <Pencil size={18}/> Edit
+                          </button>
+                      )}
+                      {selectedIndices.length === 2 && (
+                          <button onClick={handleSwapSelected} className="bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:scale-105 transition">
+                              <ArrowRightLeft size={18}/> Swap
+                          </button>
+                      )}
+                      <button onClick={handleDeleteSelected} className="bg-red-900/30 text-red-500 border border-red-500/30 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-900/50">
+                          <Trash2 size={18}/> Delete
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- ADD ITEMS MODAL --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
              <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
@@ -606,7 +647,7 @@ export default function LoadOut() {
         </div>
       )}
 
-      {/* TOOL MODAL - FIXED DARK INPUTS */}
+      {/* TOOL MODAL (Dark Mode Fixed) */}
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
@@ -637,6 +678,32 @@ export default function LoadOut() {
                     {uploading ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>} SAVE TO VAN
                 </button>
             </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL (Single Item) */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-industrial-border bg-black">
+            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">EDIT ITEM</h2>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Name</label>
+            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="bg-gray-900 border border-gray-700 rounded-lg mb-4 w-full p-3 font-bold text-lg text-white" />
+            <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Target Qty</label>
+                <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg w-20 text-center font-oswald text-xl p-2 text-[#FF6700]" />
+            </div>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Color</label>
+            <div className="grid grid-cols-5 gap-2 mb-6">
+              {colors.map((c) => (
+                <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg border border-white/10 ${editingItem.color === c.hex ? "ring-2 ring-white" : ""}`} />
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => deleteStockItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold"><Trash2 size={16} /></button>
+              <button onClick={saveStockEdit} className="flex-[3] bg-[#FF6700] text-black py-3 rounded-lg font-bold">SAVE</button>
+            </div>
+          </div>
         </div>
       )}
 
