@@ -45,41 +45,52 @@ export default function SignOff() {
 
   const vibrate = (p = 10) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p); };
 
-  // --- LOGIC FUNCTIONS ---
-
+  // --- LOGIC: FETCH SITESNAP PHOTOS ---
   const loadProjectPhotos = async (jobName) => {
     if (!jobName || jobName === "SELECT PROJECT") return;
-    const { data } = await supabase.from("site_photos").select("image_url, tag").eq("job_name", jobName).order('created_at', { ascending: false }).limit(5);
+    const { data } = await supabase
+      .from("site_photos")
+      .select("image_url, tag")
+      .eq("job_name", jobName)
+      .order('created_at', { ascending: false })
+      .limit(5);
     if (data) setSiteSnapPhotos(data);
   };
 
+  // --- LOGIC: LOAD ALL DATA (Now includes SiteSnap Jobs) ---
   const loadAllData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // 1. Load History
     const { data: history } = await supabase.from("contracts").select("*").order("created_at", { ascending: false });
-    if (history) {
-        setContracts(history);
-        const uniqueJobs = [...new Set(history.map(c => c.project_name))].slice(0, 10);
+    
+    // 2. Load Jobs from SiteSnap to populate menu
+    const { data: photoData } = await supabase.from("site_photos").select("job_name");
+    
+    if (history || photoData) {
+        if (history) setContracts(history);
+        
+        const contractJobs = history ? history.map(c => c.project_name) : [];
+        const snapJobs = photoData ? photoData.map(p => p.job_name) : [];
+        
+        // Merge and unique
+        const uniqueJobs = [...new Set([...contractJobs, ...snapJobs])].slice(0, 15);
         setRecentJobs(uniqueJobs);
         if (uniqueJobs.length > 0) setSelectedJob(uniqueJobs[0]);
     }
 
+    // 3. Load Templates
     const { data: dbTemplates } = await supabase.from("contract_templates").select("*").order("created_at", { ascending: false });
-    
     const defaults = [
         { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [Client Name], authorize [Contractor Name] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
-        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or hidden structural weaknesses discovered during work.", is_pinned: true },
+        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or structural weaknesses discovered during work.", is_pinned: true },
         { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [Contractor Name] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
         { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [Contractor Name] by start time.", is_pinned: true },
         { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [Client Name], confirm that [Contractor Name] has completed work to my satisfaction.", is_pinned: true }
     ];
-
     const merged = [...(dbTemplates || [])];
-    defaults.forEach(d => {
-        if (!merged.find(m => m.label === d.label)) merged.push(d);
-    });
-
+    defaults.forEach(d => { if (!merged.find(m => m.label === d.label)) merged.push(d); });
     setTemplates(merged);
     setLoading(false);
   };
@@ -92,6 +103,7 @@ export default function SignOff() {
     }
   }, [selectedJob]);
 
+  // --- SMART FUNCTIONS ---
   const applySmartTemplate = (templateBody) => {
       vibrate(15);
       let smartText = templateBody;
@@ -100,29 +112,21 @@ export default function SignOff() {
       setContractBody(smartText);
   };
 
-  const handleSignatureEnd = () => {
-      if (!sigPad.current.isEmpty()) setHasSigned(true);
-  };
-
-  const clearSignature = () => {
-      sigPad.current.clear();
-      setHasSigned(false);
-      setIsSigned(false);
-      setSavedSignature(null);
-  };
+  const handleSignatureEnd = () => { if (!sigPad.current.isEmpty()) setHasSigned(true); };
+  const clearSignature = () => { sigPad.current.clear(); setHasSigned(false); setIsSigned(false); setSavedSignature(null); };
 
   const handlePhotoUpload = async (e) => {
       if (!e.target.files?.[0] || !selectedJob) return;
       setSaving(true);
       const file = e.target.files[0];
       const { data: { user } } = await supabase.auth.getUser();
-      const fileName = `${user.id}/${selectedJob}/${Date.now()}.jpg`;
+      const fileName = `${user.id}/${selectedJob.replace(/\s+/g, '_')}/${Date.now()}.jpg`;
       
       const { error: upErr } = await supabase.storage.from("sitesnap").upload(fileName, file);
       if (!upErr) {
           const publicUrl = supabase.storage.from("sitesnap").getPublicUrl(fileName).data.publicUrl;
           await supabase.from("site_photos").insert({
-              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "SignOff Attachment"
+              user_id: user.id, job_name: selectedJob, tag: "PRE-EXISTING", image_url: publicUrl, notes: "Attached via SignOff Agreement"
           });
           loadProjectPhotos(selectedJob);
           showToast("Photo synced with SiteSnap", "success");
@@ -133,7 +137,7 @@ export default function SignOff() {
   const togglePin = async (templateId) => {
       const pinnedCount = templates.filter(t => t.is_pinned).length;
       const target = templates.find(t => t.id === templateId);
-      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 dashboard templates.");
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Dashboard limit: 5");
       const newStatus = !target.is_pinned;
       setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
       if (typeof templateId === 'string' && templateId.length > 5) {
@@ -143,13 +147,13 @@ export default function SignOff() {
 
   const saveContract = async () => {
     const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
-    if (!clientName || !contractBody || !finalProjectName) return alert("Missing form details.");
-    if (sigPad.current.isEmpty()) return alert("Missing signature.");
+    if (!clientName || !contractBody || !finalProjectName) return alert("Fill out all fields.");
+    if (sigPad.current.isEmpty()) return alert("Signature required.");
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const sigBlob = await new Promise(r => sigPad.current.getCanvas().toBlob(r, "image/png"));
-    const fileName = `${user.id}/${Date.now()}-sig.png`;
+    const fileName = `${user.id}/sigs/${Date.now()}.png`;
     await supabase.storage.from("signatures").upload(fileName, sigBlob);
     const publicUrl = supabase.storage.from("signatures").getPublicUrl(fileName).data.publicUrl;
 
@@ -160,7 +164,7 @@ export default function SignOff() {
 
     if (newDoc) {
         setContracts([newDoc, ...contracts]);
-        if (!recentJobs.includes(finalProjectName)) setRecentJobs([finalProjectName, ...recentJobs.slice(0, 9)]);
+        if (!recentJobs.includes(finalProjectName)) setRecentJobs([finalProjectName, ...recentJobs.slice(0, 14)]);
         setSelectedJob(finalProjectName);
         setIsCustomJob(false);
         setCustomJobName("");
@@ -172,7 +176,7 @@ export default function SignOff() {
   };
 
   const handleShare = async () => {
-    const text = `Agreement: ${selectedJob}\nCustomer: ${clientName}\n\nTerms:\n${contractBody}`;
+    const text = `Contract: ${selectedJob}\nCustomer: ${clientName}\n\nTerms:\n${contractBody}`;
     if (navigator.share) await navigator.share({ title: `Signed Agreement`, text });
     else { navigator.clipboard.writeText(text); showToast("Summary Copied", "success"); }
   };
@@ -193,7 +197,7 @@ export default function SignOff() {
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32 font-inter">
       
       {/* HEADER */}
       <div className="flex items-center justify-between px-6 pt-4 mb-4 no-print">
@@ -211,7 +215,7 @@ export default function SignOff() {
 
       <main className="max-w-4xl mx-auto px-6">
         
-        {/* JOB SELECTOR */}
+        {/* JOB SELECTOR (Now bridges with SiteSnap) */}
         <div className="relative mb-6 no-print">
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
@@ -226,7 +230,7 @@ export default function SignOff() {
                 </button>
             )}
             {isDropdownOpen && !isCustomJob && (
-                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl">
+                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-100">
                     <div className="p-2 space-y-1">
                         {recentJobs?.map(job => (
                             <button key={job} onClick={() => { setSelectedJob(job); setIsDropdownOpen(false); }} className={`w-full text-left px-4 py-3 rounded-lg font-bold uppercase text-sm ${selectedJob === job ? "bg-[#FF6700] text-black" : "text-[var(--text-main)] hover:bg-[#FF6700]/10"}`}>{job}</button>
@@ -284,18 +288,18 @@ export default function SignOff() {
                     )}
                 </div>
 
-                {/* SITESNAP CROSS-APP SYNC */}
+                {/* SITESNAP CROSS-APP SYNC (Proof Section) */}
                 <div className="mt-8 border-t border-gray-100 pt-6">
                     <div className="flex justify-between items-center mb-3">
-                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> Evidence Attachments</label>
+                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> Job Evidence Attachments</label>
                         {!isSigned && (
-                            <button onClick={() => photoInputRef.current.click()} className="text-[10px] font-black text-[#FF6700] uppercase">+ Upload to Job</button>
+                            <button onClick={() => photoInputRef.current.click()} className="text-[10px] font-black text-[#FF6700] uppercase">+ Add Photo to Job</button>
                         )}
-                        <input type="file" ref={photoInputRef} className="hidden" accept="image/*" onChange={handlePhotoUpload} />
+                        <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
                     </div>
                     <div className="grid grid-cols-5 gap-2">
                         {siteSnapPhotos?.map((photo, i) => (
-                            <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm">
+                            <div key={i} className="aspect-square rounded border border-gray-100 overflow-hidden relative shadow-sm">
                                 <img src={photo.image_url} className="w-full h-full object-cover" />
                                 <div className="absolute bottom-0 left-0 w-full bg-black/60 text-white text-[6px] font-bold py-0.5 text-center uppercase">{photo.tag}</div>
                             </div>
@@ -305,7 +309,7 @@ export default function SignOff() {
             </div>
 
             <div className="mt-12 border-t-2 border-black pt-6 relative">
-                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Signature</label>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Customer Signature</label>
                 {isSigned ? <img src={savedSignature} className="h-24 object-contain" alt="Signature" /> : (
                     <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-zinc-50 hover:border-[#FF6700] transition">
                         <SignatureCanvas ref={sigPad} penColor="black" onEnd={handleSignatureEnd} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
@@ -325,7 +329,7 @@ export default function SignOff() {
                     <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] transition flex items-center justify-center gap-2 text-xl">
                         <Share size={24}/> SHARE PDF
                     </button>
-                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSiteSnapPhotos([]); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
+                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSiteSnapPhotos([]); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl shadow-lg">NEW</button>
                 </div>
             )}
         </div>
@@ -356,7 +360,7 @@ export default function SignOff() {
                           ))
                       ) : (
                           <div className="space-y-4">
-                              <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs">+ CUSTOM TEMPLATE</button>
+                              <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/5 transition">+ CUSTOM TEMPLATE</button>
                               {editingTemplate && (
                                   <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700]">
                                       <input placeholder="TITLE..." value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none text-[var(--text-main)]" />
