@@ -6,7 +6,7 @@ import {
   PenTool, Save, RotateCcw, Share, Printer, FileText, Calendar, 
   User, Trash2, CheckCircle2, Loader2, X, Lock, ArrowLeft, Menu, 
   Settings, Plus, ChevronDown, FolderOpen, Clock, Copy, Eye, Pencil, Pin, PinOff, 
-  Camera, Image as ImageIcon, Maximize2, Check, Search
+  Camera, Image as ImageIcon, Maximize2, Check, Search, ListPlus, AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import SignatureCanvas from "react-signature-canvas";
@@ -29,6 +29,9 @@ export default function SignOff() {
   const [jobSearch, setJobSearch] = useState("");
   const [historySearch, setHistorySearch] = useState("");
 
+  // --- FORM TYPE STATE ---
+  const [docType, setDocType] = useState("AGREEMENT"); // AGREEMENT, PARTS, RETURN
+
   // --- DATA STATE ---
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -47,11 +50,19 @@ export default function SignOff() {
   const [hasSigned, setHasSigned] = useState(false);
   const [savedSignature, setSavedSignature] = useState(null);
 
+  // --- PARTS ORDER STATE ---
+  const [partsList, setPartsList] = useState([{ name: "", model: "", qty: "1" }]);
+
+  // --- RETURN ORDER STATE ---
+  const [returnReason, setReturnReason] = useState("");
+  const [workDone, setWorkDone] = useState("");
+  const [workRemaining, setWorkRemaining] = useState("");
+
   const [editingTemplate, setEditingTemplate] = useState(null); 
 
   const vibrate = (p = 10) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p); };
 
-  // Load contractor from memory (Local Storage)
+  // Memory: Contractor Identity
   useEffect(() => {
     const memory = localStorage.getItem("fdo_last_contractor");
     if (memory) setContractorName(memory);
@@ -91,7 +102,6 @@ export default function SignOff() {
         { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [CUSTOMER], authorize [CONTRACTOR] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
         { id: 'd2', label: "LIABILITY WAIVER", body: "[CONTRACTOR] is not responsible for damages resulting from pre-existing conditions discovered during work.", is_pinned: true },
         { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [CONTRACTOR] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
-        { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [CONTRACTOR] by start time.", is_pinned: true },
         { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [CUSTOMER], confirm that [CONTRACTOR] has completed work to my satisfaction.", is_pinned: true }
     ];
     const merged = [...(dbTemplates || [])];
@@ -142,28 +152,9 @@ export default function SignOff() {
       setSaving(false);
   };
 
-  const togglePin = async (templateId) => {
-      const pinnedCount = templates.filter(t => t.is_pinned).length;
-      const target = templates.find(t => t.id === templateId);
-      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 pinned.");
-      const newStatus = !target.is_pinned;
-      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
-      if (typeof templateId === 'string' && templateId.length > 5) {
-          await supabase.from("contract_templates").update({ is_pinned: newStatus }).eq("id", templateId);
-      }
-  };
-
-  const deleteTemplate = async (t) => {
-    if (t.is_pinned) return showToast("Unpin template before deleting", "error");
-    if (!confirm("Delete template?")) return;
-    await supabase.from("contract_templates").delete().eq("id", t.id);
-    setTemplates(templates.filter(x => x.id !== t.id));
-    showToast("Template Removed", "success");
-  };
-
   const saveContract = async () => {
     const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
-    if (!clientName || !contractBody || !finalProjectName) return alert("Missing fields.");
+    if (!clientName || !finalProjectName) return alert("Missing Client/Project.");
     
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -179,9 +170,17 @@ export default function SignOff() {
       publicUrl = supabase.storage.from("signatures").getPublicUrl(fileName).data.publicUrl;
     }
 
+    // Structured metadata for Parts/Return Orders
+    const metadata = {
+      type: docType,
+      parts: docType === "PARTS" ? partsList : null,
+      return: docType === "RETURN" ? { reason: returnReason, done: workDone, remaining: workRemaining } : null
+    };
+
     const { data: newDoc } = await supabase.from("contracts").insert({
         user_id: user.id, client_name: clientName, project_name: finalProjectName,
-        contract_body: renderLiveBody(), signature_url: publicUrl, status: finalStatus,
+        contract_body: docType === "AGREEMENT" ? renderLiveBody() : JSON.stringify(metadata), 
+        signature_url: publicUrl, status: finalStatus,
         evidence_urls: selectedPhotos
     }).select().single();
 
@@ -190,9 +189,28 @@ export default function SignOff() {
         setIsCustomJob(false);
         setCustomJobName("");
         if (hasSigned) { setIsSigned(true); setSavedSignature(publicUrl); }
-        showToast(finalStatus === "SIGNED" ? "Agreement Finalized" : "Draft Saved", "success");
+        showToast(finalStatus === "SIGNED" ? "Signed & Saved" : "Draft Saved", "success");
     }
     setSaving(false);
+  };
+
+  const togglePin = async (templateId) => {
+      const pinnedCount = templates.filter(t => t.is_pinned).length;
+      const target = templates.find(t => t.id === templateId);
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 pinned.");
+      const newStatus = !target.is_pinned;
+      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
+      if (typeof templateId === 'string' && templateId.length > 5) {
+          await supabase.from("contract_templates").update({ is_pinned: newStatus }).eq("id", templateId);
+      }
+  };
+
+  const deleteTemplate = async (t) => {
+    if (t.is_pinned) return showToast("Unpin to enable deletion", "error");
+    if (!confirm("Delete template?")) return;
+    await supabase.from("contract_templates").delete().eq("id", t.id);
+    setTemplates(templates.filter(x => x.id !== t.id));
+    showToast("Template Removed", "success");
   };
 
   const saveNewTemplate = async () => {
@@ -219,7 +237,7 @@ export default function SignOff() {
       <div className="flex items-center justify-between px-6 pt-4 mb-4 no-print">
         <div className="flex items-center gap-4">
           <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors"><ArrowLeft size={28} /></Link>
-          <div><h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1><p className="text-xs opacity-60 font-black uppercase">Agreement Suite</p></div>
+          <div><h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1><p className="text-xs opacity-60 font-bold tracking-widest uppercase">Digital Agreement</p></div>
         </div>
         <button onClick={() => setShowSettings(true)} className="industrial-card p-3 rounded-xl text-[#FF6700] border border-[var(--border-color)] shadow-md"><Menu size={24} /></button>
       </div>
@@ -235,7 +253,7 @@ export default function SignOff() {
                     <button onClick={() => setIsCustomJob(false)}><X size={20}/></button>
                 </div>
             ) : (
-                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-sm">
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-sm transition-all">
                     <div className="flex items-center gap-3"><FolderOpen className="text-[#FF6700]" size={22} /><span className="font-bold uppercase tracking-wide truncate">{selectedJob || "SELECT PROJECT"}</span></div>
                     <ChevronDown size={20} className={isDropdownOpen ? "rotate-180" : ""} />
                 </button>
@@ -255,10 +273,22 @@ export default function SignOff() {
             )}
         </div>
 
+        {/* DOCUMENT TYPE SELECTOR */}
+        {!isSigned && (
+          <div className="flex gap-1 bg-zinc-800/40 p-1 rounded-xl mb-4 border border-zinc-700/50 no-print">
+            {["AGREEMENT", "PARTS", "RETURN"].map(type => (
+              <button key={type} onClick={() => setDocType(type)} className={`flex-1 py-2 text-[10px] font-black rounded-lg transition ${docType === type ? 'bg-[#FF6700] text-black shadow-lg' : 'text-zinc-500 hover:text-white'}`}>{type}</button>
+            ))}
+          </div>
+        )}
+
         {/* PAPER UI */}
-        <div className="bg-white text-black p-8 rounded-xl shadow-2xl relative min-h-[75vh] flex flex-col border border-gray-300">
+        <div className="bg-white text-black p-8 rounded-xl shadow-2xl relative min-h-[75vh] flex flex-col border border-gray-300 overflow-hidden">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
-                <div><h1 className="text-3xl font-oswald font-bold uppercase">Agreement</h1><p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p></div>
+                <div>
+                  <h1 className="text-3xl font-oswald font-bold uppercase">{docType === "AGREEMENT" ? "Agreement" : docType === "PARTS" ? "Parts Order" : "Return Order"}</h1>
+                  <p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p>
+                </div>
                 {isSigned && <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] text-2xl font-oswald flex items-center gap-2"><CheckCircle2 size={24}/> SIGNED</div>}
             </div>
 
@@ -269,22 +299,58 @@ export default function SignOff() {
                         {isSigned ? <p className="font-bold text-lg uppercase py-1">{clientName}</p> : <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="CUSTOMER NAME..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
                     </div>
                     <div className="border-b border-gray-200 pb-2 relative">
-                        <label className="block text-[10px] font-black uppercase text-gray-400">Contractor</label>
+                        <label className="block text-[10px] font-black uppercase text-gray-400">Authorized Contractor</label>
                         {isSigned ? <p className="font-bold text-lg uppercase py-1">{contractorName}</p> : <input value={contractorName} onChange={e => setContractorName(e.target.value.toUpperCase())} placeholder="COMPANY / LICENSE #" className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
                     </div>
                 </div>
 
-                <div className="relative">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Scope & Terms</label>
-                    {!isSigned && (
-                        <div className="flex gap-2 overflow-x-auto mb-3 pb-2 no-print scrollbar-hide">
-                            {templates.filter(t => t.is_pinned).map(t => (
-                                <button key={t.id} onClick={() => { setContractBody(t.body); vibrate(15); }} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
-                            ))}
+                {/* CONDITIONAL RENDERING BY DOC TYPE */}
+                {docType === "AGREEMENT" && (
+                  <div className="relative">
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Scope & Terms</label>
+                      {!isSigned && (
+                          <div className="flex gap-2 overflow-x-auto mb-3 pb-2 no-print scrollbar-hide">
+                              {templates.filter(t => t.is_pinned).map(t => (
+                                  <button key={t.id} onClick={() => { setContractBody(t.body); vibrate(15); }} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
+                              ))}
+                          </div>
+                      )}
+                      {isSigned ? <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed p-4 bg-zinc-50 rounded border border-gray-100">{renderLiveBody()}</div> : <textarea value={contractBody} onChange={e => setContractBody(e.target.value)} placeholder="Type terms here... use [CUSTOMER] for auto-fill." className="w-full h-80 font-mono text-sm leading-relaxed bg-zinc-50/50 p-4 border border-dashed border-gray-300 rounded-lg outline-none focus:border-[#FF6700] transition" />}
+                  </div>
+                )}
+
+                {docType === "PARTS" && (
+                  <div className="space-y-4">
+                    <label className="block text-[10px] font-black uppercase text-gray-400">Parts Required (Internal Use)</label>
+                    <div className="space-y-2">
+                      {partsList.map((item, idx) => (
+                        <div key={idx} className="flex gap-2 items-end border-b border-gray-100 pb-2">
+                          <input placeholder="Part Name" className="flex-1 text-xs font-bold uppercase outline-none" value={item.name} onChange={e => { const nl = [...partsList]; nl[idx].name = e.target.value; setPartsList(nl); }} />
+                          <input placeholder="Model #" className="flex-1 text-xs font-mono uppercase outline-none text-gray-500" value={item.model} onChange={e => { const nl = [...partsList]; nl[idx].model = e.target.value; setPartsList(nl); }} />
+                          <input type="number" className="w-12 text-xs font-bold text-center outline-none bg-zinc-50 rounded" value={item.qty} onChange={e => { const nl = [...partsList]; nl[idx].qty = e.target.value; setPartsList(nl); }} />
                         </div>
-                    )}
-                    {isSigned ? <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed p-4 bg-zinc-50 rounded border border-gray-100">{renderLiveBody()}</div> : <textarea value={contractBody} onChange={e => setContractBody(e.target.value)} placeholder="Type terms here... use [CUSTOMER] for auto-fill." className="w-full h-80 font-mono text-sm leading-relaxed bg-zinc-50/50 p-4 border border-dashed border-gray-300 rounded-lg outline-none focus:border-[#FF6700] transition" />}
-                </div>
+                      ))}
+                      {!isSigned && <button onClick={() => setPartsList([...partsList, { name: "", model: "", qty: "1" }])} className="text-[9px] font-black text-[#FF6700] uppercase mt-2">+ Add Line Item</button>}
+                    </div>
+                  </div>
+                )}
+
+                {docType === "RETURN" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400">Reason for Return</label>
+                      <input className="w-full text-sm font-bold uppercase outline-none border-b border-gray-100 py-1" value={returnReason} onChange={e => setReturnReason(e.target.value)} placeholder="E.G. MISSING CAPACITOR / WEATHER..." />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400">Work Completed Today</label>
+                      <textarea className="w-full h-24 text-xs font-mono bg-zinc-50 p-3 rounded outline-none border border-dashed border-gray-200 mt-1" value={workDone} onChange={e => setWorkDone(e.target.value)} placeholder="What did you finish?" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 text-red-500">Work Remaining</label>
+                      <textarea className="w-full h-24 text-xs font-mono bg-red-50/30 p-3 rounded outline-none border border-dashed border-red-200 mt-1" value={workRemaining} onChange={e => setWorkRemaining(e.target.value)} placeholder="What needs to be done next visit?" />
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-8 border-t border-gray-100 pt-6">
                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-3 flex items-center gap-2"><ImageIcon size={14}/> Evidence Attachments</label>
@@ -301,7 +367,7 @@ export default function SignOff() {
             </div>
 
             <div className="mt-12 border-t-2 border-black pt-6 relative">
-                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Customer Signature</label>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Signature</label>
                 {isSigned ? <img src={savedSignature} className="h-24 object-contain" /> : (
                     <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-zinc-50 hover:border-[#FF6700] transition">
                         <SignatureCanvas ref={sigPad} penColor="black" onEnd={handleSignatureEnd} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
@@ -318,8 +384,12 @@ export default function SignOff() {
                 </button>
             ) : (
                 <div className="flex-1 flex gap-3">
-                    <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] transition flex items-center justify-center gap-2 text-xl uppercase"><Share size={24}/> Share PDF</button>
-                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSelectedPhotos([]); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
+                    <button onClick={() => { 
+                      const text = `FIELDDESKOPS: ${docType}\nJob: ${selectedJob}\nClient: ${clientName}\n\nStatus: SIGNED`;
+                      if (navigator.share) navigator.share({ title: `Signed ${docType}`, text });
+                      else { navigator.clipboard.writeText(text); showToast("Summary Copied", "success"); }
+                    }} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl uppercase"><Share size={24}/> Share</button>
+                    <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSelectedPhotos([]); setPartsList([{ name: "", model: "", qty: "1" }]); setDocType("AGREEMENT"); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
                 </div>
             )}
         </div>
