@@ -26,7 +26,8 @@ export default function SignOff() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [zoomImage, setZoomImage] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [jobSearch, setJobSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
 
   // --- DATA STATE ---
   const [contracts, setContracts] = useState([]);
@@ -40,7 +41,7 @@ export default function SignOff() {
   const [isCustomJob, setIsCustomJob] = useState(false);
   const [customJobName, setCustomJobName] = useState("");
   const [clientName, setClientName] = useState("");
-  const [contractorName, setContractorName] = useState(""); // LEGAL SAFETY: Defaults to empty
+  const [contractorName, setContractorName] = useState(""); 
   const [contractBody, setContractBody] = useState("");
   const [isSigned, setIsSigned] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
@@ -50,23 +51,11 @@ export default function SignOff() {
 
   const vibrate = (p = 10) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p); };
 
-  // --- COMPONENT FUNCTIONS ---
-
-  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
-
-  const clearSignature = () => {
-    if (sigPad.current.clear) {
-      sigPad.current.clear();
-      setHasSigned(false);
-    }
-  };
-
-  const handleSignatureEnd = () => { 
-    if (sigPad.current && !sigPad.current.isEmpty()) {
-      setHasSigned(true);
-      vibrate(20);
-    }
-  };
+  // Load contractor from memory (Local Storage)
+  useEffect(() => {
+    const memory = localStorage.getItem("fdo_last_contractor");
+    if (memory) setContractorName(memory);
+  }, []);
 
   const loadProjectPhotos = async (jobName) => {
     if (!jobName || jobName === "SELECT PROJECT") return;
@@ -83,32 +72,27 @@ export default function SignOff() {
 
     if (history || photoData) {
         if (history) setContracts(history);
-        
-        // Activity-First Sorting: Combine projects from both sources
         const combined = [
           ...(history ? history.map(c => ({ name: c.project_name, date: new Date(c.created_at) })) : []),
           ...(photoData ? photoData.map(p => ({ name: p.job_name, date: new Date(p.created_at) })) : [])
         ];
-
-        // Sort by most recent date, then unique names
         const sortedUnique = combined
           .sort((a, b) => b.date - a.date)
           .reduce((acc, current) => {
             if (!acc.find(item => item === current.name)) acc.push(current.name);
             return acc;
           }, []);
-
-        setRecentJobs(sortedUnique.slice(0, 20));
+        setRecentJobs(sortedUnique);
         if (sortedUnique.length > 0) setSelectedJob(sortedUnique[0]);
     }
 
     const { data: dbTemplates } = await supabase.from("contract_templates").select("*").order("created_at", { ascending: false });
     const defaults = [
-        { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [Client Name], authorize [Contractor Name] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
-        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or hidden structural weaknesses.", is_pinned: true },
-        { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [Contractor Name] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
-        { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [Contractor Name] by start time.", is_pinned: true },
-        { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [Client Name], confirm that [Contractor Name] has completed work to my satisfaction.", is_pinned: true }
+        { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [CUSTOMER], authorize [CONTRACTOR] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
+        { id: 'd2', label: "LIABILITY WAIVER", body: "[CONTRACTOR] is not responsible for damages resulting from pre-existing conditions discovered during work.", is_pinned: true },
+        { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [CONTRACTOR] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
+        { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [CONTRACTOR] by start time.", is_pinned: true },
+        { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [CUSTOMER], confirm that [CONTRACTOR] has completed work to my satisfaction.", is_pinned: true }
     ];
     const merged = [...(dbTemplates || [])];
     defaults.forEach(d => { if (!merged.find(m => m.label === d.label)) merged.push(d); });
@@ -117,17 +101,25 @@ export default function SignOff() {
   };
 
   useEffect(() => { loadAllData(); }, []);
+  useEffect(() => { if (selectedJob) loadProjectPhotos(selectedJob); }, [selectedJob]);
 
-  useEffect(() => {
-    if (selectedJob) loadProjectPhotos(selectedJob);
-  }, [selectedJob]);
-
-  const applySmartTemplate = (templateBody) => {
-      vibrate(15);
-      let smartText = templateBody.replaceAll("[Client Name]", clientName || "[CLIENT NAME]");
-      smartText = smartText.replaceAll("[Contractor Name]", contractorName || "[CONTRACTOR NAME]");
-      setContractBody(smartText);
+  // LIVE MIRRORING LOGIC
+  const renderLiveBody = () => {
+    let text = contractBody;
+    text = text.replaceAll("[CUSTOMER]", clientName || "__________");
+    text = text.replaceAll("[CONTRACTOR]", contractorName || "__________");
+    return text;
   };
+
+  const clearSignature = () => {
+    if (sigPad.current.clear) {
+      sigPad.current.clear();
+      setHasSigned(false);
+      setIsSigned(false);
+    }
+  };
+
+  const handleSignatureEnd = () => { if (!sigPad.current.isEmpty()) setHasSigned(true); };
 
   const handlePhotoUpload = async (e) => {
       if (!e.target.files?.[0] || !selectedJob) return;
@@ -139,7 +131,7 @@ export default function SignOff() {
       if (!upErr) {
           const publicUrl = supabase.storage.from("sitesnap").getPublicUrl(fileName).data.publicUrl;
           const { data: photoObj } = await supabase.from("site_photos").insert({
-              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "Attached via SignOff"
+              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "SignOff Attachment"
           }).select().single();
           if (photoObj) {
             setAllJobPhotos([photoObj, ...allJobPhotos]);
@@ -150,57 +142,10 @@ export default function SignOff() {
       setSaving(false);
   };
 
-  const togglePhotoSelection = (url) => {
-      vibrate(5);
-      setSelectedPhotos(prev => prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]);
-  };
-
-  const saveContract = async () => {
-    const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
-    if (!clientName || !contractBody || !finalProjectName) return alert("Fill out all fields.");
-    
-    setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    let publicUrl = null;
-    let currentStatus = "DRAFT";
-
-    // Only upload signature if it exists
-    if (hasSigned && !isSigned) {
-      const sigBlob = await new Promise(r => sigPad.current.getCanvas().toBlob(r, "image/png"));
-      const fileName = `${user.id}/sigs/${Date.now()}.png`;
-      await supabase.storage.from("signatures").upload(fileName, sigBlob);
-      publicUrl = supabase.storage.from("signatures").getPublicUrl(fileName).data.publicUrl;
-      currentStatus = "SIGNED";
-    }
-
-    const { data: newDoc } = await supabase.from("contracts").insert({
-        user_id: user.id, client_name: clientName, project_name: finalProjectName,
-        contract_body: contractBody, signature_url: publicUrl, status: currentStatus,
-        evidence_urls: selectedPhotos
-    }).select().single();
-
-    if (newDoc) {
-        setContracts([newDoc, ...contracts]);
-        if (!recentJobs.includes(finalProjectName)) setRecentJobs([finalProjectName, ...recentJobs.slice(0, 14)]);
-        setSelectedJob(finalProjectName);
-        setIsCustomJob(false);
-        setCustomJobName("");
-        if (currentStatus === "SIGNED") {
-          setSavedSignature(publicUrl);
-          setIsSigned(true);
-          showToast("Agreement Signed & Saved", "success");
-        } else {
-          showToast("Draft Saved to History", "success");
-        }
-    }
-    setSaving(false);
-  };
-
   const togglePin = async (templateId) => {
       const pinnedCount = templates.filter(t => t.is_pinned).length;
       const target = templates.find(t => t.id === templateId);
-      if (!target.is_pinned && pinnedCount >= 5) return alert("Dashboard limit: 5 pinned.");
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 pinned.");
       const newStatus = !target.is_pinned;
       setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
       if (typeof templateId === 'string' && templateId.length > 5) {
@@ -208,14 +153,46 @@ export default function SignOff() {
       }
   };
 
-  const deleteTemplate = async (template) => {
-    if (template.is_pinned) {
-      return showToast("Unpin template before deleting", "error");
+  const deleteTemplate = async (t) => {
+    if (t.is_pinned) return showToast("Unpin template before deleting", "error");
+    if (!confirm("Delete template?")) return;
+    await supabase.from("contract_templates").delete().eq("id", t.id);
+    setTemplates(templates.filter(x => x.id !== t.id));
+    showToast("Template Removed", "success");
+  };
+
+  const saveContract = async () => {
+    const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
+    if (!clientName || !contractBody || !finalProjectName) return alert("Missing fields.");
+    
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    localStorage.setItem("fdo_last_contractor", contractorName);
+
+    let publicUrl = null;
+    const finalStatus = hasSigned ? "SIGNED" : "DRAFT";
+
+    if (hasSigned) {
+      const sigBlob = await new Promise(r => sigPad.current.getCanvas().toBlob(r, "image/png"));
+      const fileName = `${user.id}/sigs/${Date.now()}.png`;
+      await supabase.storage.from("signatures").upload(fileName, sigBlob);
+      publicUrl = supabase.storage.from("signatures").getPublicUrl(fileName).data.publicUrl;
     }
-    if (!confirm("Delete this template permanently?")) return;
-    await supabase.from("contract_templates").delete().eq("id", template.id);
-    setTemplates(templates.filter(t => t.id !== template.id));
-    showToast("Template Deleted", "success");
+
+    const { data: newDoc } = await supabase.from("contracts").insert({
+        user_id: user.id, client_name: clientName, project_name: finalProjectName,
+        contract_body: renderLiveBody(), signature_url: publicUrl, status: finalStatus,
+        evidence_urls: selectedPhotos
+    }).select().single();
+
+    if (newDoc) {
+        setContracts([newDoc, ...contracts]);
+        setIsCustomJob(false);
+        setCustomJobName("");
+        if (hasSigned) { setIsSigned(true); setSavedSignature(publicUrl); }
+        showToast(finalStatus === "SIGNED" ? "Agreement Finalized" : "Draft Saved", "success");
+    }
+    setSaving(false);
   };
 
   const saveNewTemplate = async () => {
@@ -224,15 +201,16 @@ export default function SignOff() {
     const { data } = await supabase.from("contract_templates").insert({
         user_id: user.id, label: editingTemplate.label.toUpperCase(), body: editingTemplate.body, is_pinned: false
     }).select().single();
-    if (data) {
-        setTemplates([data, ...templates]);
-        setEditingTemplate(null);
-        showToast("Template Created", "success");
-    }
+    if (data) { setTemplates([data, ...templates]); setEditingTemplate(null); showToast("Created", "success"); }
   };
 
-  // Job Search Logic
-  const filteredJobs = recentJobs.filter(j => j.toLowerCase().includes(searchQuery.toLowerCase()));
+  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
+
+  const filteredJobs = recentJobs.filter(j => j.toLowerCase().includes(jobSearch.toLowerCase()));
+  const filteredHistory = contracts.filter(c => 
+    c.client_name?.toLowerCase().includes(historySearch.toLowerCase()) || 
+    c.project_name?.toLowerCase().includes(historySearch.toLowerCase())
+  );
 
   return (
     <div className={`min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32 font-inter ${showPhotoPicker || zoomImage ? 'overflow-hidden' : ''}`}>
@@ -241,37 +219,31 @@ export default function SignOff() {
       <div className="flex items-center justify-between px-6 pt-4 mb-4 no-print">
         <div className="flex items-center gap-4">
           <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors"><ArrowLeft size={28} /></Link>
-          <div>
-            <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1>
-            <p className="text-xs opacity-60 font-bold tracking-widest uppercase">Agreement Suite</p>
-          </div>
+          <div><h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">SignOff</h1><p className="text-xs opacity-60 font-black uppercase">Agreement Suite</p></div>
         </div>
-        <button onClick={() => setShowSettings(true)} className="industrial-card p-3 rounded-xl text-[#FF6700] border border-[var(--border-color)]">
-          <Menu size={24} />
-        </button>
+        <button onClick={() => setShowSettings(true)} className="industrial-card p-3 rounded-xl text-[#FF6700] border border-[var(--border-color)] shadow-md"><Menu size={24} /></button>
       </div>
 
       <main className="max-w-4xl mx-auto px-6">
         
-        {/* SEARCHABLE JOB SELECTOR */}
+        {/* JOB SELECTOR */}
         <div className="relative mb-6 no-print">
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
                     <Plus className="text-[#FF6700]" size={20} />
-                    <input autoFocus placeholder="NEW PROJECT NAME..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
+                    <input autoFocus placeholder="NEW PROJECT..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} onBlur={() => !customJobName && setIsCustomJob(false)} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
                     <button onClick={() => setIsCustomJob(false)}><X size={20}/></button>
                 </div>
             ) : (
-                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-md transition-all">
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-sm">
                     <div className="flex items-center gap-3"><FolderOpen className="text-[#FF6700]" size={22} /><span className="font-bold uppercase tracking-wide truncate">{selectedJob || "SELECT PROJECT"}</span></div>
                     <ChevronDown size={20} className={isDropdownOpen ? "rotate-180" : ""} />
                 </button>
             )}
             {isDropdownOpen && !isCustomJob && (
-                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
                     <div className="p-3 bg-[var(--bg-card)] border-b border-[var(--border-color)] flex items-center gap-2">
-                        <Search size={16} className="text-zinc-500" />
-                        <input placeholder="SEARCH JOBS..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent outline-none text-xs font-black w-full uppercase" />
+                        <Search size={16} className="text-zinc-500" /><input placeholder="SEARCH..." value={jobSearch} onChange={e => setJobSearch(e.target.value)} className="bg-transparent outline-none text-xs font-black w-full uppercase" />
                     </div>
                     <div className="max-h-64 overflow-y-auto p-2 space-y-1">
                         {filteredJobs.map(job => (
@@ -286,49 +258,32 @@ export default function SignOff() {
         {/* PAPER UI */}
         <div className="bg-white text-black p-8 rounded-xl shadow-2xl relative min-h-[75vh] flex flex-col border border-gray-300">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
-                <div><h1 className="text-3xl font-oswald font-bold uppercase tracking-tighter">Agreement</h1><p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p></div>
-                {/* BRAND ORANGE SIGNED STAMP */}
-                {(isSigned || hasSigned) && (
-                    <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] opacity-90 text-2xl font-oswald flex items-center gap-2">
-                        <CheckCircle2 size={24}/> SIGNED
-                    </div>
-                )}
+                <div><h1 className="text-3xl font-oswald font-bold uppercase">Agreement</h1><p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p></div>
+                {isSigned && <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] text-2xl font-oswald flex items-center gap-2"><CheckCircle2 size={24}/> SIGNED</div>}
             </div>
 
             <div className="space-y-6 flex-1">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="border-b border-gray-200 pb-2 relative">
                         <label className="block text-[10px] font-black uppercase text-gray-400">Recipient (Customer)</label>
-                        {isSigned ? (
-                           <div className="flex items-center justify-between"><p className="font-bold text-lg uppercase py-1">{clientName}</p><Check size={16} className="text-[#FF6700]"/></div>
-                        ) : (
-                           <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="CUSTOMER NAME..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />
-                        )}
+                        {isSigned ? <p className="font-bold text-lg uppercase py-1">{clientName}</p> : <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="CUSTOMER NAME..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
                     </div>
                     <div className="border-b border-gray-200 pb-2 relative">
-                        <label className="block text-[10px] font-black uppercase text-gray-400">Authorized Contractor</label>
-                        {isSigned ? (
-                           <div className="flex items-center justify-between"><p className="font-bold text-lg uppercase py-1">{contractorName}</p><Check size={16} className="text-[#FF6700]"/></div>
-                        ) : (
-                           <input value={contractorName} onChange={e => setContractorName(e.target.value.toUpperCase())} placeholder="CO. NAME / LICENSE #" className="w-full font-bold text-lg outline-none bg-transparent uppercase" />
-                        )}
+                        <label className="block text-[10px] font-black uppercase text-gray-400">Contractor</label>
+                        {isSigned ? <p className="font-bold text-lg uppercase py-1">{contractorName}</p> : <input value={contractorName} onChange={e => setContractorName(e.target.value.toUpperCase())} placeholder="COMPANY / LICENSE #" className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
                     </div>
                 </div>
 
                 <div className="relative">
                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Scope & Terms</label>
                     {!isSigned && (
-                        <div className="flex gap-2 overflow-x-auto mb-3 pb-2 scrollbar-hide no-print">
+                        <div className="flex gap-2 overflow-x-auto mb-3 pb-2 no-print scrollbar-hide">
                             {templates.filter(t => t.is_pinned).map(t => (
-                                <button key={t.id} onClick={() => applySmartTemplate(t.body)} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
+                                <button key={t.id} onClick={() => { setContractBody(t.body); vibrate(15); }} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
                             ))}
                         </div>
                     )}
-                    {isSigned ? (
-                        <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed p-4 bg-zinc-50 rounded border border-gray-100">{contractBody}</div>
-                    ) : (
-                        <textarea value={contractBody} onChange={e => setContractBody(e.target.value)} placeholder="Type terms here..." className="w-full h-80 font-mono text-sm leading-relaxed bg-zinc-50/50 p-4 border border-dashed border-gray-300 rounded-lg outline-none focus:border-[#FF6700] transition" />
-                    )}
+                    {isSigned ? <div className="whitespace-pre-wrap font-mono text-sm leading-relaxed p-4 bg-zinc-50 rounded border border-gray-100">{renderLiveBody()}</div> : <textarea value={contractBody} onChange={e => setContractBody(e.target.value)} placeholder="Type terms here... use [CUSTOMER] for auto-fill." className="w-full h-80 font-mono text-sm leading-relaxed bg-zinc-50/50 p-4 border border-dashed border-gray-300 rounded-lg outline-none focus:border-[#FF6700] transition" />}
                 </div>
 
                 <div className="mt-8 border-t border-gray-100 pt-6">
@@ -337,15 +292,17 @@ export default function SignOff() {
                         {selectedPhotos.map((url, i) => (
                             <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm group">
                                 <img src={url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setZoomImage(url)} />
+                                {!isSigned && <button onClick={() => setSelectedPhotos(prev => prev.filter(u => u !== url))} className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full"><X size={10}/></button>}
                             </div>
                         ))}
+                        {!isSigned && <button onClick={() => setShowPhotoPicker(true)} className="aspect-square rounded border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center text-zinc-400 hover:text-[#FF6700] hover:border-[#FF6700] transition"><Plus size={20}/><span className="text-[8px] font-black">PICK</span></button>}
                     </div>
                 </div>
             </div>
 
             <div className="mt-12 border-t-2 border-black pt-6 relative">
                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Customer Signature</label>
-                {isSigned ? <img src={savedSignature} className="h-24 object-contain" alt="Signature" /> : (
+                {isSigned ? <img src={savedSignature} className="h-24 object-contain" /> : (
                     <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-zinc-50 hover:border-[#FF6700] transition">
                         <SignatureCanvas ref={sigPad} penColor="black" onEnd={handleSignatureEnd} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
                         <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print"><RotateCcw size={18}/></button>
@@ -382,59 +339,75 @@ export default function SignOff() {
                       <button onClick={() => setSettingsTab("TEMPLATES")} className={`flex-1 pb-3 font-black text-[10px] tracking-widest ${settingsTab === "TEMPLATES" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-500"}`}>TEMPLATES</button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                      {settingsTab === "HISTORY" ? (
-                          contracts?.map(c => (
-                              <div key={c.id} className="industrial-card p-4 rounded-xl flex flex-col gap-2 relative">
-                                  <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase">
-                                      <Clock size={12}/> {new Date(c.created_at).toLocaleString()}
-                                      <span className={`px-2 py-0.5 rounded ${c.status === 'SIGNED' ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-400'}`}>{c.status}</span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <Eye size={18} className="text-[#FF6700] cursor-pointer" onClick={() => { setClientName(c.client_name); setContractBody(c.contract_body); setSelectedJob(c.project_name); setSavedSignature(c.signature_url); setSelectedPhotos(c.evidence_urls || []); setIsSigned(c.status === 'SIGNED'); setShowSettings(false); }} />
-                                    </div>
-                                  </div>
-                                  <span className="font-bold uppercase text-[#FF6700] truncate">{c.project_name}</span>
-                                  <span className="text-[10px] font-bold opacity-60 uppercase">{c.client_name}</span>
-                              </div>
-                          ))
-                      ) : (
-                          <div className="space-y-4">
-                              <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs">+ CUSTOM TEMPLATE</button>
-                              {editingTemplate && (
-                                  <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700]">
-                                      <input placeholder="TITLE..." value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none text-[var(--text-main)]" />
-                                      <textarea placeholder="TERMS..." value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} className="w-full bg-transparent h-40 text-xs font-mono outline-none resize-none text-[var(--text-main)]" />
-                                      <div className="flex gap-2">
-                                          <button onClick={saveNewTemplate} className="flex-1 bg-[#FF6700] text-black font-black py-2 rounded-lg text-xs">SAVE</button>
-                                          <button onClick={() => setEditingTemplate(null)} className="flex-1 bg-zinc-800 text-white font-black py-2 rounded-lg text-xs">CANCEL</button>
-                                      </div>
-                                  </div>
-                              )}
-                              {templates.map(t => (
-                                  <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center ${t.is_pinned ? 'border-[#FF6700]' : 'border-[var(--border-color)]'}`}>
-                                      <div className="flex flex-col"><span className="font-bold uppercase text-[10px] truncate max-w-[120px]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
-                                      <div className="flex gap-1">
-                                          <button onClick={() => togglePin(t.id)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-500'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
-                                          <button onClick={() => deleteTemplate(t)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed' : 'bg-red-900/20 text-red-500'}`}><Trash2 size={14}/></button>
-                                          <button onClick={() => { applySmartTemplate(t.body); setShowSettings(false); }} className="p-1.5 bg-zinc-800 text-[#FF6700] rounded"><Copy size={14}/></button>
-                                      </div>
+                  {settingsTab === "HISTORY" ? (
+                      <div className="flex-1 flex flex-col min-h-0">
+                          <div className="mb-4 relative"><Search className="absolute left-3 top-2.5 text-zinc-500" size={14} /><input placeholder="SEARCH HISTORY..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-2.5 pl-9 rounded-lg text-[10px] font-black outline-none" /></div>
+                          <div className="flex-1 overflow-y-auto space-y-4">
+                              {filteredHistory.map(c => (
+                                  <div key={c.id} className="industrial-card p-4 rounded-xl flex flex-col gap-2 relative">
+                                      <div className="flex justify-between items-center"><span className="text-[9px] font-black uppercase text-zinc-500"><Clock size={10} className="inline mr-1" /> {new Date(c.created_at).toLocaleString()}</span><span className={`text-[8px] font-black px-2 py-0.5 rounded ${c.status === 'SIGNED' ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-400'}`}>{c.status}</span></div>
+                                      <span className="font-bold uppercase text-[#FF6700] truncate">{c.project_name}</span>
+                                      <div className="flex justify-between items-center"><span className="text-[10px] font-bold opacity-60 uppercase">{c.client_name}</span><Eye size={18} className="text-[#FF6700] cursor-pointer" onClick={() => { setClientName(c.client_name); setContractBody(c.contract_body); setSelectedJob(c.project_name); setSavedSignature(c.signature_url); setSelectedPhotos(c.evidence_urls || []); setIsSigned(c.status === 'SIGNED'); setShowSettings(false); }} /></div>
                                   </div>
                               ))}
                           </div>
-                      )}
-                  </div>
+                      </div>
+                  ) : (
+                      <div className="space-y-4 overflow-y-auto">
+                          <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs">+ CUSTOM TEMPLATE</button>
+                          {editingTemplate && (
+                              <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700]">
+                                  <input placeholder="TITLE..." value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none" />
+                                  <div className="flex gap-2">
+                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CUSTOMER]"})} className="bg-zinc-800 text-white text-[8px] font-black px-2 py-1 rounded">+ CUSTOMER</button>
+                                    <button onClick={() => setEditingTemplate({...editingTemplate, body: editingTemplate.body + " [CONTRACTOR]"})} className="bg-zinc-800 text-white text-[8px] font-black px-2 py-1 rounded">+ COMPANY</button>
+                                  </div>
+                                  <textarea placeholder="TERMS..." value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} className="w-full bg-transparent h-40 text-xs font-mono outline-none resize-none" />
+                                  <div className="flex gap-2"><button onClick={saveNewTemplate} className="flex-1 bg-[#FF6700] text-black font-black py-2 rounded-lg text-xs">SAVE</button><button onClick={() => setEditingTemplate(null)} className="flex-1 bg-zinc-800 text-white font-black py-2 rounded-lg text-xs">CANCEL</button></div>
+                              </div>
+                          )}
+                          {templates.map(t => (
+                              <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center ${t.is_pinned ? 'border-[#FF6700]' : ''}`}>
+                                  <div className="flex flex-col"><span className="font-bold uppercase text-[10px] truncate max-w-[120px]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
+                                  <div className="flex gap-1">
+                                      <button onClick={() => togglePin(t.id)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-500'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
+                                      <button onClick={() => deleteTemplate(t)} className={`p-1.5 rounded ${t.is_pinned ? 'bg-zinc-900 text-zinc-700 cursor-not-allowed opacity-50' : 'bg-red-900/20 text-red-500'}`}><Trash2 size={14}/></button>
+                                      <button onClick={() => { setContractBody(t.body); setShowSettings(false); }} className="p-1.5 bg-zinc-800 text-[#FF6700] rounded"><Copy size={14}/></button>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
               </div>
           </div>
       )}
 
+      {/* PHOTO PICKER MODAL */}
+      {showPhotoPicker && (
+        <div className="fixed inset-0 z-[100] bg-[var(--bg-main)] flex flex-col animate-in slide-in-from-bottom">
+          <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center"><h2 className="text-xl font-oswald font-bold text-[#FF6700]">JOB PHOTO VAULT</h2><button onClick={() => setShowPhotoPicker(false)} className="p-2 text-[var(--text-main)]"><X size={32}/></button></div>
+          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-4">
+            {allJobPhotos.map((photo, i) => {
+              const isPicked = selectedPhotos.includes(photo.image_url);
+              return (
+                <div key={i} className={`relative aspect-[4/3] rounded-xl overflow-hidden border-4 transition-all ${isPicked ? 'border-[#FF6700]' : 'border-transparent'}`} onClick={() => togglePhotoSelection(photo.image_url)}>
+                  <img src={photo.image_url} className="w-full h-full object-cover" />
+                  <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">{photo.tag}</div>
+                  {isPicked && <div className="absolute inset-0 bg-[#FF6700]/20 flex items-center justify-center"><CheckCircle2 className="text-[#FF6700] bg-white rounded-full" size={40}/></div>}
+                  <button onClick={(e) => { e.stopPropagation(); setZoomImage(photo.image_url); }} className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg"><Maximize2 size={16}/></button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="p-6 border-t border-[var(--border-color)]"><button onClick={() => setShowPhotoPicker(false)} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase">DONE SELECTING ({selectedPhotos.length})</button></div>
+        </div>
+      )}
+
+      {/* ZOOM LIGHTBOX */}
       {zoomImage && (
         <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col animate-in zoom-in duration-150" onClick={() => setZoomImage(null)}>
           <div className="p-6 flex justify-end"><button className="text-white p-2"><X size={40}/></button></div>
-          <div className="flex-1 flex items-center justify-center p-4">
-            <img src={zoomImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
-          </div>
+          <div className="flex-1 flex items-center justify-center p-4"><img src={zoomImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" /></div>
         </div>
       )}
 
