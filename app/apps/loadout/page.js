@@ -34,7 +34,7 @@ export default function LoadOut() {
   // --- SWAP STATE (Replaces Drag & Drop) ---
   const [swapSourceIndex, setSwapSourceIndex] = useState(null);
   
-  // --- ADD MODAL STATE (Unified) ---
+  // --- ADD MODAL STATE (Unified - No Modes) ---
   const [showAddModal, setShowAddModal] = useState(false);
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
@@ -51,15 +51,6 @@ export default function LoadOut() {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [toolFilter, setToolFilter] = useState("ALL");
   const [newMemberName, setNewMemberName] = useState("");
-
-  const colors = [
-    { hex: "#262626", name: "Charcoal" },
-    { hex: THEME_ORANGE, name: "Brand Orange" }, 
-    { hex: "#7f1d1d", name: "Red" },
-    { hex: "#14532d", name: "Green" },
-    { hex: "#1e3a8a", name: "Blue" },
-    { hex: "#581c87", name: "Purple" },
-  ];
 
   // HAPTIC ENGINE
   const vibrate = (pattern = 10) => {
@@ -123,7 +114,7 @@ export default function LoadOut() {
     }
   };
 
-  // --- SWAP LOGIC (Replaces Drag & Drop) ---
+  // --- SWAP LOGIC (The "Patch") ---
   const handleSwapClick = (index) => {
       vibrate(20);
       
@@ -401,7 +392,7 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
 
-                {/* SETTINGS MENU */}
+                {/* SETTINGS MENU (Z-INDEX 50 to Fix Overlap) */}
                 {showSettings && (
                     <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
@@ -426,11 +417,13 @@ export default function LoadOut() {
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
+                        
                         <div className="mb-4 pb-4 border-b border-gray-700">
                              <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
                                 <Users size={16}/> MANAGE TEAM
                              </button>
                         </div>
+
                         <div className="space-y-2 pb-4 border-b border-gray-700">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
@@ -455,7 +448,7 @@ export default function LoadOut() {
         {activeTab === "STOCK" && (
             <div className="animate-in fade-in slide-in-from-left-4">
                 
-                {/* ACTION BAR (STICKY) */}
+                {/* ACTION BAR (STICKY Z-30) */}
                 <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
@@ -613,7 +606,7 @@ export default function LoadOut() {
         </div>
       )}
 
-      {/* TOOL MODAL */}
+      {/* TOOL MODAL - FIXED DARK INPUTS */}
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
@@ -634,10 +627,10 @@ export default function LoadOut() {
                     )}
                 </div>
                 <div className="space-y-3">
-                    <input placeholder="Tool Name (e.g. Hilti Drill)" value={newTool.name} onChange={e => setNewTool({...newTool, name: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                    <input placeholder="Tool Name (e.g. Hilti Drill)" value={newTool.name} onChange={e => setNewTool({...newTool, name: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
                     <div className="flex gap-2">
-                        <input placeholder="Brand" value={newTool.brand} onChange={e => setNewTool({...newTool, brand: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
-                        <input placeholder="Serial #" value={newTool.serial} onChange={e => setNewTool({...newTool, serial: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                        <input placeholder="Brand" value={newTool.brand} onChange={e => setNewTool({...newTool, brand: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                        <input placeholder="Serial #" value={newTool.serial} onChange={e => setNewTool({...newTool, serial: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
                     </div>
                 </div>
                 <button onClick={addTool} disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
