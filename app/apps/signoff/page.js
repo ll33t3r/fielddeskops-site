@@ -5,7 +5,7 @@ import { createClient } from "../../../utils/supabase/client";
 import { 
   PenTool, Save, RotateCcw, Share, Printer, FileText, Calendar, 
   User, Trash2, CheckCircle2, Loader2, X, Lock, ArrowLeft, Menu, 
-  Settings, Plus, ChevronDown, FolderOpen, Clock, Copy, Eye, Pencil
+  Settings, Plus, ChevronDown, FolderOpen, Clock, Copy, Eye, Pencil, Pin, PinOff, Briefcase
 } from "lucide-react";
 import Link from "next/link";
 import SignatureCanvas from "react-signature-canvas";
@@ -15,6 +15,7 @@ export default function SignOff() {
   const sigPad = useRef({});
   const dropdownRef = useRef(null);
   
+  // --- UI STATE ---
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
@@ -22,14 +23,17 @@ export default function SignOff() {
   const [settingsTab, setSettingsTab] = useState("HISTORY");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // --- DATA STATE ---
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
   
+  // --- FORM STATE ---
   const [selectedJob, setSelectedJob] = useState("");
   const [isCustomJob, setIsCustomJob] = useState(false);
   const [customJobName, setCustomJobName] = useState("");
   const [clientName, setClientName] = useState("");
+  const [contractorName, setContractorName] = useState("FieldDeskOps"); // Smart Default
   const [contractBody, setContractBody] = useState("");
   const [isSigned, setIsSigned] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
@@ -45,6 +49,7 @@ export default function SignOff() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // 1. Load History
     const { data: history } = await supabase.from("contracts").select("*").order("created_at", { ascending: false });
     if (history) {
         setContracts(history);
@@ -53,26 +58,58 @@ export default function SignOff() {
         if (uniqueJobs.length > 0) setSelectedJob(uniqueJobs[0]);
     }
 
-    const { data: customTemplates } = await supabase.from("contract_templates").select("*").order("created_at", { ascending: false });
+    // 2. Load Templates
+    const { data: dbTemplates } = await supabase.from("contract_templates").select("*").order("created_at", { ascending: false });
     
-    // UNIVERSAL MULTI-USE TEMPLATES
+    // Default system templates (Marked as Pinned by default if DB is empty)
     const defaults = [
-        { label: "WORK AUTHORIZATION", body: "I, [Client Name], authorize work to proceed as described. \n\nTERMS: Payment is due upon completion. Any additional work discovered during the project will require a signed Change Order. \n\nWARRANTY: Standard labor warranty of 30 days applies unless otherwise stated." },
-        { label: "LIABILITY WAIVER", body: "CUSTOMER ACKNOWLEDGMENT: Contractor is not responsible for damages resulting from pre-existing conditions, hidden defects, or structural weaknesses discovered during the course of work. Contractor shall exercise reasonable care but is not liable for [incidental damage to landscaping/utilities] in the work area." },
-        { label: "CHANGE ORDER", body: "REVISION TO ORIGINAL SCOPE: \n\nThe following additional work has been requested and authorized: \n\nTOTAL COST INCREASE: $ \nESTIMATED TIME INCREASE: [Days]" },
-        { label: "SITE READINESS", body: "CLIENT RESPONSIBILITY: Work area must be clear of personal property and accessible by [Time]. Delays caused by site unreadiness may result in an additional mobilization fee of $ [Amount]." },
-        { label: "FINAL ACCEPTANCE", body: "WORK COMPLETED: I have inspected the work performed and confirm it has been completed to my satisfaction. All systems were tested and found to be in working order at the time of contractor departure." }
+        { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [Client Name], authorize [Contractor Name] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
+        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or hidden structural weaknesses.", is_pinned: true },
+        { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [Contractor Name] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
+        { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [Contractor Name] by start time.", is_pinned: true },
+        { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [Client Name], confirm that [Contractor Name] has completed work to my satisfaction.", is_pinned: true }
     ];
 
-    setTemplates([...(customTemplates || []), ...defaults]);
+    const all = dbTemplates && dbTemplates.length > 0 ? dbTemplates : defaults;
+    setTemplates(all);
     setLoading(false);
+  };
+
+  // SMART AUTOFILL LOGIC
+  const applySmartTemplate = (templateBody) => {
+      vibrate(15);
+      let smartText = templateBody;
+      smartText = smartText.replaceAll("[Client Name]", clientName || "CLIENT");
+      smartText = smartText.replaceAll("[Contractor Name]", contractorName || "CONTRACTOR");
+      setContractBody(smartText);
+  };
+
+  // PINNING LOGIC (Hard Limit 5)
+  const togglePin = async (templateId) => {
+      const pinnedCount = templates.filter(t => t.is_pinned).length;
+      const target = templates.find(t => t.id === templateId);
+      
+      if (!target.is_pinned && pinnedCount >= 5) {
+          return alert("Max 5 templates allowed on dashboard. Unpin one first.");
+      }
+
+      const newPinnedStatus = !target.is_pinned;
+      
+      // Update Local State
+      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newPinnedStatus} : t));
+
+      // Update Database (if not a default template)
+      if (typeof templateId === 'string' && templateId.length > 5) {
+          await supabase.from("contract_templates").update({ is_pinned: newPinnedStatus }).eq("id", templateId);
+      }
+      showToast(newPinnedStatus ? "Template Pinned" : "Template Unpinned", "success");
   };
 
   const saveNewTemplate = async () => {
       if (!editingTemplate.label || !editingTemplate.body) return;
       const { data: { user } } = await supabase.auth.getUser();
       const { data } = await supabase.from("contract_templates").insert({
-          user_id: user.id, label: editingTemplate.label.toUpperCase(), body: editingTemplate.body
+          user_id: user.id, label: editingTemplate.label.toUpperCase(), body: editingTemplate.body, is_pinned: false
       }).select().single();
       
       if (data) {
@@ -119,6 +156,8 @@ export default function SignOff() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
+      
+      {/* HEADER */}
       <div className="flex items-center justify-between px-6 pt-4 mb-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors"><ArrowLeft size={28} /></Link>
@@ -133,6 +172,8 @@ export default function SignOff() {
       </div>
 
       <main className="max-w-4xl mx-auto px-6">
+        
+        {/* JOB SELECTOR */}
         <div className="relative mb-6">
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
@@ -141,8 +182,8 @@ export default function SignOff() {
                     <button onClick={() => setIsCustomJob(false)}><X size={20}/></button>
                 </div>
             ) : (
-                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700]">
-                    <div className="flex items-center gap-3"><FolderOpen className="text-[#FF6700]" size={22} /><span className="font-bold uppercase truncate">{selectedJob || "SELECT PROJECT"}</span></div>
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center justify-between industrial-card p-4 rounded-xl hover:border-[#FF6700] shadow-md">
+                    <div className="flex items-center gap-3"><FolderOpen className="text-[#FF6700]" size={22} /><span className="font-bold uppercase tracking-wide truncate">{selectedJob || "SELECT PROJECT"}</span></div>
                     <ChevronDown size={20} className={isDropdownOpen ? "rotate-180" : ""} />
                 </button>
             )}
@@ -158,24 +199,31 @@ export default function SignOff() {
             )}
         </div>
 
+        {/* PAPER UI */}
         <div className="bg-white text-black p-8 rounded-xl shadow-2xl relative min-h-[70vh] flex flex-col border border-gray-300">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
-                <div><h1 className="text-3xl font-oswald font-bold uppercase">Work Agreement</h1><p className="text-sm font-bold text-gray-500">{new Date().toLocaleDateString()}</p></div>
-                {isSigned && <div className="border-4 border-black text-black font-black px-4 py-1 rounded uppercase rotate-[-12deg] opacity-70 text-2xl font-oswald tracking-widest">SIGNED</div>}
+                <div><h1 className="text-3xl font-oswald font-bold uppercase tracking-tighter">Agreement</h1><p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p></div>
+                {isSigned && <div className="border-4 border-black text-black font-black px-4 py-1 rounded uppercase rotate-[-12deg] opacity-70 text-2xl font-oswald">LOCKED</div>}
             </div>
 
             <div className="space-y-6 flex-1">
-                <div className="border-b border-gray-300 pb-2">
-                    <label className="block text-[10px] font-black uppercase text-gray-400">Recipient</label>
-                    {isSigned || hasSigned ? <p className="font-bold text-lg uppercase">{clientName}</p> : <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Customer Name..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="border-b border-gray-200 pb-2">
+                        <label className="block text-[10px] font-black uppercase text-gray-400">Recipient (Customer)</label>
+                        {isSigned || hasSigned ? <p className="font-bold text-lg uppercase">{clientName}</p> : <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="CUSTOMER NAME..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
+                    </div>
+                    <div className="border-b border-gray-200 pb-2">
+                        <label className="block text-[10px] font-black uppercase text-gray-400">Authorized Contractor</label>
+                        {isSigned || hasSigned ? <p className="font-bold text-lg uppercase">{contractorName}</p> : <input value={contractorName} onChange={e => setContractorName(e.target.value)} placeholder="YOUR COMPANY NAME..." className="w-full font-bold text-lg outline-none bg-transparent uppercase" />}
+                    </div>
                 </div>
 
                 <div className="relative">
                     <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Scope of Work & Terms</label>
                     {!isSigned && !hasSigned && (
                         <div className="flex gap-2 overflow-x-auto mb-3 pb-2 scrollbar-hide">
-                            {templates.map(t => (
-                                <button key={t.label} onClick={() => setContractBody(t.body)} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
+                            {templates.filter(t => t.is_pinned).map(t => (
+                                <button key={t.id} onClick={() => applySmartTemplate(t.body)} className="whitespace-nowrap px-3 py-1 bg-zinc-100 border border-zinc-300 rounded-full text-[10px] font-black hover:bg-[#FF6700] transition uppercase">+ {t.label}</button>
                             ))}
                         </div>
                     )}
@@ -188,7 +236,7 @@ export default function SignOff() {
                 {isSigned ? <img src={savedSignature} className="h-24 object-contain" /> : (
                     <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-zinc-50 hover:border-[#FF6700] transition">
                         <SignatureCanvas ref={sigPad} penColor="black" onEnd={handleSignatureEnd} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
-                        <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><RotateCcw size={18}/></button>
+                        <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print"><RotateCcw size={18}/></button>
                     </div>
                 )}
             </div>
@@ -197,11 +245,11 @@ export default function SignOff() {
         <div className="mt-8 flex gap-3">
             {!isSigned ? (
                 <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2 text-xl">
-                    {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} SAVE AGREEMENT
+                    {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} SAVE & LOCK
                 </button>
             ) : (
                 <div className="flex-1 flex gap-3">
-                    <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl">
+                    <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] transition flex items-center justify-center gap-2 text-xl">
                         <Share size={24}/> SHARE PDF
                     </button>
                     <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
@@ -250,9 +298,17 @@ export default function SignOff() {
                                   </div>
                               )}
                               {templates.map(t => (
-                                  <div key={t.label} className="industrial-card p-4 rounded-xl flex justify-between items-center group">
-                                      <span className="font-bold uppercase text-xs truncate max-w-[200px]">{t.label}</span>
-                                      <button onClick={() => { setContractBody(t.body); setShowSettings(false); vibrate(15); }} className="p-2 bg-[#FF6700] text-black rounded-lg shadow-md"><Copy size={16}/></button>
+                                  <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center group ${t.is_pinned ? 'border-[#FF6700]' : ''}`}>
+                                      <div className="flex flex-col">
+                                        <span className="font-bold uppercase text-xs truncate max-w-[180px]">{t.label}</span>
+                                        {t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED TO DASHBOARD</span>}
+                                      </div>
+                                      <div className="flex gap-2">
+                                          <button onClick={() => togglePin(t.id)} className={`p-2 rounded-lg transition ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>
+                                            {t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}
+                                          </button>
+                                          <button onClick={() => { applySmartTemplate(t.body); setShowSettings(false); }} className="p-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-[#FF6700] rounded-lg transition"><Copy size={14}/></button>
+                                      </div>
                                   </div>
                               ))}
                           </div>
