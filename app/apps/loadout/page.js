@@ -6,9 +6,9 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft
 } from "lucide-react";
-import Header from "../../components/Header";
+import Link from "next/link";
 
 const THEME_ORANGE = "#FF6700";
 
@@ -32,8 +32,10 @@ export default function LoadOut() {
   const [targetQtyInput, setTargetQtyInput] = useState("");
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   
-  // --- ADD MODAL STATE (Unified) ---
+  // --- ADD MODAL STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addMode, setAddMode] = useState("SINGLE"); 
+  const [newItemName, setNewItemName] = useState(""); 
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
   // --- TOOLS STATE ---
@@ -148,7 +150,24 @@ export default function LoadOut() {
       showToast("Order Updated", "success");
   };
 
-  // --- BATCH ADD LOGIC (Unified) ---
+  // 2. STOCK ACTIONS
+  const addSingleStockItem = async () => {
+    if (!newItemName.trim()) return;
+    vibrate(20);
+    const { data: { user } } = await supabase.auth.getUser();
+    const tempId = Math.random();
+    const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
+    setItems([tempItem, ...items]);
+    setNewItemName("");
+    setShowAddModal(false);
+
+    const { data } = await supabase.from("inventory").insert({
+        user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
+    }).select().single();
+    if (data) setItems(prev => prev.map(i => i.id === tempId ? data : i));
+  };
+
+  // BATCH ACTIONS
   const handleBatchRowChange = (index, field, value) => {
       const newRows = [...batchRows];
       newRows[index][field] = value;
@@ -166,12 +185,10 @@ export default function LoadOut() {
       if(validRows.length === 0) return;
       
       const { data: { user } } = await supabase.auth.getUser();
-      
       const newItems = validRows.map(r => ({
           id: Math.random(), name: r.name, quantity: 1, min_quantity: parseInt(r.qty) || 3, color: THEME_ORANGE
       }));
       setItems([...newItems, ...items]);
-      
       setBatchRows([{ name: "", qty: 3 }]);
       setShowAddModal(false);
 
@@ -361,11 +378,21 @@ export default function LoadOut() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-inter pb-32">
-      <Header title="LOADOUT" backLink="/" />
+      
+      {/* CUSTOM HEADER (Replaces Component for full control) */}
+      <div className="flex items-center gap-4 px-6 pt-4 mb-4">
+        <Link href="/" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors text-foreground border border-transparent hover:border-[#FF6700]/30">
+          <ArrowLeft size={24} />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">LOADOUT</h1>
+          <p className="text-xs text-foreground font-bold tracking-widest opacity-60">INVENTORY TRACKER</p>
+        </div>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-6 pt-4">
+      <main className="max-w-6xl mx-auto px-6 pt-2">
         
-        {/* TOP BAR */}
+        {/* TOP BAR - VAN SELECTOR */}
         <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-20">
             <div className="relative w-full">
                 <button onClick={() => { vibrate(); setShowSettings(!showSettings); }} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
@@ -376,7 +403,7 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
 
-                {/* MENU */}
+                {/* SETTINGS MENU */}
                 {showSettings && (
                     <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
@@ -401,6 +428,14 @@ export default function LoadOut() {
                             ))}
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
+                        
+                        {/* MOVED TEAM BUTTON HERE */}
+                        <div className="mb-4 pb-4 border-b border-gray-700">
+                             <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
+                                <Users size={16}/> MANAGE TEAM
+                             </button>
+                        </div>
+
                         <div className="space-y-2 pb-4 border-b border-gray-700">
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
@@ -411,7 +446,7 @@ export default function LoadOut() {
             </div>
         </div>
 
-        {/* TABS - NOW CONSISTENT COLORS */}
+        {/* TABS */}
         <div className="flex bg-industrial-bg p-1 rounded-xl mb-6 border border-industrial-border">
             <button onClick={() => { vibrate(); setActiveTab("STOCK"); }} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${activeTab === "STOCK" ? "bg-[#FF6700] text-black shadow-lg" : "text-industrial-muted hover:text-foreground"}`}>
                 <LayoutGrid size={18}/> STOCK
@@ -425,8 +460,8 @@ export default function LoadOut() {
         {activeTab === "STOCK" && (
             <div className="animate-in fade-in slide-in-from-left-4">
                 
-                {/* HERO SEARCH & ADD */}
-                <div className="flex gap-2 mb-4 h-14">
+                {/* ACTION BAR (STICKY) */}
+                <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input 
@@ -434,10 +469,9 @@ export default function LoadOut() {
                             placeholder="Filter stock..." 
                             value={stockSearch} 
                             onChange={(e) => setStockSearch(e.target.value)} 
-                            className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg" 
+                            className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" 
                         />
                     </div>
-                    {/* ENHANCED ADD BUTTON - FLUSH & ORANGE */}
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -458,16 +492,13 @@ export default function LoadOut() {
                                 ${isEditMode ? "ring-2 ring-white cursor-grab active:cursor-grabbing hover:scale-95 transition-transform" : ""} 
                                 ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
                         >
-                            {/* TOP */}
                             <div className="p-3 flex justify-between items-start h-[30%]">
                                 <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
                                 {isEditMode ? <GripVertical size={16} className="text-white/50" /> : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
                             </div>
-                            {/* MIDDLE */}
                             <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
                                 <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
                             </div>
-                            {/* BOTTOM */}
                             {!isEditMode && (
                                 <div className="flex h-[35%] border-t border-white/10">
                                     <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
@@ -478,28 +509,19 @@ export default function LoadOut() {
                         </div>
                     ))}
                 </div>
-
-                <div className="mt-12 text-center opacity-40">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
-                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
-                    </p>
-                </div>
             </div>
         )}
 
-        {/* TAB 2: TOOLS (Now Identical Styling) */}
+        {/* TAB 2: TOOLS */}
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
                 
-                {/* HERO SEARCH & ADD (Identical to Stock) */}
-                <div className="flex gap-2 mb-4 h-14">
+                {/* ACTION BAR (STICKY) - Identical to Stock */}
+                <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
-                        <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg" />
+                        <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
-                    {/* Team Button */}
-                    <button onClick={() => { vibrate(); setShowTeamModal(true); }} className="bg-industrial-card hover:bg-white hover:text-black text-foreground font-bold px-4 rounded-xl flex items-center justify-center border border-industrial-border shrink-0"><Users size={24}/></button>
-                    {/* Add Tool Button (Identical Orange) */}
                     <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
@@ -555,68 +577,55 @@ export default function LoadOut() {
                         </div>
                     ))}
                 </div>
-
-                <div className="mt-12 text-center opacity-40">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
-                        POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
-                    </p>
-                </div>
             </div>
         )}
 
+        <div className="mt-12 text-center opacity-40">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
+                POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+            </p>
+        </div>
+
       </main>
 
-      {/* --- ADD ITEMS MODAL (Unified) --- */}
+      {/* --- ADD ITEMS MODAL --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
              <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
                 <div className="flex justify-between items-center mb-6 shrink-0">
-                    <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2"><ListPlus size={24}/> ADD ITEMS</h2>
+                    <div className="flex gap-4">
+                        <button onClick={() => setAddMode("SINGLE")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "SINGLE" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>SINGLE</button>
+                        <button onClick={() => setAddMode("BULK")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "BULK" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>BULK LIST</button>
+                    </div>
                     <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
                 </div>
-                <div className="flex-1 flex flex-col">
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
-                        {batchRows.map((row, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                                <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
-                                <input placeholder="Item Name" value={row.name} onChange={(e) => { const n = [...batchRows]; n[idx].name = e.target.value; setBatchRows(n); }} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
-                                <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => { const n = [...batchRows]; n[idx].qty = e.target.value; setBatchRows(n); }} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
-                            </div>
-                        ))}
-                        <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
+                {addMode === "SINGLE" && (
+                    <div className="flex-1 flex flex-col gap-4">
+                        <label className="text-xs text-gray-500 font-bold uppercase">Item Name</label>
+                        <input autoFocus placeholder="e.g. Wire Nuts" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="bg-black/40 border border-gray-700 rounded-xl p-4 text-xl text-white outline-none focus:border-[#FF6700]" />
+                        <button onClick={addSingleStockItem} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl mt-auto hover:scale-[1.02] transition">ADD TO VAN</button>
                     </div>
-                    <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ITEMS</button>
-                </div>
+                )}
+                {addMode === "BULK" && (
+                    <div className="flex-1 flex flex-col">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
+                            {batchRows.map((row, idx) => (
+                                <div key={idx} className="flex gap-2 items-center">
+                                    <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
+                                    <input placeholder="Item Name" value={row.name} onChange={(e) => { const n = [...batchRows]; n[idx].name = e.target.value; setBatchRows(n); }} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
+                                    <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => { const n = [...batchRows]; n[idx].qty = e.target.value; setBatchRows(n); }} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
+                                </div>
+                            ))}
+                            <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
+                        </div>
+                        <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ITEMS</button>
+                    </div>
+                )}
              </div>
         </div>
       )}
 
-      {/* EDIT MODAL */}
-      {editingItem && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-industrial-border bg-black">
-            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
-            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">EDIT ITEM</h2>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Name</label>
-            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="bg-gray-900 border border-gray-700 rounded-lg mb-4 w-full p-3 font-bold text-lg text-white" />
-            <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-bold text-gray-500 uppercase">Target Qty</label>
-                <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg w-20 text-center font-oswald text-xl p-2 text-[#FF6700]" />
-            </div>
-            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Color</label>
-            <div className="grid grid-cols-5 gap-2 mb-6">
-              {colors.map((c) => (
-                <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg border border-white/10 ${editingItem.color === c.hex ? "ring-2 ring-white" : ""}`} />
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => deleteStockItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold"><Trash2 size={16} /></button>
-              <button onClick={saveStockEdit} className="flex-[3] bg-[#FF6700] text-black py-3 rounded-lg font-bold">SAVE</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* TOOL MODAL - FIXED DARK INPUTS */}
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
@@ -637,10 +646,10 @@ export default function LoadOut() {
                     )}
                 </div>
                 <div className="space-y-3">
-                    <input placeholder="Tool Name (e.g. Hilti Drill)" value={newTool.name} onChange={e => setNewTool({...newTool, name: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
+                    <input placeholder="Tool Name (e.g. Hilti Drill)" value={newTool.name} onChange={e => setNewTool({...newTool, name: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
                     <div className="flex gap-2">
-                        <input placeholder="Brand" value={newTool.brand} onChange={e => setNewTool({...newTool, brand: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
-                        <input placeholder="Serial #" value={newTool.serial} onChange={e => setNewTool({...newTool, serial: e.target.value})} className="input-field rounded-lg p-3 w-full"/>
+                        <input placeholder="Brand" value={newTool.brand} onChange={e => setNewTool({...newTool, brand: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                        <input placeholder="Serial #" value={newTool.serial} onChange={e => setNewTool({...newTool, serial: e.target.value})} className="bg-black/40 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
                     </div>
                 </div>
                 <button onClick={addTool} disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
