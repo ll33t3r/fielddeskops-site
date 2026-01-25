@@ -1,163 +1,130 @@
-﻿import Link from 'next/link'
-import LogoutButton from '../../components/LogoutButton'
+﻿'use client'
+
+import Link from 'next/link'
+import { Wallet, Truck, Camera, FileSignature, LogOut, UserCircle, BarChart3, Zap, ShieldCheck } from 'lucide-react'
 
 export default function Dashboard() {
   const apps = [
     {
-      name: 'ProfitLock',
-      description: 'Bid Calculator & Quote Manager',
-      icon: '💰',
+      name: 'PROFITLOCK',
+      description: 'Bids & Invoices',
+      icon: <Wallet className="w-10 h-10 md:w-16 md:h-16" />,
       href: '/apps/profitlock',
+      color: 'text-green-500', 
+      border: 'hover:border-green-500',
+      bg: 'hover:bg-green-500/10'
     },
     {
-      name: 'LoadOut',
-      description: 'Van Inventory Tracker',
-      icon: '🚚',
+      name: 'LOADOUT',
+      description: 'Inventory',
+      icon: <Truck className="w-10 h-10 md:w-16 md:h-16" />,
       href: '/apps/loadout',
+      color: 'text-blue-500',
+      border: 'hover:border-blue-500',
+      bg: 'hover:bg-blue-500/10'
     },
     {
-      name: 'SiteSnap',
-      description: 'Photo Documentation System',
-      icon: '📸',
+      name: 'SITESNAP',
+      description: 'Photos',
+      icon: <Camera className="w-10 h-10 md:w-16 md:h-16" />,
       href: '/apps/sitesnap',
+      color: 'text-purple-500',
+      border: 'hover:border-purple-500',
+      bg: 'hover:bg-purple-500/10'
     },
     {
-      name: 'SignOff',
-      description: 'Digital Contracts & Signatures',
-      icon: '📝',
+      name: 'SIGNOFF',
+      description: 'Contracts',
+      icon: <FileSignature className="w-10 h-10 md:w-16 md:h-16" />,
       href: '/apps/signoff',
-    },
-    {
-      name: 'CrewClock',
-      description: 'Time Tracking & Payroll',
-      icon: '⏰', 
-      href: '/apps/crewclock',
+      color: 'text-[#FF6700]',
+      border: 'hover:border-[#FF6700]',
+      bg: 'hover:bg-[#FF6700]/10'
     },
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 p-4 md:p-8">
-      {/* Header with Account and Sign Out buttons */}
-      <header className="mb-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-white">
-              Your Digital Toolbelt
-            </h1>
-            <p className="text-gray-400 mt-2">
-              All your field tools in one place
-            </p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Link 
-              href="/account"
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-white"
-            >
-              Account
-            </Link>
-            <Link 
-              href="/auth/login"
-              className="px-4 py-2 bg-primary hover:bg-orange-600 rounded-lg font-medium transition-colors text-white"
-            >
-              Sign Out
-            </Link>
-          </div>
+    // h-screen locks the height to the viewport (no scrolling)
+    <div className="h-screen bg-[#0a0a0a] flex flex-col p-4 md:p-6 overflow-hidden font-sans">
+      
+      {/* 1. HEADER */}
+      <header className="flex justify-between items-center mb-4 shrink-0">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-wide font-oswald">
+            FIELDDESK<span className="text-[#FF6700]">OPS</span>
+          </h1>
+        </div>
+        <div className="flex items-center space-x-3">
+          <Link href="/account" className="p-2 text-gray-400 hover:text-white transition-colors">
+            <UserCircle size={28} />
+          </Link>
+          <Link href="/auth/login" className="p-2 text-gray-400 hover:text-[#FF6700] transition-colors">
+            <LogOut size={28} />
+          </Link>
         </div>
       </header>
 
-      {/* Stats/Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-sm">Subscription</p>
-              <p className="text-xl font-semibold text-white">Pro Tier</p>
-            </div>
-            <div className="text-3xl">👷</div>
-          </div>
+      {/* 2. STATS BAR (Kept at top) */}
+      <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
+        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
+          <ShieldCheck size={20} className="text-[#FF6700] mb-1"/>
+          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Plan</p>
+          <p className="text-lg font-bold text-white">PRO</p>
         </div>
-        
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-sm">Credits Remaining</p>
-              <p className="text-xl font-semibold text-white">Unlimited</p>
-            </div>
-            <div className="text-3xl">⚡</div>
-          </div>
+        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
+          <Zap size={20} className="text-yellow-500 mb-1"/>
+          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Credits</p>
+          <p className="text-lg font-bold text-white">∞</p>
         </div>
-        
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-sm">Active Projects</p>
-              <p className="text-xl font-semibold text-white">3 of 10</p>
-            </div>
-            <div className="text-3xl">📊</div>
-          </div>
+        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
+          <BarChart3 size={20} className="text-blue-500 mb-1"/>
+          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Projects</p>
+          <p className="text-lg font-bold text-white">3/10</p>
         </div>
       </div>
 
-      {/* Apps Grid */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-white mb-6">Your Tools</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {apps.map((app) => (
-            <Link
-              key={app.name}
-              href={app.href}
-              className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-800 to-gray-900 p-6 border border-gray-700 hover:border-primary transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/20"
-            >
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-4xl">{app.icon}</span>
-                  <span className="text-primary font-semibold">→</span>
-                </div>
-                
-                <h3 className="text-xl font-bold text-white mb-2">
-                  {app.name}
-                </h3>
-                
-                <p className="text-gray-400 text-sm">
-                  {app.description}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
+      {/* 3. CORE 4 GRID (Fills remaining space) */}
+      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0">
+        {apps.map((app) => (
+          <Link
+            key={app.name}
+            href={app.href}
+            className={`
+              group relative flex flex-col items-center justify-center p-4 
+              bg-[#121212] rounded-2xl border-2 border-white/5
+              transition-all duration-300 active:scale-95 shadow-xl
+              ${app.border} ${app.bg}
+            `}
+          >
+            {/* Icon Circle */}
+            <div className={`mb-3 p-4 rounded-full bg-black/40 ${app.color} ring-1 ring-white/5 group-hover:scale-110 transition-transform`}>
+              {app.icon}
+            </div>
+            
+            <h3 className="text-xl md:text-3xl font-bold text-white mb-1 tracking-wide font-oswald">
+              {app.name}
+            </h3>
+            
+            <p className="text-gray-500 text-[10px] md:text-xs uppercase tracking-widest font-bold group-hover:text-gray-300 transition-colors">
+              {app.description}
+            </p>
+          </Link>
+        ))}
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl p-6 border border-gray-700">
-        <h2 className="text-2xl font-bold text-white mb-6">Recent Activity</h2>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                <span>💰</span>
-              </div>
-              <div>
-                <p className="font-medium text-white">New Quote Created</p>
-                <p className="text-sm text-gray-400">ProfitLock • 2 hours ago</p>
-              </div>
-            </div>
-            <span className="text-primary font-medium">$2,450</span>
-          </div>
-          
-          <div className="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                <span>🚚</span>
-              </div>
-              <div>
-                <p className="font-medium text-white">Inventory Updated</p>
-                <p className="text-sm text-gray-400">LoadOut • 5 hours ago</p>
-              </div>
-            </div>
-            <span className="text-blue-400 font-medium">+12 items</span>
-          </div>
+      {/* 4. ACTIVITY FOOTER (Compact at bottom) */}
+      <div className="mt-4 pt-4 border-t border-white/5 shrink-0">
+        <div className="flex items-center justify-between text-xs text-gray-500 px-2">
+            <span className="uppercase tracking-widest font-bold">Recent Activity</span>
+            <span>View All</span>
+        </div>
+        <div className="mt-2 flex items-center gap-3 px-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-sm text-gray-300">New Quote Created #1024</span>
+            <span className="ml-auto text-xs text-gray-600">2h ago</span>
         </div>
       </div>
+      
     </div>
   )
 }
