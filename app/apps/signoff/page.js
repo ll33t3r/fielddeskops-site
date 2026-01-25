@@ -31,8 +31,8 @@ export default function SignOff() {
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
-  const [allJobPhotos, setAllJobPhotos] = useState([]); // Master list from SiteSnap
-  const [selectedPhotos, setSelectedPhotos] = useState([]); // User's specific picks
+  const [allJobPhotos, setAllJobPhotos] = useState([]); 
+  const [selectedPhotos, setSelectedPhotos] = useState([]); 
   
   // --- FORM STATE ---
   const [selectedJob, setSelectedJob] = useState("");
@@ -49,7 +49,23 @@ export default function SignOff() {
 
   const vibrate = (p = 10) => { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p); };
 
-  // Load photos for the current job from the SiteSnap table
+  // --- COMPONENT FUNCTIONS ---
+
+  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
+
+  const clearSignature = () => {
+    if (sigPad.current.clear) {
+      sigPad.current.clear();
+      setHasSigned(false);
+      setIsSigned(false);
+      setSavedSignature(null);
+    }
+  };
+
+  const handleSignatureEnd = () => { 
+    if (sigPad.current && !sigPad.current.isEmpty()) setHasSigned(true); 
+  };
+
   const loadProjectPhotos = async (jobName) => {
     if (!jobName || jobName === "SELECT PROJECT") return;
     const { data } = await supabase.from("site_photos").select("image_url, tag, created_at").eq("job_name", jobName).order('created_at', { ascending: false });
@@ -65,9 +81,10 @@ export default function SignOff() {
 
     if (history || photoData) {
         if (history) setContracts(history);
-        const contractJobs = history ? history.map(c => c.project_name) : [];
-        const snapJobs = photoData ? photoData.map(p => p.job_name) : [];
-        const uniqueJobs = [...new Set([...contractJobs, ...snapJobs])].slice(0, 15);
+        const uniqueJobs = [...new Set([
+          ...(history ? history.map(c => c.project_name) : []),
+          ...(photoData ? photoData.map(p => p.job_name) : [])
+        ])].slice(0, 15);
         setRecentJobs(uniqueJobs);
         if (uniqueJobs.length > 0) setSelectedJob(uniqueJobs[0]);
     }
@@ -75,7 +92,7 @@ export default function SignOff() {
     const { data: dbTemplates } = await supabase.from("contract_templates").select("*").order("created_at", { ascending: false });
     const defaults = [
         { id: 'd1', label: "WORK AUTHORIZATION", body: "I, [Client Name], authorize [Contractor Name] to proceed with work. \n\nTERMS: Payment due upon completion.", is_pinned: true },
-        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or hidden structural weaknesses.", is_pinned: true },
+        { id: 'd2', label: "LIABILITY WAIVER", body: "[Contractor Name] is not responsible for damages resulting from pre-existing conditions or hidden structural weaknesses discovered during work.", is_pinned: true },
         { id: 'd3', label: "CHANGE ORDER", body: "REVISION: [Contractor Name] is authorized to perform additional work. \n\nCOST INCREASE: $", is_pinned: true },
         { id: 'd4', label: "SITE READINESS", body: "Client acknowledges that work area must be clear for [Contractor Name] by start time.", is_pinned: true },
         { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [Client Name], confirm that [Contractor Name] has completed work to my satisfaction.", is_pinned: true }
@@ -92,7 +109,6 @@ export default function SignOff() {
     if (selectedJob) loadProjectPhotos(selectedJob);
   }, [selectedJob]);
 
-  // --- SMART FUNCTIONS ---
   const applySmartTemplate = (templateBody) => {
       vibrate(15);
       let smartText = templateBody.replaceAll("[Client Name]", clientName || "[CLIENT NAME]");
@@ -105,14 +121,13 @@ export default function SignOff() {
       setSaving(true);
       const file = e.target.files[0];
       const { data: { user } } = await supabase.auth.getUser();
-      const fileName = `${user.id}/${selectedJob}/${Date.now()}.jpg`;
+      const fileName = `${user.id}/${selectedJob.replace(/\s+/g, '_')}/${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage.from("sitesnap").upload(fileName, file);
       if (!upErr) {
           const publicUrl = supabase.storage.from("sitesnap").getPublicUrl(fileName).data.publicUrl;
           const { data: photoObj } = await supabase.from("site_photos").insert({
               user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "Attached via SignOff"
           }).select().single();
-          
           if (photoObj) {
             setAllJobPhotos([photoObj, ...allJobPhotos]);
             setSelectedPhotos([...selectedPhotos, photoObj.image_url]);
@@ -142,7 +157,7 @@ export default function SignOff() {
     const { data: newDoc } = await supabase.from("contracts").insert({
         user_id: user.id, client_name: clientName, project_name: finalProjectName,
         contract_body: contractBody, signature_url: publicUrl, status: "SIGNED",
-        evidence_urls: selectedPhotos // Ensure your table has this JSONB column
+        evidence_urls: selectedPhotos
     }).select().single();
 
     if (newDoc) {
@@ -158,7 +173,35 @@ export default function SignOff() {
     setSaving(false);
   };
 
-  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
+  const handleShare = async () => {
+    const text = `Contract: ${selectedJob}\nCustomer: ${clientName}\n\nTerms:\n${contractBody}`;
+    if (navigator.share) await navigator.share({ title: `Signed Agreement`, text });
+    else { navigator.clipboard.writeText(text); showToast("Summary Copied", "success"); }
+  };
+
+  const togglePin = async (templateId) => {
+      const pinnedCount = templates.filter(t => t.is_pinned).length;
+      const target = templates.find(t => t.id === templateId);
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Limit: 5 pinned.");
+      const newStatus = !target.is_pinned;
+      setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
+      if (typeof templateId === 'string' && templateId.length > 5) {
+          await supabase.from("contract_templates").update({ is_pinned: newStatus }).eq("id", templateId);
+      }
+  };
+
+  const saveNewTemplate = async () => {
+    if (!editingTemplate.label || !editingTemplate.body) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase.from("contract_templates").insert({
+        user_id: user.id, label: editingTemplate.label.toUpperCase(), body: editingTemplate.body, is_pinned: false
+    }).select().single();
+    if (data) {
+        setTemplates([data, ...templates]);
+        setEditingTemplate(null);
+        showToast("Template Created", "success");
+    }
+  };
 
   return (
     <div className={`min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32 font-inter ${showPhotoPicker || zoomImage ? 'overflow-hidden' : ''}`}>
@@ -179,7 +222,7 @@ export default function SignOff() {
 
       <main className="max-w-4xl mx-auto px-6">
         
-        {/* JOB SELECTOR */}
+        {/* PROJECT SELECTOR */}
         <div className="relative mb-6 no-print">
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
@@ -227,7 +270,7 @@ export default function SignOff() {
                         )}
                     </div>
                     <div className="border-b border-gray-200 pb-2 relative">
-                        <label className="block text-[10px] font-black uppercase text-gray-400">Authorized Contractor</label>
+                        <label className="block text-[10px] font-black uppercase text-gray-400">Contractor</label>
                         {isSigned || hasSigned ? (
                            <div className="flex items-center justify-between"><p className="font-bold text-lg uppercase py-1">{contractorName}</p><Lock size={12} className="text-gray-300"/></div>
                         ) : (
@@ -252,10 +295,10 @@ export default function SignOff() {
                     )}
                 </div>
 
-                {/* VISUAL EVIDENCE SECTION (Picks from SiteSnap) */}
+                {/* VISUAL EVIDENCE SECTION */}
                 <div className="mt-8 border-t border-gray-100 pt-6">
                     <div className="flex justify-between items-center mb-3">
-                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> Visual Evidence Attachments</label>
+                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> Evidence Attachments</label>
                         {!isSigned && (
                           <div className="flex gap-2">
                             <button onClick={() => photoInputRef.current.click()} className="text-[10px] font-black text-[#FF6700] uppercase hover:underline flex items-center gap-1"><Camera size={12}/> Snap</button>
@@ -270,11 +313,10 @@ export default function SignOff() {
                             <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm group">
                                 <img src={url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setZoomImage(url)} />
                                 {!isSigned && (
-                                  <button onClick={() => setSelectedPhotos(prev => prev.filter(u => u !== url))} className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={10}/></button>
+                                  <button onClick={() => setSelectedPhotos(prev => prev.filter(u => u !== url))} className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded-full"><X size={10}/></button>
                                 )}
                             </div>
                         ))}
-                        {selectedPhotos.length === 0 && <p className="col-span-4 text-[10px] italic text-gray-300">No photos attached to this agreement.</p>}
                     </div>
                 </div>
             </div>
@@ -283,22 +325,21 @@ export default function SignOff() {
                 <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Customer Signature</label>
                 {isSigned ? <img src={savedSignature} className="h-24 object-contain" alt="Signature" /> : (
                     <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-zinc-50 hover:border-[#FF6700] transition">
-                        <SignatureCanvas ref={sigPad} penColor="black" onEnd={() => setHasSigned(true)} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
+                        <SignatureCanvas ref={sigPad} penColor="black" onEnd={handleSignatureEnd} canvasProps={{ className: "w-full h-40 cursor-crosshair" }} />
                         <button onClick={clearSignature} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 no-print"><RotateCcw size={18}/></button>
                     </div>
                 )}
             </div>
         </div>
 
-        {/* ACTIONS */}
         <div className="mt-8 flex gap-3 no-print">
             {!isSigned ? (
-                <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2 text-xl">
-                    {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} SAVE & LOCK
+                <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] transition flex items-center justify-center gap-2 text-xl uppercase">
+                    {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} Save Agreement
                 </button>
             ) : (
                 <div className="flex-1 flex gap-3">
-                    <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] transition flex items-center justify-center gap-2 text-xl">
+                    <button onClick={handleShare} className="flex-1 bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl transition flex items-center justify-center gap-2 text-xl">
                         <Share size={24}/> SHARE PDF
                     </button>
                     <button onClick={() => { setIsSigned(false); setHasSigned(false); setClientName(""); setContractBody(""); setSelectedPhotos([]); }} className="px-8 bg-zinc-800 text-white font-black rounded-2xl">NEW</button>
@@ -309,10 +350,10 @@ export default function SignOff() {
 
       {/* PHOTO PICKER MODAL */}
       {showPhotoPicker && (
-        <div className="fixed inset-0 z-[100] bg-background flex flex-col animate-in slide-in-from-bottom">
-          <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-card)]">
+        <div className="fixed inset-0 z-[100] bg-[var(--bg-main)] flex flex-col animate-in slide-in-from-bottom">
+          <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center">
             <h2 className="text-xl font-oswald font-bold text-[#FF6700]">JOB PHOTO VAULT</h2>
-            <button onClick={() => setShowPhotoPicker(false)} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full"><X/></button>
+            <button onClick={() => setShowPhotoPicker(false)} className="p-2 text-[var(--text-main)]"><X size={32}/></button>
           </div>
           <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-4">
             {allJobPhotos.map((photo, i) => {
@@ -321,14 +362,14 @@ export default function SignOff() {
                 <div key={i} className={`relative aspect-[4/3] rounded-xl overflow-hidden border-4 transition-all ${isPicked ? 'border-[#FF6700]' : 'border-transparent'}`} onClick={() => togglePhotoSelection(photo.image_url)}>
                   <img src={photo.image_url} className="w-full h-full object-cover" />
                   <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">{photo.tag}</div>
-                  {isPicked && <div className="absolute inset-0 bg-[#FF6700]/20 flex items-center justify-center"><CheckCircle2 className="text-white bg-[#FF6700] rounded-full p-1" size={40}/></div>}
+                  {isPicked && <div className="absolute inset-0 bg-[#FF6700]/20 flex items-center justify-center"><CheckCircle2 className="text-[#FF6700] bg-white rounded-full" size={40}/></div>}
                   <button onClick={(e) => { e.stopPropagation(); setZoomImage(photo.image_url); }} className="absolute bottom-2 right-2 p-2 bg-black/60 text-white rounded-lg"><Maximize2 size={16}/></button>
                 </div>
               );
             })}
           </div>
-          <div className="p-6 border-t border-[var(--border-color)] bg-[var(--bg-card)]">
-            <button onClick={() => setShowPhotoPicker(false)} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase">Done Selecting ({selectedPhotos.length})</button>
+          <div className="p-6 border-t border-[var(--border-color)]">
+            <button onClick={() => setShowPhotoPicker(false)} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl">DONE SELECTING ({selectedPhotos.length})</button>
           </div>
         </div>
       )}
@@ -336,14 +377,14 @@ export default function SignOff() {
       {/* ZOOM LIGHTBOX */}
       {zoomImage && (
         <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col animate-in zoom-in duration-150" onClick={() => setZoomImage(null)}>
-          <div className="p-6 flex justify-end"><button className="text-white p-2"><X size={32}/></button></div>
+          <div className="p-6 flex justify-end"><button className="text-white p-2"><X size={40}/></button></div>
           <div className="flex-1 flex items-center justify-center p-4">
             <img src={zoomImage} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
           </div>
         </div>
       )}
 
-      {/* SETTINGS DRAWER (REMAINING CODE SAME) */}
+      {/* SETTINGS DRAWER */}
       {showSettings && (
           <div className="fixed inset-0 z-[60] animate-in fade-in">
               <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
@@ -356,7 +397,7 @@ export default function SignOff() {
                       <button onClick={() => setSettingsTab("HISTORY")} className={`flex-1 pb-3 font-black text-xs ${settingsTab === "HISTORY" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-400"}`}>HISTORY</button>
                       <button onClick={() => setSettingsTab("TEMPLATES")} className={`flex-1 pb-3 font-black text-xs ${settingsTab === "TEMPLATES" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-400"}`}>TEMPLATES</button>
                   </div>
-                  <div className="overflow-y-auto max-h-[75vh] space-y-4 pr-2 custom-scrollbar">
+                  <div className="overflow-y-auto max-h-[75vh] space-y-4">
                       {settingsTab === "HISTORY" ? (
                           contracts?.map(c => (
                               <div key={c.id} className="industrial-card p-4 rounded-xl flex flex-col gap-2">
@@ -367,13 +408,13 @@ export default function SignOff() {
                           ))
                       ) : (
                           <div className="space-y-4">
-                              <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/5 transition">+ CUSTOM TEMPLATE</button>
+                              <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs">+ CUSTOM TEMPLATE</button>
                               {templates.map(t => (
                                   <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center ${t.is_pinned ? 'border-[#FF6700]' : 'border-[var(--border-color)]'}`}>
                                       <div className="flex flex-col"><span className="font-bold uppercase text-xs truncate max-w-[150px]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
                                       <div className="flex gap-2">
-                                          <button onClick={() => togglePin(t.id)} className={`p-2 rounded-lg transition ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-500'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
-                                          <button onClick={() => { applySmartTemplate(t.body); setShowSettings(false); }} className="p-2 bg-zinc-800 text-[#FF6700] rounded-lg shadow-sm hover:bg-[#FF6700] hover:text-black transition"><Copy size={14}/></button>
+                                          <button onClick={() => togglePin(t.id)} className={`p-2 rounded-lg ${t.is_pinned ? 'bg-[#FF6700] text-black' : 'bg-zinc-800 text-zinc-500'}`}>{t.is_pinned ? <Pin size={14}/> : <PinOff size={14}/>}</button>
+                                          <button onClick={() => { applySmartTemplate(t.body); setShowSettings(false); }} className="p-2 bg-zinc-800 text-[#FF6700] rounded-lg shadow-sm"><Copy size={14}/></button>
                                       </div>
                                   </div>
                               ))}
