@@ -6,7 +6,7 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box
 } from "lucide-react";
 import Header from "../../components/Header";
 
@@ -26,14 +26,15 @@ export default function LoadOut() {
 
   // --- STOCK STATE ---
   const [items, setItems] = useState([]);
-  const [newItem, setNewItem] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
   
-  // --- BATCH ADD STATE ---
-  const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]);
+  // --- ADD MODAL STATE (New Streamlined Logic) ---
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addMode, setAddMode] = useState("SINGLE"); // SINGLE or BULK
+  const [newItemName, setNewItemName] = useState(""); // For single add
+  const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); // For bulk
 
   // --- TOOLS STATE ---
   const [tools, setTools] = useState([]);
@@ -58,10 +59,10 @@ export default function LoadOut() {
     { hex: "#581c87", name: "Purple" },
   ];
 
-  // HAPTIC FEEDBACK HELPER
-  const vibrate = () => {
+  // HAPTIC ENGINE
+  const vibrate = (pattern = 10) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(10); // Short 10ms tick
+        navigator.vibrate(pattern);
     }
   };
 
@@ -121,15 +122,15 @@ export default function LoadOut() {
   };
 
   // 2. STOCK ACTIONS
-  const addStockItem = async (e) => {
-    e.preventDefault();
-    if (!newItem.trim()) return;
-    vibrate();
+  const addSingleStockItem = async () => {
+    if (!newItemName.trim()) return;
+    vibrate(20);
     const { data: { user } } = await supabase.auth.getUser();
     const tempId = Math.random();
-    const tempItem = { id: tempId, name: newItem, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
+    const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
     setItems([tempItem, ...items]);
-    setNewItem("");
+    setNewItemName("");
+    setShowAddModal(false); // Close modal on success
 
     const { data } = await supabase.from("inventory").insert({
         user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
@@ -137,7 +138,7 @@ export default function LoadOut() {
     if (data) setItems(prev => prev.map(i => i.id === tempId ? data : i));
   };
 
-  // BATCH ADD LOGIC
+  // BATCH ACTIONS
   const handleBatchRowChange = (index, field, value) => {
       const newRows = [...batchRows];
       newRows[index][field] = value;
@@ -149,50 +150,33 @@ export default function LoadOut() {
       setBatchRows([...batchRows, { name: "", qty: 3 }]);
   };
 
-  const removeBatchRow = (index) => {
-      if(batchRows.length === 1) return;
-      const newRows = [...batchRows];
-      newRows.splice(index, 1);
-      setBatchRows(newRows);
-  };
-
   const saveBatch = async () => {
-      vibrate();
+      vibrate(20);
       const validRows = batchRows.filter(r => r.name.trim() !== "");
       if(validRows.length === 0) return;
       
-      setShowBatchModal(false);
       const { data: { user } } = await supabase.auth.getUser();
-
-      // Optimistic update
+      // Optimistic
       const newItems = validRows.map(r => ({
-          id: Math.random(), 
-          name: r.name, 
-          quantity: 1, 
-          min_quantity: parseInt(r.qty) || 3, 
-          color: THEME_ORANGE
+          id: Math.random(), name: r.name, quantity: 1, min_quantity: parseInt(r.qty) || 3, color: THEME_ORANGE
       }));
       setItems([...newItems, ...items]);
-      setBatchRows([{ name: "", qty: 3 }]); // Reset
+      setBatchRows([{ name: "", qty: 3 }]);
+      setShowAddModal(false);
 
-      // DB Insert Loop (Sequential to ensure order or could be Promise.all)
+      // DB Loop
       for (const row of validRows) {
           await supabase.from("inventory").insert({
-            user_id: user.id, 
-            van_id: currentVan.id, 
-            name: row.name, 
-            quantity: 1, 
-            min_quantity: parseInt(row.qty) || 3, 
-            color: THEME_ORANGE 
+            user_id: user.id, van_id: currentVan.id, name: row.name, 
+            quantity: 1, min_quantity: parseInt(row.qty) || 3, color: THEME_ORANGE 
           });
       }
-      // Refresh to get real IDs
-      fetchVanData(currentVan.id);
+      fetchVanData(currentVan.id); // Refresh for IDs
       showToast(`${validRows.length} Items Added`, "success");
   };
 
   const updateStockQty = async (id, currentQty, change) => {
-    vibrate();
+    vibrate(5); // Sharp tick
     const newQty = Math.max(0, Number(currentQty) + change);
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
     await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
@@ -243,7 +227,6 @@ export default function LoadOut() {
         const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
         const { error: uploadError } = await supabase.storage.from("tool-photos").upload(fileName, newPhoto);
         if (uploadError) {
-            console.log("Upload Error:", uploadError);
             showToast("Photo failed, saving tool anyway...", "error");
         } else {
             const { data } = supabase.storage.from("tool-photos").getPublicUrl(fileName);
@@ -381,7 +364,7 @@ export default function LoadOut() {
 
                 {/* MENU - FIX: Hardcoded Dark Background for Visibility */}
                 {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
+                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#121212] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
                             <div className="mb-4 pb-4 border-b border-gray-700">
                                 <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
@@ -427,47 +410,55 @@ export default function LoadOut() {
         {/* TAB 1: STOCK */}
         {activeTab === "STOCK" && (
             <div className="animate-in fade-in slide-in-from-left-4">
-                <div className="flex gap-2 mb-6">
-                    <form onSubmit={addStockItem} className="flex-1 flex gap-2">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
-                            <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Quick Add (Single Item)..." className="input-field rounded-lg pl-10 pr-4 py-3 w-full" />
-                        </div>
-                        <button type="submit" className="bg-[#FF6700]/20 text-[#FF6700] border border-[#FF6700] font-bold rounded-lg w-14 flex items-center justify-center hover:bg-[#FF6700] hover:text-black transition"><Plus /></button>
-                    </form>
-                    {/* BATCH ADD BUTTON */}
-                    <button onClick={() => { vibrate(); setShowBatchModal(true); }} className="bg-white text-black font-bold rounded-lg px-4 flex items-center gap-2 hover:scale-105 transition shadow-lg">
-                        <ListPlus size={20} /> <span className="hidden sm:inline">BULK ADD</span>
+                
+                {/* HERO SEARCH & ADD */}
+                <div className="flex gap-2 mb-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
+                        <input type="text" placeholder="Filter stock..." className="input-field rounded-xl pl-10 pr-4 py-3 w-full bg-industrial-card border-none" />
+                    </div>
+                    {/* ENHANCED ADD BUTTON */}
+                    <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-white text-black h-full px-5 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg">
+                        <Plus size={28} />
                     </button>
                 </div>
 
-                {/* FIX: 3 Grid Columns always */}
+                {/* THE CONTROL DECK GRID (3 Columns) */}
                 <div className="grid grid-cols-3 gap-3 pb-20 select-none">
                     {items.map((item) => (
-                        <div key={item.id} onClick={() => { if(isEditMode) openStockEdit(item); }} style={{ backgroundColor: item.color || "#262626" }} className={`relative h-36 rounded-xl p-3 flex flex-col justify-between shadow-lg transition-transform border border-white/5 ${isEditMode ? "cursor-pointer hover:scale-105 ring-2 ring-white" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}>
-                            <div className="flex justify-between items-start">
-                                {/* Force white text on colored cards for readability */}
-                                <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-20">{item.name}</h3>
-                                {isEditMode ? <Edit3 size={14} className="text-white/80"/> : item.quantity < (item.min_quantity || 3) && <AlertTriangle size={14} className="text-red-500 animate-pulse" />}
+                        <div key={item.id} onClick={() => { if(isEditMode) { vibrate(); openStockEdit(item); }}} style={{ backgroundColor: item.color || "#262626" }} className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 ${isEditMode ? "ring-2 ring-white cursor-pointer" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}>
+                            
+                            {/* TOP: INFO */}
+                            <div className="p-3 flex justify-between items-start h-[30%]">
+                                <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
+                                {item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>}
                             </div>
+
+                            {/* MIDDLE: QUANTITY */}
+                            <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
+                                <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
+                            </div>
+
+                            {/* BOTTOM: CONTROL DECK (Huge Buttons) */}
                             {!isEditMode && (
-                                <div className="flex items-center justify-between mt-1">
-                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-red-500 transition text-white backdrop-blur-sm"><Minus size={16} /></button>
-                                    <div className="text-center">
-                                        <span className="text-2xl font-oswald font-bold drop-shadow-md text-white block leading-none">{item.quantity}</span>
-                                        <span className="text-[9px] text-white/60 font-bold uppercase">Target: {item.min_quantity || 3}</span>
-                                    </div>
-                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center hover:bg-black/40 active:bg-green-500 transition text-white backdrop-blur-sm"><Plus size={16} /></button>
+                                <div className="flex h-[35%] border-t border-white/10">
+                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10">
+                                        <Minus size={24} />
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors">
+                                        <Plus size={24} />
+                                    </button>
                                 </div>
                             )}
-                            {isEditMode && <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl"><p className="text-[10px] font-bold uppercase tracking-widest text-white border border-white px-2 py-1 rounded">Edit</p></div>}
+                            
+                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">EDIT</div>}
                         </div>
                     ))}
                 </div>
             </div>
         )}
 
-        {/* TAB 2: TOOLS */}
+        {/* TAB 2: TOOLS (Kept Simple) */}
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
                 <div className="flex gap-2 mb-6">
@@ -530,59 +521,53 @@ export default function LoadOut() {
                     ))}
                 </div>
 
-                {/* BRANDING FOOTER */}
                 <div className="mt-12 text-center opacity-40">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
-                        POWERED BY FIELDDESKOPS
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">POWERED BY FIELDDESKOPS</p>
                 </div>
             </div>
         )}
 
       </main>
 
-      {/* --- BATCH ADD MODAL --- */}
-      {showBatchModal && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm animate-in fade-in">
-             <div className="bg-[#121212] w-full max-w-lg rounded-2xl p-6 shadow-2xl relative border border-gray-700 flex flex-col max-h-[85vh]">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2"><ListPlus size={24}/> BULK ADD PARTS</h2>
-                    <button onClick={() => setShowBatchModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
-                </div>
+      {/* --- ADD MODAL (Streamlined) --- */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
+             <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
                 
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2">
-                    {batchRows.map((row, idx) => (
-                        <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2">
-                             <span className="text-gray-500 font-mono text-xs w-6">{idx + 1}.</span>
-                             <input 
-                                autoFocus={idx === batchRows.length - 1}
-                                placeholder="Part Name (e.g. 3/4 PVC)" 
-                                value={row.name} 
-                                onChange={(e) => handleBatchRowChange(idx, "name", e.target.value)} 
-                                className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]"
-                             />
-                             <div className="relative w-20">
-                                <span className="absolute -top-2 left-2 text-[8px] bg-[#121212] px-1 text-gray-500 uppercase font-bold">Target</span>
-                                <input 
-                                    type="number" 
-                                    value={row.qty} 
-                                    onChange={(e) => handleBatchRowChange(idx, "qty", e.target.value)} 
-                                    className="w-full bg-black/40 border border-gray-700 rounded-lg p-3 text-center font-mono text-[#FF6700] outline-none focus:border-[#FF6700]"
-                                />
-                             </div>
-                             <button onClick={() => removeBatchRow(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>
-                        </div>
-                    ))}
-                    <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-700 rounded-lg text-gray-500 hover:text-white hover:border-white transition flex items-center justify-center gap-2">
-                        <Plus size={16}/> Add Another Row
-                    </button>
+                {/* Modal Header */}
+                <div className="flex justify-between items-center mb-6 shrink-0">
+                    <div className="flex gap-4">
+                        <button onClick={() => setAddMode("SINGLE")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "SINGLE" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>SINGLE</button>
+                        <button onClick={() => setAddMode("BULK")} className={`text-lg font-oswald font-bold transition-colors ${addMode === "BULK" ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-gray-600"}`}>BULK LIST</button>
+                    </div>
+                    <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-gray-800">
-                    <button onClick={saveBatch} className="w-full bg-[#FF6700] text-black font-bold py-4 rounded-xl hover:scale-[1.02] transition shadow-lg flex items-center justify-center gap-2">
-                        <Save size={20}/> SAVE ALL PARTS
-                    </button>
-                </div>
+                {/* SINGLE MODE */}
+                {addMode === "SINGLE" && (
+                    <div className="flex-1 flex flex-col gap-4">
+                        <label className="text-xs text-gray-500 font-bold uppercase">Item Name</label>
+                        <input autoFocus placeholder="e.g. Wire Nuts" value={newItemName} onChange={e => setNewItemName(e.target.value)} className="bg-black/40 border border-gray-700 rounded-xl p-4 text-xl text-white outline-none focus:border-[#FF6700]" />
+                        <button onClick={addSingleStockItem} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl mt-auto hover:scale-[1.02] transition">ADD TO VAN</button>
+                    </div>
+                )}
+
+                {/* BULK MODE */}
+                {addMode === "BULK" && (
+                    <div className="flex-1 flex flex-col">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
+                            {batchRows.map((row, idx) => (
+                                <div key={idx} className="flex gap-2 items-center">
+                                    <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
+                                    <input placeholder="Item Name" value={row.name} onChange={(e) => { const n = [...batchRows]; n[idx].name = e.target.value; setBatchRows(n); }} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
+                                    <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => { const n = [...batchRows]; n[idx].qty = e.target.value; setBatchRows(n); }} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
+                                </div>
+                            ))}
+                            <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
+                        </div>
+                        <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ALL</button>
+                    </div>
+                )}
              </div>
         </div>
       )}
@@ -590,32 +575,28 @@ export default function LoadOut() {
       {/* EDIT MODAL */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
-            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X /></button>
-            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700] flex items-center gap-2"><Edit3 size={20}/> EDIT STOCK</h2>
-            <label className="text-xs font-bold text-industrial-muted uppercase mb-1 block">Item Name</label>
-            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="input-field rounded-lg mb-4 w-full p-3 font-bold text-lg" />
-            <div className="mb-6 bg-white/5 p-4 rounded-lg border border-white/5">
-                <div className="flex justify-between items-center mb-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase">Target / Low Stock Level</label>
-                    <span className="text-xs text-[#FF6700]">Alerts under {targetQtyInput || 0}</span>
-                </div>
-                <div className="flex gap-4 items-center">
-                    <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="input-field rounded-lg w-20 text-center font-oswald text-xl p-2" placeholder="0"/>
-                    <div className="flex-1 text-xs text-gray-500 leading-tight">Enter a number. The alert triggers if quantity drops below this.</div>
-                </div>
+          <div className="glass-panel w-full max-w-sm rounded-xl p-6 shadow-2xl relative border border-industrial-border bg-black">
+            <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
+            <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">EDIT ITEM</h2>
+            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Name</label>
+            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="bg-gray-900 border border-gray-700 rounded-lg mb-4 w-full p-3 font-bold text-lg text-white" />
+            
+            <div className="flex justify-between items-center mb-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Target Qty</label>
+                <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg w-20 text-center font-oswald text-xl p-2 text-[#FF6700]" />
             </div>
-            <label className="text-xs font-bold text-industrial-muted uppercase mb-2 block">Card Color</label>
-            <div className="grid grid-cols-6 gap-2 mb-6">
+
+            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Color</label>
+            <div className="grid grid-cols-5 gap-2 mb-6">
               {colors.map((c) => (
-                <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg transition-transform hover:scale-110 ${editingItem.color === c.hex ? "ring-2 ring-white scale-110" : "opacity-40 hover:opacity-100"}`} />
+                <button key={c.hex} onClick={() => setEditingItem({ ...editingItem, color: c.hex })} style={{ backgroundColor: c.hex }} className={`h-10 rounded-lg border border-white/10 ${editingItem.color === c.hex ? "ring-2 ring-white" : ""}`} />
               ))}
             </div>
+            
             <div className="flex gap-2">
-              <button onClick={() => deleteStockItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-red-900/40"><Trash2 size={16} /> Delete</button>
-              <button onClick={saveStockEdit} className="flex-[2] bg-[#FF6700] text-black py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition">SAVE CHANGES</button>
+              <button onClick={() => deleteStockItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold"><Trash2 size={16} /></button>
+              <button onClick={saveStockEdit} className="flex-[3] bg-[#FF6700] text-black py-3 rounded-lg font-bold">SAVE</button>
             </div>
-            <button onClick={() => { const refillVal = parseInt(targetQtyInput) || 3; setEditingItem({...editingItem, quantity: refillVal}); }} className="w-full mt-3 text-xs text-green-500 font-bold uppercase tracking-wider hover:text-green-400 py-2 border border-green-900/30 rounded bg-green-900/10">Quick Action: Refill to Target</button>
           </div>
         </div>
       )}
