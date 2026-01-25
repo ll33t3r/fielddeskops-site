@@ -26,15 +26,16 @@ export default function LoadOut() {
 
   // --- STOCK STATE ---
   const [items, setItems] = useState([]);
+  const [stockSearch, setStockSearch] = useState(""); // NEW: Search State
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
   
-  // --- ADD MODAL STATE (New Streamlined Logic) ---
+  // --- ADD MODAL STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addMode, setAddMode] = useState("SINGLE"); // SINGLE or BULK
-  const [newItemName, setNewItemName] = useState(""); // For single add
-  const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); // For bulk
+  const [addMode, setAddMode] = useState("SINGLE"); 
+  const [newItemName, setNewItemName] = useState(""); 
+  const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
   // --- TOOLS STATE ---
   const [tools, setTools] = useState([]);
@@ -130,7 +131,7 @@ export default function LoadOut() {
     const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
     setItems([tempItem, ...items]);
     setNewItemName("");
-    setShowAddModal(false); // Close modal on success
+    setShowAddModal(false);
 
     const { data } = await supabase.from("inventory").insert({
         user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
@@ -176,7 +177,7 @@ export default function LoadOut() {
   };
 
   const updateStockQty = async (id, currentQty, change) => {
-    vibrate(5); // Sharp tick
+    vibrate(5);
     const newQty = Math.max(0, Number(currentQty) + change);
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
     await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
@@ -334,13 +335,17 @@ export default function LoadOut() {
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
-  // FILTERS
+  // --- FILTERS (Now includes Stock!) ---
   const filteredTools = tools.filter(t => {
       const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
       const matchFilter = toolFilter === "ALL" || 
                           (toolFilter === "OUT" && t.status === "CHECKED_OUT") ||
                           (toolFilter === "BROKEN" && t.status === "BROKEN");
       return matchSearch && matchFilter;
+  });
+
+  const filteredItems = items.filter(i => {
+      return !stockSearch || i.name.toLowerCase().includes(stockSearch.toLowerCase());
   });
 
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
@@ -362,9 +367,9 @@ export default function LoadOut() {
                     <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
 
-                {/* MENU - FIX: Hardcoded Dark Background for Visibility */}
+                {/* MENU */}
                 {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#121212] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
+                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
                             <div className="mb-4 pb-4 border-b border-gray-700">
                                 <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
@@ -415,7 +420,13 @@ export default function LoadOut() {
                 <div className="flex gap-2 mb-4">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-3.5 text-industrial-muted" size={18} />
-                        <input type="text" placeholder="Filter stock..." className="input-field rounded-xl pl-10 pr-4 py-3 w-full bg-industrial-card border-none" />
+                        <input 
+                            type="text" 
+                            placeholder="Filter stock..." 
+                            value={stockSearch} 
+                            onChange={(e) => setStockSearch(e.target.value)} 
+                            className="input-field rounded-xl pl-10 pr-4 py-3 w-full bg-industrial-card border-none" 
+                        />
                     </div>
                     {/* ENHANCED ADD BUTTON */}
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-white text-black h-full px-5 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg">
@@ -425,7 +436,7 @@ export default function LoadOut() {
 
                 {/* THE CONTROL DECK GRID (3 Columns) */}
                 <div className="grid grid-cols-3 gap-3 pb-20 select-none">
-                    {items.map((item) => (
+                    {filteredItems.map((item) => (
                         <div key={item.id} onClick={() => { if(isEditMode) { vibrate(); openStockEdit(item); }}} style={{ backgroundColor: item.color || "#262626" }} className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 ${isEditMode ? "ring-2 ring-white cursor-pointer" : ""} ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}>
                             
                             {/* TOP: INFO */}
