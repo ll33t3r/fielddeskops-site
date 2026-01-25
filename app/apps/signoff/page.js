@@ -5,7 +5,7 @@ import { createClient } from "../../../utils/supabase/client";
 import { 
   PenTool, Save, RotateCcw, Share, Printer, FileText, Calendar, 
   User, Trash2, CheckCircle2, Loader2, X, Lock, ArrowLeft, Menu, 
-  Settings, Plus, ChevronDown, FolderOpen, Clock, Copy, Eye, Pencil, Pin, PinOff, Image as ImageIcon
+  Settings, Plus, ChevronDown, FolderOpen, Clock, Copy, Eye, Pencil, Pin, PinOff, Camera, Image as ImageIcon
 } from "lucide-react";
 import Link from "next/link";
 import SignatureCanvas from "react-signature-canvas";
@@ -14,6 +14,7 @@ export default function SignOff() {
   const supabase = createClient();
   const sigPad = useRef({});
   const dropdownRef = useRef(null);
+  const photoInputRef = useRef(null);
   
   // --- UI STATE ---
   const [loading, setLoading] = useState(true);
@@ -46,9 +47,11 @@ export default function SignOff() {
 
   useEffect(() => { loadAllData(); }, []);
 
-  // Effect to load SiteSnap photos whenever the job changes
+  // Fetch SiteSnap photos whenever job changes
   useEffect(() => {
-    if (selectedJob) loadProjectPhotos(selectedJob);
+    if (selectedJob && selectedJob !== "custom") {
+        loadProjectPhotos(selectedJob);
+    }
   }, [selectedJob]);
 
   const loadAllData = async () => {
@@ -58,7 +61,7 @@ export default function SignOff() {
     const { data: history } = await supabase.from("contracts").select("*").order("created_at", { ascending: false });
     if (history) {
         setContracts(history);
-        const uniqueJobs = [...new Set(history.map(c => c.project_name))].slice(0, 15);
+        const uniqueJobs = [...new Set(history.map(c => c.project_name))].slice(0, 7);
         setRecentJobs(uniqueJobs);
         if (uniqueJobs.length > 0) setSelectedJob(uniqueJobs[0]);
     }
@@ -73,32 +76,48 @@ export default function SignOff() {
         { id: 'd5', label: "FINAL ACCEPTANCE", body: "I, [Client Name], confirm that [Contractor Name] has completed work to my satisfaction.", is_pinned: true }
     ];
 
-    const merged = [...(dbTemplates || [])];
-    defaults.forEach(d => {
-        if (!merged.find(m => m.label === d.label)) merged.push(d);
-    });
-
+    const merged = dbTemplates && dbTemplates.length > 0 ? dbTemplates : defaults;
     setTemplates(merged);
     setLoading(false);
   };
 
   const loadProjectPhotos = async (jobName) => {
-      const { data } = await supabase.from("site_photos").select("image_url, tag").eq("job_name", jobName).limit(5);
+      const { data } = await supabase.from("site_photos").select("image_url, tag").eq("job_name", jobName).order('created_at', { ascending: false }).limit(5);
       if (data) setSiteSnapPhotos(data);
   };
 
   const applySmartTemplate = (templateBody) => {
       vibrate(15);
       let smartText = templateBody;
-      smartText = smartText.replaceAll("[Client Name]", clientName || "CLIENT");
-      smartText = smartText.replaceAll("[Contractor Name]", contractorName || "CONTRACTOR");
+      smartText = smartText.replaceAll("[Client Name]", clientName || "[CLIENT]");
+      smartText = smartText.replaceAll("[Contractor Name]", contractorName || "[CONTRACTOR]");
       setContractBody(smartText);
+  };
+
+  // CROSS-APP PHOTO UPLOAD (Sends to SiteSnap table)
+  const handlePhotoUpload = async (e) => {
+      if (!e.target.files?.[0] || !selectedJob) return;
+      setSaving(true);
+      const file = e.target.files[0];
+      const { data: { user } } = await supabase.auth.getUser();
+      const fileName = `${user.id}/${selectedJob}/${Date.now()}.jpg`;
+      
+      const { error: upErr } = await supabase.storage.from("sitesnap").upload(fileName, file);
+      if (!upErr) {
+          const publicUrl = supabase.storage.from("sitesnap").getPublicUrl(fileName).data.publicUrl;
+          await supabase.from("site_photos").insert({
+              user_id: user.id, job_name: selectedJob, tag: "EVIDENCE", image_url: publicUrl, notes: "Attached via SignOff"
+          });
+          loadProjectPhotos(selectedJob);
+          showToast("Photo synced with SiteSnap", "success");
+      }
+      setSaving(false);
   };
 
   const togglePin = async (templateId) => {
       const pinnedCount = templates.filter(t => t.is_pinned).length;
       const target = templates.find(t => t.id === templateId);
-      if (!target.is_pinned && pinnedCount >= 5) return alert("Max 5 pinned allowed.");
+      if (!target.is_pinned && pinnedCount >= 5) return alert("Dashboard limit is 5.");
       const newStatus = !target.is_pinned;
       setTemplates(templates.map(t => t.id === templateId ? {...t, is_pinned: newStatus} : t));
       if (typeof templateId === 'string' && templateId.length > 5) {
@@ -106,12 +125,11 @@ export default function SignOff() {
       }
   };
 
-  const handleSignatureEnd = () => { if (!sigPad.current.isEmpty()) setHasSigned(true); };
-  const clearSignature = () => { sigPad.current.clear(); setHasSigned(false); setIsSigned(false); setSavedSignature(null); };
-
   const saveContract = async () => {
     const finalProjectName = isCustomJob ? customJobName.toUpperCase() : selectedJob;
-    if (!clientName || !contractBody || !finalProjectName) return alert("Missing details.");
+    if (!clientName || !contractBody || !finalProjectName) return alert("Fill out all fields.");
+    if (sigPad.current.isEmpty()) return alert("Signature required.");
+
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const sigBlob = await new Promise(r => sigPad.current.getCanvas().toBlob(r, "image/png"));
@@ -126,8 +144,8 @@ export default function SignOff() {
 
     if (newDoc) {
         setContracts([newDoc, ...contracts]);
-        // FIX: Update dropdown and clear "stuck" state
-        if (!recentJobs.includes(finalProjectName)) setRecentJobs([finalProjectName, ...recentJobs]);
+        // FIX: Update project list and clear state
+        if (!recentJobs.includes(finalProjectName)) setRecentJobs([finalProjectName, ...recentJobs.slice(0, 6)]);
         setSelectedJob(finalProjectName);
         setIsCustomJob(false);
         setCustomJobName("");
@@ -139,16 +157,10 @@ export default function SignOff() {
     setSaving(false);
   };
 
-  const handleShare = async () => {
-    const text = `FIELDDESKOPS AGREEMENT\nJob: ${selectedJob}\nClient: ${clientName}\n\n${contractBody}\n\nStatus: SIGNED`;
-    if (navigator.share) await navigator.share({ title: `Agreement: ${clientName}`, text });
-    else { navigator.clipboard.writeText(text); showToast("Link Copied", "success"); }
-  };
-
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32 font-inter">
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
       
       {/* HEADER */}
       <div className="flex items-center justify-between px-6 pt-4 mb-4 no-print">
@@ -171,7 +183,7 @@ export default function SignOff() {
             {isCustomJob ? (
                 <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-[#FF6700]">
                     <Plus className="text-[#FF6700]" size={20} />
-                    <input autoFocus placeholder="NEW PROJECT NAME..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
+                    <input autoFocus placeholder="NEW PROJECT..." value={customJobName} onChange={e => setCustomJobName(e.target.value.toUpperCase())} className="bg-transparent text-[var(--text-main)] font-bold uppercase outline-none w-full" />
                     <button onClick={() => setIsCustomJob(false)}><X size={20}/></button>
                 </div>
             ) : (
@@ -181,7 +193,7 @@ export default function SignOff() {
                 </button>
             )}
             {isDropdownOpen && !isCustomJob && (
-                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute top-full left-0 w-full mt-2 bg-[var(--bg-main)] border-2 border-[var(--border-color)] rounded-xl z-50 overflow-hidden shadow-2xl">
                     <div className="p-2 space-y-1">
                         {recentJobs.map(job => (
                             <button key={job} onClick={() => { setSelectedJob(job); setIsDropdownOpen(false); }} className={`w-full text-left px-4 py-3 rounded-lg font-bold uppercase text-sm ${selectedJob === job ? "bg-[#FF6700] text-black" : "text-[var(--text-main)] hover:bg-[#FF6700]/10"}`}>{job}</button>
@@ -196,7 +208,6 @@ export default function SignOff() {
         <div className="bg-white text-black p-8 rounded-xl shadow-2xl relative min-h-[75vh] flex flex-col border border-gray-300">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
                 <div><h1 className="text-3xl font-oswald font-bold uppercase tracking-tighter">Agreement</h1><p className="text-sm font-bold text-gray-400 uppercase">{new Date().toLocaleDateString()}</p></div>
-                {/* ORANGE SIGNED STAMP */}
                 {(isSigned || hasSigned) && (
                     <div className="border-4 border-[#FF6700] text-[#FF6700] font-black px-4 py-1 rounded uppercase rotate-[-12deg] opacity-90 text-2xl font-oswald flex items-center gap-2">
                         <CheckCircle2 size={24}/> SIGNED
@@ -240,20 +251,28 @@ export default function SignOff() {
                     )}
                 </div>
 
-                {/* SITESNAP PROJECT PHOTOS (Evidence Section) */}
-                {siteSnapPhotos.length > 0 && (
-                    <div className="mt-8 border-t border-gray-100 pt-6">
-                        <label className="block text-[10px] font-black uppercase text-gray-400 mb-3 flex items-center gap-2"><ImageIcon size={14}/> SiteSnap Evidence Attachments</label>
+                {/* SITESNAP CROSS-APP EVIDENCE SECTION */}
+                <div className="mt-8 border-t border-gray-100 pt-6">
+                    <div className="flex justify-between items-center mb-3">
+                        <label className="block text-[10px] font-black uppercase text-gray-400 flex items-center gap-2"><ImageIcon size={14}/> SiteSnap Evidence Attachments</label>
+                        {!isSigned && (
+                            <button onClick={() => photoInputRef.current.click()} className="text-[10px] font-black text-[#FF6700] uppercase hover:underline">+ Add Live Photo</button>
+                        )}
+                        <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
+                    </div>
+                    {siteSnapPhotos.length > 0 ? (
                         <div className="grid grid-cols-5 gap-2">
                             {siteSnapPhotos.map((photo, i) => (
-                                <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative">
+                                <div key={i} className="aspect-square rounded border border-gray-200 overflow-hidden relative shadow-sm">
                                     <img src={photo.image_url} className="w-full h-full object-cover" />
                                     <div className="absolute bottom-0 left-0 w-full bg-black/60 text-white text-[6px] font-bold py-0.5 text-center">{photo.tag}</div>
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <p className="text-[10px] italic text-gray-300">No job photos found in SiteSnap yet.</p>
+                    )}
+                </div>
             </div>
 
             <div className="mt-12 border-t-2 border-black pt-6 relative">
@@ -269,7 +288,7 @@ export default function SignOff() {
 
         <div className="mt-8 flex gap-3 no-print">
             {!isSigned ? (
-                <button onClick={saveContract} disabled={saving} className="flex-1 bg-[#FF6700] text-black font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2 text-xl">
+                <button onClick={saveContract} disabled={saving || loading} className="flex-1 bg-[#FF6700] text-black font-black py-5 rounded-2xl shadow-xl hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2 text-xl">
                     {saving ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={28}/>} SAVE AGREEMENT
                 </button>
             ) : (
@@ -309,6 +328,16 @@ export default function SignOff() {
                       ) : (
                           <div className="space-y-4">
                               <button onClick={() => setEditingTemplate({label: "", body: ""})} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/5 transition">+ CUSTOM TEMPLATE</button>
+                              {editingTemplate && (
+                                  <div className="industrial-card p-4 rounded-xl space-y-4 border-[#FF6700]">
+                                      <input placeholder="TITLE (E.G. ROOFING)" value={editingTemplate.label} onChange={e => setEditingTemplate({...editingTemplate, label: e.target.value.toUpperCase()})} className="w-full bg-transparent border-b border-[var(--border-color)] pb-2 font-black text-sm outline-none text-[var(--text-main)]" />
+                                      <textarea placeholder="TERMS..." value={editingTemplate.body} onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})} className="w-full bg-transparent h-40 text-xs font-mono outline-none resize-none text-[var(--text-main)]" />
+                                      <div className="flex gap-2">
+                                          <button onClick={saveNewTemplate} className="flex-1 bg-[#FF6700] text-black font-black py-2 rounded-lg text-xs">SAVE</button>
+                                          <button onClick={() => setEditingTemplate(null)} className="flex-1 bg-zinc-800 text-white font-black py-2 rounded-lg text-xs">CANCEL</button>
+                                      </div>
+                                  </div>
+                              )}
                               {templates.map(t => (
                                   <div key={t.id} className={`industrial-card p-4 rounded-xl flex justify-between items-center ${t.is_pinned ? 'border-[#FF6700]' : 'border-[var(--border-color)]'}`}>
                                       <div className="flex flex-col"><span className="font-bold uppercase text-xs truncate max-w-[150px]">{t.label}</span>{t.is_pinned && <span className="text-[8px] font-black text-[#FF6700]">PINNED</span>}</div>
