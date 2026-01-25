@@ -6,7 +6,7 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft
 } from "lucide-react";
 import Link from "next/link";
 
@@ -30,11 +30,13 @@ export default function LoadOut() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
-  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   
-  // --- ADD MODAL STATE (Consolidated) ---
+  // --- SWAP STATE (Replaces Drag & Drop) ---
+  const [swapSourceIndex, setSwapSourceIndex] = useState(null);
+  
+  // --- ADD MODAL STATE ---
   const [showAddModal, setShowAddModal] = useState(false);
-  // Removed "addMode" and "newItemName" - we now use batchRows for everything.
+  // Unified logic - batchRows handles single and bulk
   const [batchRows, setBatchRows] = useState([{ name: "", qty: 3 }]); 
 
   // --- TOOLS STATE ---
@@ -122,34 +124,55 @@ export default function LoadOut() {
     }
   };
 
-  // --- DRAG & DROP LOGIC ---
-  const handleDragStart = (e, index) => {
-      setDraggedItemIndex(index);
-      e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e, index) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = (e, dropIndex) => {
-      e.preventDefault();
-      if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
-
-      const newItems = [...items];
-      const draggedItem = newItems[draggedItemIndex];
-      
-      newItems.splice(draggedItemIndex, 1);
-      newItems.splice(dropIndex, 0, draggedItem);
-      
-      setItems(newItems);
-      setDraggedItemIndex(null);
+  // --- SWAP LOGIC (Replaces Drag & Drop) ---
+  const handleSwapClick = (index) => {
       vibrate(20);
-      showToast("Order Updated", "success");
+      
+      // If nothing selected, select this one
+      if (swapSourceIndex === null) {
+          setSwapSourceIndex(index);
+          return;
+      }
+
+      // If clicking self, deselect
+      if (swapSourceIndex === index) {
+          setSwapSourceIndex(null);
+          return;
+      }
+
+      // Perform Swap
+      const newItems = [...items];
+      const itemA = newItems[swapSourceIndex];
+      const itemB = newItems[index];
+
+      newItems[swapSourceIndex] = itemB;
+      newItems[index] = itemA;
+
+      setItems(newItems);
+      setSwapSourceIndex(null);
+      showToast("Items Swapped", "success");
+      
+      // Optional: Here you would save the new order to DB if you had a sort_order column
   };
 
-  // --- UNIFIED ADD LOGIC ---
+  // 2. STOCK ACTIONS
+  const addSingleStockItem = async () => {
+    if (!newItemName.trim()) return;
+    vibrate(20);
+    const { data: { user } } = await supabase.auth.getUser();
+    const tempId = Math.random();
+    const tempItem = { id: tempId, name: newItemName, quantity: 1, min_quantity: 3, color: THEME_ORANGE };
+    setItems([tempItem, ...items]);
+    setNewItemName("");
+    setShowAddModal(false);
+
+    const { data } = await supabase.from("inventory").insert({
+        user_id: user.id, van_id: currentVan.id, name: tempItem.name, quantity: 1, min_quantity: 3, color: THEME_ORANGE 
+    }).select().single();
+    if (data) setItems(prev => prev.map(i => i.id === tempId ? data : i));
+  };
+
+  // BATCH ACTIONS
   const handleBatchRowChange = (index, field, value) => {
       const newRows = [...batchRows];
       newRows[index][field] = value;
@@ -162,7 +185,7 @@ export default function LoadOut() {
   };
 
   const removeBatchRow = (index) => {
-      if (batchRows.length === 1) return;
+      if(batchRows.length === 1) return;
       const newRows = [...batchRows];
       newRows.splice(index, 1);
       setBatchRows(newRows);
@@ -175,17 +198,16 @@ export default function LoadOut() {
       
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Optimistic Update
+      // Optimistic
       const newItems = validRows.map(r => ({
           id: Math.random(), name: r.name, quantity: 1, min_quantity: parseInt(r.qty) || 3, color: THEME_ORANGE
       }));
       setItems([...newItems, ...items]);
       
-      // Reset Modal
       setBatchRows([{ name: "", qty: 3 }]);
       setShowAddModal(false);
 
-      // DB Writes
+      // DB Loop
       for (const row of validRows) {
           await supabase.from("inventory").insert({
             user_id: user.id, van_id: currentVan.id, name: row.name, 
@@ -203,7 +225,8 @@ export default function LoadOut() {
     await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
   };
 
-  const openStockEdit = (item) => {
+  const openStockEdit = (e, item) => {
+      e.stopPropagation(); // Prevent swap click
       vibrate();
       setEditingItem(item);
       setTargetQtyInput(item.min_quantity.toString());
@@ -423,7 +446,6 @@ export default function LoadOut() {
                             <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
                         </div>
                         
-                        {/* TEAM MANAGEMENT MOVED HERE */}
                         <div className="mb-4 pb-4 border-b border-gray-700">
                              <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
                                 <Users size={16}/> MANAGE TEAM
@@ -477,20 +499,19 @@ export default function LoadOut() {
                     {filteredItems.map((item, index) => (
                         <div 
                             key={item.id} 
-                            onClick={() => { if(isEditMode) { vibrate(); openStockEdit(item); }}} 
-                            onDragStart={(e) => isEditMode && handleDragStart(e, index)}
-                            onDragOver={(e) => isEditMode && handleDragOver(e, index)}
-                            onDrop={(e) => isEditMode && handleDrop(e, index)}
-                            draggable={isEditMode}
+                            onClick={() => { if(isEditMode) handleSwapClick(index); }} 
                             style={{ backgroundColor: item.color || "#262626" }} 
                             className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 
-                                ${isEditMode ? "ring-2 ring-white cursor-grab active:cursor-grabbing hover:scale-95 transition-transform" : ""} 
+                                ${isEditMode ? "cursor-pointer active:scale-95 transition-transform" : ""}
+                                ${swapSourceIndex === index ? "ring-4 ring-[#FF6700] scale-95" : (isEditMode ? "ring-2 ring-white" : "")} 
                                 ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
                         >
                             {/* TOP */}
                             <div className="p-3 flex justify-between items-start h-[30%]">
                                 <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
-                                {isEditMode ? <GripVertical size={16} className="text-white/50" /> : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
+                                {isEditMode ? (
+                                    <button onClick={(e) => openStockEdit(e, item)} className="p-1 bg-black/50 rounded hover:bg-[#FF6700] hover:text-black text-white transition"><Edit3 size={14}/></button>
+                                ) : (item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>)}
                             </div>
                             {/* MIDDLE */}
                             <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
@@ -503,7 +524,7 @@ export default function LoadOut() {
                                     <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors"><Plus size={24} /></button>
                                 </div>
                             )}
-                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">DRAG TO MOVE</div>}
+                            {isEditMode && <div className="absolute inset-x-0 bottom-0 h-[35%] bg-black/50 flex items-center justify-center text-[10px] font-bold uppercase text-white">{swapSourceIndex === index ? "SELECTED" : "TAP TO SWAP"}</div>}
                         </div>
                     ))}
                 </div>
