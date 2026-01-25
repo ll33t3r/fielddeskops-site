@@ -16,7 +16,8 @@
     "next": "14.0.4",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-signature-canvas": "^1.1.0-alpha.2"
+    "react-signature-canvas": "^1.1.0-alpha.2",
+    "stripe": "^20.2.0"
   },
   "devDependencies": {
     "@types/react": "19.2.8",
