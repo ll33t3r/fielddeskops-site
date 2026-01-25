@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
-  LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2
+  LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
+  X, ChevronRight, ShoppingCart
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,9 @@ export default function Dashboard() {
   // STATE
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("HELLO");
-  const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, lowStock: 0 });
+  const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, lowStockCount: 0 });
+  const [alertItems, setAlertItems] = useState([]); // Stores the actual items
+  const [showAlerts, setShowAlerts] = useState(false); // Controls modal
   const [theme, setTheme] = useState("dark");
   
   useEffect(() => {
@@ -49,15 +52,16 @@ export default function Dashboard() {
     const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.sale_price) || 0), 0) : 0;
     const jobs = bids ? bids.length : 0;
 
-    // FETCH ALERTS (LoadOut) -> Low Stock Logic
-    // Matches logic in LoadOut app: item.quantity < (item.min_quantity || 3)
-    const { data: inventory } = await supabase.from("inventory").select("quantity, min_quantity");
-    let lowStockCount = 0;
+    // FETCH ALERTS (LoadOut)
+    const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
+    let lowItems = [];
     if (inventory) {
-        lowStockCount = inventory.filter(i => i.quantity < (i.min_quantity || 3)).length;
+        // Filter items where Quantity < Target (default 3)
+        lowItems = inventory.filter(i => i.quantity < (i.min_quantity || 3));
     }
 
-    setMetrics({ revenue, jobs, lowStock: lowStockCount });
+    setAlertItems(lowItems);
+    setMetrics({ revenue, jobs, lowStockCount: lowItems.length });
     setLoading(false);
   };
 
@@ -66,20 +70,20 @@ export default function Dashboard() {
   if (loading) return <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
 
   return (
-    <div className="h-screen flex flex-col relative selection:bg-[#FF6700] selection:text-black bg-[var(--bg-main)] overflow-hidden">
+    <div className="h-screen flex flex-col relative selection:bg-[#FF6700] selection:text-black bg-[var(--bg-main)] overflow-hidden font-inter">
       
       {/* HEADER */}
       <header className="px-6 pt-6 pb-2 shrink-0">
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-bold text-[10px] tracking-[0.2em] uppercase mb-1">FIELDDESKOPS</p>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-wide">{greeting}.</h1>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-wide text-foreground">{greeting}.</h1>
             </div>
             <div className="flex gap-3">
-                <button onClick={toggleTheme} className="p-3 rounded-full industrial-card hover:text-[#FF6700] transition">
+                <button onClick={toggleTheme} className="p-3 rounded-full industrial-card hover:text-[#FF6700] transition text-foreground">
                     {theme === "dark" ? <Sun size={20}/> : <Moon size={20}/>}
                 </button>
-                <button onClick={handleLogout} className="p-3 rounded-full industrial-card hover:bg-red-500/20 hover:text-red-500 transition">
+                <button onClick={handleLogout} className="p-3 rounded-full industrial-card hover:bg-red-500/20 hover:text-red-500 transition text-foreground">
                     <LogOut size={20}/>
                 </button>
             </div>
@@ -96,19 +100,23 @@ export default function Dashboard() {
             {/* 2. Jobs */}
             <div className="industrial-card rounded-xl p-3 text-center">
                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Jobs</p>
-                <p className="font-bold text-lg tracking-tight">{metrics.jobs}</p>
+                <p className="font-bold text-lg tracking-tight text-foreground">{metrics.jobs}</p>
             </div>
 
-            {/* 3. SYSTEM ALERTS (The Logic) */}
-            <div className={`industrial-card rounded-xl p-3 text-center transition-all duration-300 ${metrics.lowStock > 0 ? "bg-red-500/10 border-red-500" : ""}`}>
-                <p className={`text-[10px] uppercase font-bold tracking-wider ${metrics.lowStock > 0 ? "text-red-500" : "text-gray-400"}`}>
-                    {metrics.lowStock > 0 ? "ATTENTION" : "SYSTEM"}
+            {/* 3. SYSTEM ALERTS (Clickable) */}
+            <button 
+                onClick={() => metrics.lowStockCount > 0 && setShowAlerts(true)}
+                disabled={metrics.lowStockCount === 0}
+                className={`industrial-card rounded-xl p-3 text-center transition-all duration-300 relative overflow-hidden ${metrics.lowStockCount > 0 ? "bg-red-900/10 border-red-500 cursor-pointer hover:bg-red-900/20 active:scale-95" : "cursor-default opacity-80"}`}
+            >
+                <p className={`text-[10px] uppercase font-bold tracking-wider ${metrics.lowStockCount > 0 ? "text-red-500" : "text-gray-400"}`}>
+                    {metrics.lowStockCount > 0 ? "ATTENTION" : "SYSTEM"}
                 </p>
                 <div className="flex items-center justify-center gap-2">
-                    {metrics.lowStock > 0 ? (
+                    {metrics.lowStockCount > 0 ? (
                         <>
                             <AlertTriangle size={16} className="text-red-500 animate-pulse" />
-                            <p className="font-bold text-lg tracking-tight text-red-500">{metrics.lowStock} LOW</p>
+                            <p className="font-bold text-lg tracking-tight text-red-500">{metrics.lowStockCount} LOW</p>
                         </>
                     ) : (
                         <>
@@ -117,7 +125,9 @@ export default function Dashboard() {
                         </>
                     )}
                 </div>
-            </div>
+                {/* Visual Hint to click if active */}
+                {metrics.lowStockCount > 0 && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500/50"><ChevronRight size={14}/></div>}
+            </button>
         </div>
       </header>
 
@@ -125,7 +135,7 @@ export default function Dashboard() {
       <main className="flex-1 p-6 min-h-0">
          <div className="grid grid-cols-2 grid-rows-2 gap-4 h-full w-full max-w-2xl mx-auto">
             <AppCard href="/apps/profitlock" label="PROFITLOCK" sub="Bids & Invoices" icon={<Calculator size={32}/>} color="group-hover:text-green-500" />
-            <AppCard href="/apps/loadout" label="LOADOUT" sub="Inventory" icon={<Package size={32}/>} color="group-hover:text-blue-500" alert={metrics.lowStock > 0} />
+            <AppCard href="/apps/loadout" label="LOADOUT" sub="Inventory" icon={<Package size={32}/>} color="group-hover:text-blue-500" alert={metrics.lowStockCount > 0} />
             <AppCard href="/apps/sitesnap" label="SITESNAP" sub="Photos" icon={<Camera size={32}/>} color="group-hover:text-purple-500" />
             <AppCard href="/apps/signoff" label="SIGNOFF" sub="Contracts" icon={<PenTool size={32}/>} color="group-hover:text-[#FF6700]" />
          </div>
@@ -137,6 +147,50 @@ export default function Dashboard() {
                 POWERED BY FIELDDESKOPS
             </p>
       </div>
+
+      {/* --- ALERT MODAL --- */}
+      {showAlerts && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-200">
+            <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-red-900/50 bg-[#0a0a0a]">
+                
+                {/* Header */}
+                <div className="flex justify-between items-center mb-6 border-b border-red-900/30 pb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-red-500/10 rounded-full">
+                            <AlertTriangle size={24} className="text-red-500" />
+                        </div>
+                        <div>
+                            <h2 className="font-oswald font-bold text-xl text-red-500 tracking-wide">SYSTEM ALERTS</h2>
+                            <p className="text-xs text-red-400/60 uppercase font-bold tracking-widest">Action Required</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowAlerts(false)} className="text-gray-500 hover:text-white transition"><X size={24}/></button>
+                </div>
+
+                {/* List */}
+                <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar mb-6">
+                    {alertItems.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-red-900/5 border border-red-900/20 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                <span className="font-bold text-gray-200">{item.name}</span>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-red-500 font-mono font-bold text-lg">{item.quantity}</span>
+                                <span className="text-gray-600 text-[10px] uppercase font-bold ml-1">/ {item.min_quantity || 3}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Action */}
+                <Link href="/apps/loadout" className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition shadow-[0_0_20px_rgba(220,38,38,0.4)]">
+                    <ShoppingCart size={18}/> GO TO LOADOUT
+                </Link>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -159,7 +213,7 @@ function AppCard({ href, label, sub, icon, color, alert }) {
                 {alert && <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]"></span>}
             </div>
             
-            <h2 className="text-lg md:text-2xl font-bold tracking-widest mb-1 group-hover:text-white transition-colors">{label}</h2>
+            <h2 className="text-lg md:text-2xl font-bold tracking-widest mb-1 group-hover:text-white transition-colors text-foreground">{label}</h2>
             <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-bold">{sub}</p>
         </Link>
     );
