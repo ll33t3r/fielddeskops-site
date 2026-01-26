@@ -130,8 +130,13 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
+          // This specific error handling helps debug the schema cache issue
           console.error("Supabase Error:", error);
-          alert(`Error creating job: ${error?.message || "Unknown error"}. Check console.`);
+          if(error.message.includes("schema cache")) {
+             alert("Browser cache error. Please refresh the page.");
+          } else {
+             alert(`Error creating job: ${error?.message || "Unknown error"}.`);
+          }
       }
   };
 
