@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "./utils/supabase/client";
+import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
   LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
@@ -60,7 +60,6 @@ export default function Dashboard() {
     const { data: jobs } = await supabase.from("jobs").select("*").eq("status", "ACTIVE").order("updated_at", { ascending: false });
     
     // 2. REVENUE (ProfitLock Bids)
-    // We fetch bids to calculate estimated revenue vs expenses
     const { data: bids } = await supabase.from("bids").select("sale_price, material_cost, status");
     let income = 0;
     let expense = 0;
