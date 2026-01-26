@@ -1,325 +1,467 @@
-﻿'use client';
+﻿"use client";
 
-import { useState, useEffect } from 'react';
-import { createClient } from '../../../utils/supabase/client';
-import { Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Plus, Loader2 } from 'lucide-react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import { createClient } from "../utils/supabase/client";
+import { 
+  Calculator, Package, Camera, PenTool, 
+  LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
+  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2, User as UserIcon, MapPin
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-export default function ProfitLock() {
+export default function Dashboard() {
   const supabase = createClient();
+  const router = useRouter();
+
+  // --- STATE ---
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [time, setTime] = useState("");
+  const [greeting, setGreeting] = useState("WELCOME");
   
-  // STATE
-  const [isInvoiceMode, setIsInvoiceMode] = useState(false);
-  const [jobName, setJobName] = useState('');
-  const [materialsCost, setMaterialsCost] = useState(''); 
-  const [laborHours, setLaborHours] = useState('');
+  // Data State
+  const [metrics, setMetrics] = useState({ revenue: 0, profit: 0, jobs: 0, alerts: 0 });
+  const [activeJobs, setActiveJobs] = useState([]);
+  const [crewList, setCrewList] = useState([]);
+  const [vanList, setVanList] = useState([]);
+  const [customerList, setCustomerList] = useState([]);
+  const [alertList, setAlertList] = useState([]);
+  const [financials, setFinancials] = useState({ income: 0, expense: 0 });
+
+  // UI State
+  const [activeDrawer, setActiveDrawer] = useState(null); 
+  const [adminTab, setAdminTab] = useState("JOB"); 
+  const [showNewJobModal, setShowNewJobModal] = useState(false);
+  const [creating, setCreating] = useState(false);
   
-  // DYNAMIC EXPENSES (Subs, Permits, etc.)
-  const [expenses, setExpenses] = useState([]); // [{id: 1, name: '', cost: ''}]
+  // Forms
+  const [newJobData, setNewJobData] = useState({ name: "", client: "" });
+  const [newWorker, setNewWorker] = useState({ name: "", role: "Tech" });
+  const [newVan, setNewVan] = useState({ name: "", plate: "" });
+  const [newCustomer, setNewCustomer] = useState({ name: "", address: "" });
 
-  // UI STATE
-  const [showMenu, setShowMenu] = useState(false); 
-  const [showSettings, setShowSettings] = useState(false);
+  // --- INIT ---
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    document.documentElement.setAttribute("data-theme", savedTheme);
 
-  // DEFAULTS
-  const [hourlyRate, setHourlyRate] = useState(75);
-  const [markupPercent, setMarkupPercent] = useState(20);
-  
-  const [bidHistory, setBidHistory] = useState([]);
-  const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(false);
+    const updateTime = () => {
+      const now = new Date();
+      setTime(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      const h = now.getHours();
+      setGreeting(h < 12 ? "GOOD MORNING" : h < 18 ? "GOOD AFTERNOON" : "GOOD EVENING");
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 60000);
 
-  // LOAD BIDS
-  useEffect(() => { fetchBids(); }, []);
+    loadCommandData();
+    return () => clearInterval(interval);
+  }, []);
 
-  const fetchBids = async () => {
+  const loadCommandData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase.from('bids').select('*').order('created_at', { ascending: false });
-    if (data) {
-        const mapped = data.map(bid => {
-            // Reconstruct costs
-            const cost = Number(bid.materials) + (Number(bid.hours) * Number(bid.rate));
-            const finalBid = Number(bid.sale_price);
-            const grossMargin = finalBid > 0 ? ((finalBid - cost) / finalBid) * 100 : 0;
-            return {
-                id: bid.id,
-                jobName: bid.project_name,
-                materials: Number(bid.materials),
-                hours: Number(bid.hours),
-                rate: Number(bid.rate),
-                markup: Number(bid.margin),
-                cost: cost,
-                finalPrice: `$${finalBid.toFixed(2)}`,
-                grossMargin: Math.round(grossMargin),
-                date: new Date(bid.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            };
+    if (!user) { router.replace("/auth/login"); return; }
+    setUser(user);
+
+    // 1. FETCH RESOURCES
+    const { data: jobs } = await supabase.from("jobs").select("*").order("updated_at", { ascending: false });
+    const { data: crew } = await supabase.from("crew").select("*").order("created_at", { ascending: false });
+    const { data: vans } = await supabase.from("vans").select("*").order("created_at", { ascending: false });
+    const { data: customers } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+    const { data: bids } = await supabase.from("bids").select("sale_price, material_cost, status");
+    const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
+    const { data: drafts } = await supabase.from("contracts").select("project_name, created_at").eq("status", "DRAFT");
+
+    // 2. FINANCIALS
+    let income = 0, expense = 0, badBids = 0;
+    if (bids) {
+        bids.forEach(b => {
+            if (b.status !== "REJECTED") {
+                income += (Number(b.sale_price) || 0);
+                expense += (Number(b.material_cost) || 0);
+            } else badBids++;
         });
-        setBidHistory(mapped);
     }
-  };
 
-  // --- LOGIC ENGINE ---
-  
-  // 1. Calculate Base Costs
-  const matCost = parseFloat(materialsCost) || 0;
-  const hrs = parseFloat(laborHours) || 0;
-  const rate = parseFloat(hourlyRate) || 75;
-  const laborCost = hrs * rate;
-  
-  // 2. Calculate Extra Expenses
-  const totalExpenses = expenses.reduce((acc, item) => acc + (parseFloat(item.cost) || 0), 0);
+    // 3. ALERTS
+    let alerts = [];
+    if (inventory) inventory.forEach(i => { if (i.quantity <= (i.min_quantity || 3)) alerts.push({ type: "STOCK", msg: `Low: ${i.name}`, link: "/apps/loadout", severity: "high" }); });
+    if (drafts) {
+        const yesterday = new Date(Date.now() - 86400000);
+        drafts.forEach(d => { if (new Date(d.created_at) < yesterday) alerts.push({ type: "DRAFT", msg: `Stale: ${d.project_name}`, link: "/apps/signoff", severity: "med" }); });
+    }
+    if (badBids > 0) alerts.push({ type: "BID", msg: `${badBids} Rejected Bids`, link: "/apps/profitlock", severity: "high" });
 
-  // 3. Totals
-  const totalInternalCost = matCost + laborCost + totalExpenses;
-  const markup = parseFloat(markupPercent) || 20;
-  const markupAmount = totalInternalCost * (markup / 100);
-  const finalBid = totalInternalCost + markupAmount;
-  const netProfit = finalBid - totalInternalCost;
-  const grossMargin = finalBid > 0 ? (netProfit / finalBid) * 100 : 0;
-
-  // Meter Logic
-  const getProfitMeterInfo = (margin) => {
-    const visualWidth = Math.min(margin * 1.6, 100);
-    if (margin < 20) return { color: '#ef4444', label: 'RISKY', width: visualWidth };
-    else if (margin < 40) return { color: '#eab308', label: 'OK', width: visualWidth };
-    else return { color: '#22c55e', label: 'HEALTHY', width: visualWidth };
-  };
-  const meterInfo = getProfitMeterInfo(grossMargin);
-
-  // --- ACTIONS ---
-
-  const addExpense = () => {
-    setExpenses([...expenses, { id: Date.now(), name: '', cost: '' }]);
-  };
-
-  const updateExpense = (id, field, value) => {
-    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
-  };
-
-  const removeExpense = (id) => {
-    setExpenses(expenses.filter(e => e.id !== id));
-  };
-
-  const saveBid = async () => {
-    if (!jobName.trim()) { showToast('Enter job name', 'error'); return; }
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
-    
-    // NOTE: For now, we combine materials + expenses into the 'materials' column
-    // so the math in the database stays accurate without needing a schema migration today.
-    const combinedMaterials = matCost + totalExpenses;
-
-    const { error } = await supabase.from('bids').insert({
-      user_id: user.id,
-      project_name: jobName,
-      materials: combinedMaterials, 
-      hours: hrs, 
-      rate: rate, 
-      margin: markup,
-      sale_price: finalBid, 
-      profit: netProfit
+    // 4. SET STATE
+    setActiveJobs(jobs || []);
+    setCrewList(crew || []);
+    setVanList(vans || []);
+    setCustomerList(customers || []);
+    setAlertList(alerts);
+    setFinancials({ income, expense });
+    setMetrics({ 
+        revenue: income, 
+        profit: income - expense, 
+        jobs: jobs?.filter(j => j.status === "ACTIVE").length || 0, 
+        alerts: alerts.length 
     });
-    
-    if (!error) { fetchBids(); showToast('✅ Bid Saved', 'success'); }
-    else { showToast(error.message, 'error'); }
     setLoading(false);
   };
 
-  const loadBid = (bid) => {
-    setJobName(bid.jobName);
-    setMaterialsCost(bid.materials); // This will include expenses if loaded from history (limit of current DB)
-    setLaborHours(bid.hours);
-    setHourlyRate(bid.rate);
-    setMarkupPercent(bid.markup);
-    setExpenses([]); // Reset expenses on load to avoid duplication logic for now
-    setIsInvoiceMode(false);
-    setShowSettings(false);
-    setShowMenu(false); 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // --- ACTIONS (SIMPLIFIED) ---
+
+  const handleCreateJob = async () => {
+      if (!newJobData.name) return;
+      setCreating(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // DIRECT INSERT - No checks, no relations, just text.
+      const { data, error } = await supabase.from("jobs").insert({
+          user_id: user.id,
+          job_name: newJobData.name.toUpperCase(),
+          customer_name: newJobData.client || "", // Just saves the text string
+          status: "ACTIVE"
+      }).select().single();
+
+      setCreating(false);
+
+      if (!error && data) {
+          setActiveJobs([data, ...activeJobs]);
+          setMetrics({...metrics, jobs: metrics.jobs + 1});
+          setShowNewJobModal(false);
+          setNewJobData({ name: "", client: "" });
+      } else {
+          // If this fails, it's a connection or permission issue, not logic.
+          alert(`DB Error: ${error?.message}`);
+      }
   };
 
-  const deleteBid = async (id, index) => {
-    if(!confirm('Delete?')) return;
-    const newHist = [...bidHistory];
-    newHist.splice(index, 1);
-    setBidHistory(newHist);
-    await supabase.from('bids').delete().eq('id', id);
+  const handleCreateWorker = async () => {
+      if (!newWorker.name) return;
+      setCreating(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.from("crew").insert({ 
+          user_id: user.id, name: newWorker.name, role: newWorker.role 
+      }).select().single();
+      
+      setCreating(false);
+      if (!error && data) {
+          setCrewList([data, ...crewList]);
+          setNewWorker({ name: "", role: "Tech" });
+      } else alert(`Error: ${error?.message}`);
   };
 
-  const showToast = (msg, type) => { setToast({message: msg, type}); setTimeout(()=>setToast(null), 3000); };
+  const handleCreateVan = async () => {
+      if (!newVan.name) return;
+      setCreating(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.from("vans").insert({ 
+          user_id: user.id, name: newVan.name, plate_number: newVan.plate 
+      }).select().single();
+
+      setCreating(false);
+      if (!error && data) {
+          setVanList([data, ...vanList]);
+          setNewVan({ name: "", plate: "" });
+      } else alert(`Error: ${error?.message}`);
+  };
+
+  const handleCreateCustomer = async () => {
+      if (!newCustomer.name) return;
+      setCreating(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.from("customers").insert({ 
+          user_id: user.id, name: newCustomer.name, address: newCustomer.address 
+      }).select().single();
+
+      setCreating(false);
+      if (!error && data) {
+          setCustomerList([data, ...customerList]);
+          setNewCustomer({ name: "", address: "" });
+      } else alert(`Error: ${error?.message}`);
+  };
+
+  const deleteResource = async (table, id) => {
+      if(!confirm("Delete this item?")) return;
+      await supabase.from(table).delete().eq("id", id);
+      if (table === "crew") setCrewList(crewList.filter(c => c.id !== id));
+      if (table === "vans") setVanList(vanList.filter(v => v.id !== id));
+      if (table === "customers") setCustomerList(customerList.filter(c => c.id !== id));
+      if (table === "jobs") setActiveJobs(activeJobs.filter(j => j.id !== id));
+  };
+
+  const completeJob = async (jobId) => {
+      await supabase.from("jobs").update({ status: "COMPLETED" }).eq("id", jobId);
+      setActiveJobs(activeJobs.map(j => j.id === jobId ? {...j, status: "COMPLETED"} : j));
+      setMetrics({...metrics, jobs: metrics.jobs - 1});
+  };
+
+  const handleLogout = async () => { await supabase.auth.signOut(); router.replace("/auth/login"); };
   
-  const handleShare = async () => { 
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: `Estimate: ${jobName}`,
-                text: `Estimate for ${jobName} - Total: $${finalBid.toFixed(2)}`,
-                url: window.location.href 
-            });
-        } catch (err) {}
-    } else {
-        showToast('Share not available on this device', 'error');
-    }
+  const toggleTheme = () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
   };
+
+  if (loading) return <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
 
   return (
-    <div className="flex flex-col p-4 max-w-xl mx-auto space-y-6 relative min-h-screen bg-[var(--bg-main)]">
+    <div className="h-screen flex flex-col relative selection:bg-[#FF6700] selection:text-black bg-[var(--bg-main)] overflow-hidden font-inter text-[var(--text-main)]">
       
-      {/* 1. HEADER */}
-      <div className="flex items-center gap-4">
-        <Link href="/" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors border border-transparent hover:border-[#FF6700]/30">
-          <ArrowLeft size={24} />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">ProfitLock</h1>
-          <p className="text-xs text-[var(--text-sub)] font-bold tracking-widest opacity-60">BIDS & INVOICES</p>
-        </div>
-      </div>
-
-      {/* MENU BUTTON */}
-      <button onClick={() => setShowMenu(true)} className="absolute top-4 right-4 z-40 p-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full hover:border-[#FF6700] transition text-[var(--text-main)]">
-        <Menu size={20} />
-      </button>
-
-      {/* SIDEBAR HISTORY */}
-      <div className={`fixed inset-y-0 right-0 w-80 bg-[var(--bg-main)] border-l border-[var(--border-color)] shadow-2xl transform transition-transform duration-300 z-50 ${showMenu ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="p-6 h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="font-oswald font-bold text-xl text-[#FF6700] uppercase flex items-center gap-2"><Save size={18}/> Saved Bids</h2>
-                <button onClick={() => setShowMenu(false)} className="text-[var(--text-sub)] hover:text-[#FF6700]"><X/></button>
+      {/* --- HUD HEADER --- */}
+      <header className="px-6 pt-6 pb-2 shrink-0 z-10 relative">
+        <div className="flex justify-between items-start">
+            <div>
+                <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1">FIELDDESKOPS</p>
+                <div className="flex items-center gap-2">
+                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
+                        <span className="text-[#FF6700] animate-pulse">COMMAND</span>CENTER
+                    </h1>
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                    <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide">{greeting}, {user?.email?.split("@")[0]}</p>
+                    <span className="text-[10px] font-mono text-zinc-600 font-bold tracking-widest pt-1">{time}</span>
+                </div>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-                {bidHistory.length === 0 ? <p className="text-[var(--text-sub)] text-xs italic text-center py-10">No saved history.</p> : 
-                  bidHistory.map((bid, idx) => (
-                    <div key={bid.id} onClick={() => loadBid(bid)} className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg p-3 cursor-pointer hover:border-[#FF6700] transition group relative">
-                        <div className="flex justify-between items-start">
-                          <div><p className="font-bold text-[var(--text-main)] text-sm truncate w-40">{bid.jobName || 'No Name'}</p><p className="text-[10px] text-[var(--text-sub)]">{bid.date}</p></div>
-                          <div className="text-right"><p className="text-green-500 font-oswald font-bold">{bid.finalPrice}</p></div>
+            
+            <button onClick={() => setActiveDrawer("SETTINGS")} className="industrial-card p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:scale-105 transition-transform active:scale-95">
+                <Menu size={24} strokeWidth={3} />
+            </button>
+        </div>
+
+        {/* --- METRIC TILES --- */}
+        <div className="grid grid-cols-3 gap-3 mt-6">
+            <button onClick={() => setActiveDrawer("FINANCE")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden group ${metrics.profit < 0 ? "border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse" : "border-transparent hover:border-green-500/50"}`}>
+                <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">NET REVENUE</p>
+                <p className={`text-lg font-black tracking-tighter ${metrics.profit >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    ${metrics.profit.toLocaleString()}
+                </p>
+                <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
+            </button>
+
+            <button onClick={() => setActiveDrawer("JOBS")} className="industrial-card rounded-xl p-3 text-center border-2 border-transparent hover:border-[#FF6700]/50 transition-all relative overflow-hidden group">
+                <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">ACTIVE OPS</p>
+                <p className="text-lg font-black tracking-tighter text-[var(--text-main)]">{metrics.jobs}</p>
+                <div className="absolute inset-0 bg-[#FF6700]/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
+            </button>
+
+            <button onClick={() => setActiveDrawer("ALERTS")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden ${metrics.alerts > 0 ? "border-red-500/50 bg-red-900/10" : "border-transparent opacity-60"}`}>
+                <p className={`text-[9px] uppercase font-black tracking-widest mb-1 ${metrics.alerts > 0 ? "text-red-500" : "text-zinc-500"}`}>SYSTEM</p>
+                <div className="flex items-center justify-center gap-2">
+                    {metrics.alerts > 0 ? <AlertTriangle size={18} className="text-red-500 animate-pulse"/> : <CheckCircle2 size={18} className="text-zinc-600"/>}
+                    <span className={`text-lg font-black ${metrics.alerts > 0 ? "text-red-500" : "text-zinc-600"}`}>{metrics.alerts > 0 ? metrics.alerts : "OK"}</span>
+                </div>
+            </button>
+        </div>
+      </header>
+
+      {/* --- APP GRID --- */}
+      <main className="flex-1 p-6 min-h-0 pt-2">
+         <div className="grid grid-cols-2 grid-rows-2 gap-4 h-full w-full max-w-2xl mx-auto">
+            <AppCard href="/apps/profitlock" label="PROFITLOCK" sub="Estimates" icon={<Calculator size={32}/>} color="text-green-500" status={metrics.profit < 0 ? "red" : "green"} />
+            <AppCard href="/apps/loadout" label="LOADOUT" sub="Inventory" icon={<Package size={32}/>} color="text-blue-500" status={alertList.find(a => a.type === "STOCK") ? "red" : "green"} />
+            <AppCard href="/apps/sitesnap" label="SITESNAP" sub="Evidence" icon={<Camera size={32}/>} color="text-purple-500" status="green" />
+            <AppCard href="/apps/signoff" label="SIGNOFF" sub="Contracts" icon={<PenTool size={32}/>} color="text-[#FF6700]" status={alertList.find(a => a.type === "DRAFT") ? "yellow" : "green"} />
+         </div>
+      </main>
+
+      {/* --- DRAWERS --- */}
+      
+      {/* 1. JOB MANAGER + CREATE MODAL */}
+      {activeDrawer === "JOBS" && (
+        <Drawer title="MISSION CONTROL" close={() => setActiveDrawer(null)}>
+            {showNewJobModal ? (
+                <div className="animate-in slide-in-from-right space-y-4 p-1">
+                    <div className="flex items-center gap-2 mb-4 text-[#FF6700] cursor-pointer" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
+                    <h3 className="text-sm font-black uppercase">New Job Dispatch</h3>
+                    <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
+                    <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
+                    <button onClick={handleCreateJob} disabled={creating} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase shadow-lg flex items-center justify-center gap-2">
+                        {creating ? <Loader2 className="animate-spin" size={18}/> : "CREATE JOB"}
+                    </button>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    <button onClick={() => { setNewJobData({name: "", client: ""}); setShowNewJobModal(true); }} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/10 uppercase transition-colors">+ DISPATCH NEW JOB</button>
+                    {activeJobs.map(job => (
+                        <div key={job.id} className="industrial-card p-4 rounded-xl border border-[var(--border-color)] flex justify-between items-center group">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-black text-[#FF6700] uppercase text-sm">{job.job_name}</h3>
+                                    {job.status === 'COMPLETED' && <span className="text-[8px] bg-green-500/20 text-green-500 px-1 rounded font-bold">DONE</span>}
+                                </div>
+                                <p className="text-[10px] font-bold text-zinc-500 uppercase">{job.customer_name || "NO CLIENT ASSIGNED"}</p>
+                            </div>
+                            {job.status === 'ACTIVE' && <button onClick={() => completeJob(job.id)} className="px-3 py-2 bg-zinc-800 text-zinc-400 text-[9px] font-black rounded hover:bg-green-600 hover:text-white transition uppercase">Complete</button>}
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); deleteBid(bid.id, idx); }} className="absolute -top-2 -right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><Trash2 size={12} /></button>
-                    </div>
-                  ))
-                }
+                    ))}
+                </div>
+            )}
+        </Drawer>
+      )}
+
+      {/* 2. ADMIN DRAWER (Resource Management) */}
+      {activeDrawer === "SETTINGS" && (
+        <Drawer title="ADMIN CONSOLE" close={() => setActiveDrawer(null)}>
+            <div className="flex border-b border-[var(--border-color)] mb-6 overflow-x-auto">
+                {["JOB", "CREW", "VAN", "CLIENT"].map(tab => (
+                    <button key={tab} onClick={() => setAdminTab(tab)} className={`flex-1 pb-3 font-black text-[10px] tracking-widest ${adminTab === tab ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-500"}`}>{tab}</button>
+                ))}
             </div>
-        </div>
-      </div>
 
-        {/* TABS */}
-        <div className="flex gap-2 mb-6">
-            <button onClick={() => setIsInvoiceMode(false)} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide transition-all ${!isInvoiceMode ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)]' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}>CALCULATOR</button>
-            <button onClick={() => setIsInvoiceMode(true)} className={`flex-1 py-3 rounded-lg font-bold font-oswald tracking-wide flex items-center justify-center gap-2 transition-all ${isInvoiceMode ? 'bg-[var(--text-main)] text-[var(--bg-main)] shadow-lg' : 'bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-sub)]'}`}><FileText size={16} /> INVOICE</button>
-        </div>
-
-        {/* --- CALCULATOR VIEW --- */}
-        {!isInvoiceMode && (
-            <div className="industrial-card rounded-xl p-6 space-y-6 animate-in fade-in relative">
-                
-                {/* Stealth Settings */}
-                <button onClick={() => setShowSettings(!showSettings)} className="absolute top-4 right-4 text-[var(--text-sub)] hover:text-[#FF6700] transition opacity-50 hover:opacity-100"><Settings size={18} /></button>
-
-                {/* Job Name */}
-                <div>
-                  <label className="block text-xs font-bold uppercase text-[var(--text-sub)] mb-1">Job Name</label>
-                  <input type="text" value={jobName} onChange={(e) => setJobName(e.target.value)} placeholder="e.g. Smith - Renovation" className="bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-4 w-full font-bold outline-none focus:border-[#FF6700] transition" />
-                </div>
-
-                {/* Primary Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-[var(--text-sub)] mb-1">Materials ($)</label>
-                      <input type="number" value={materialsCost} onChange={(e) => setMaterialsCost(e.target.value)} placeholder="0.00" className="bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-4 w-full outline-none focus:border-[#FF6700] transition font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-[var(--text-sub)] mb-1">Labor Hours</label>
-                      <input type="number" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} placeholder="0" className="bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-4 w-full outline-none focus:border-[#FF6700] transition font-mono" />
-                    </div>
-                </div>
-
-                {/* DYNAMIC EXPENSES */}
-                <div className="space-y-3">
-                   <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold uppercase text-[var(--text-sub)]">Other Expenses</label>
-                      <button onClick={addExpense} className="text-xs text-[#FF6700] font-bold flex items-center gap-1 hover:underline"><Plus size={14}/> ADD ITEM</button>
-                   </div>
-                   
-                   {expenses.map((item) => (
-                      <div key={item.id} className="flex gap-2 animate-in slide-in-from-left-2">
-                          <input type="text" placeholder="Description (e.g. Permit, Sub)" value={item.name} onChange={(e) => updateExpense(item.id, 'name', e.target.value)} className="flex-1 bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-3 text-sm outline-none focus:border-[#FF6700]" />
-                          <input type="number" placeholder="$0.00" value={item.cost} onChange={(e) => updateExpense(item.id, 'cost', e.target.value)} className="w-24 bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] rounded-lg p-3 text-sm outline-none focus:border-[#FF6700] font-mono" />
-                          <button onClick={() => removeExpense(item.id)} className="text-red-500 hover:text-red-400 p-2"><Trash2 size={18}/></button>
-                      </div>
-                   ))}
-                </div>
-
-                {/* Secret Settings Overlay */}
-                {showSettings && (
-                    <div className="bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-4 space-y-4 animate-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center pb-2 border-b border-[var(--border-color)]"><span className="text-xs font-bold text-[#FF6700] uppercase">Calculations Config</span><button onClick={() => setShowSettings(false)} className="text-[var(--text-sub)]"><X size={14}/></button></div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-xs text-[var(--text-sub)] mb-1">Hourly Rate ($)</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" /></div>
-                            <div><label className="block text-xs text-[var(--text-sub)] mb-1">Markup %</label><input type="number" value={markupPercent} onChange={(e) => setMarkupPercent(e.target.value)} className="bg-[var(--card-bg)] text-[var(--text-main)] border border-[var(--border-color)] rounded p-2 w-full text-sm outline-none" /></div>
+            <div className="space-y-6">
+                {/* --- JOB TAB --- */}
+                {adminTab === "JOB" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-[#FF6700]/5 border border-[#FF6700]/30 space-y-3">
+                            <h3 className="text-[#FF6700] font-black text-xs uppercase">Dispatch New Job</h3>
+                            <input placeholder="JOB NAME" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="CLIENT NAME" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateJob} disabled={creating} className="w-full bg-[#FF6700] text-black font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "CREATE JOB"}</button>
                         </div>
-                        <div className="pt-2">
-                            <div className="flex justify-between text-xs text-[var(--text-sub)] mb-1"><span>Internal Cost:</span><span>${totalInternalCost.toFixed(2)}</span></div>
-                            <div className="flex justify-between text-sm font-bold text-green-500"><span>Net Profit:</span><span>${netProfit.toFixed(2)} ({grossMargin.toFixed(0)}%)</span></div>
-                            <div className="h-1 bg-gray-700 rounded-full overflow-hidden mt-2"><div className="h-full transition-all duration-500" style={{ width: `${Math.min(meterInfo.width, 100)}%`, backgroundColor: meterInfo.color }}></div></div>
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Recent Jobs</p>
+                            {activeJobs.slice(0,5).map(j => (
+                                <div key={j.id} className="flex justify-between p-3 industrial-card rounded-lg border border-[var(--border-color)]">
+                                    <span className="text-xs font-bold">{j.job_name}</span>
+                                    <button onClick={() => deleteResource('jobs', j.id)} className="text-zinc-500 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
 
-                {/* TOTAL */}
-                <div className="bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl p-8 text-center shadow-inner">
-                    <p className="text-xs text-[var(--text-sub)] uppercase tracking-widest mb-2 font-bold">ESTIMATED TOTAL</p>
-                    <p className="text-5xl font-oswald font-bold text-[var(--text-main)] tracking-wide">${finalBid.toFixed(2)}</p>
-                </div>
-
-                <button onClick={saveBid} disabled={loading} className="w-full h-14 bg-[#FF6700] text-black font-bold text-lg uppercase rounded-xl shadow-[0_0_20px_rgba(255,103,0,0.3)] hover:scale-[1.02] active:scale-95 transition flex items-center justify-center gap-2">
-                    {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} SAVE BID
-                </button>
-            </div>
-        )}
-
-        {/* --- INVOICE VIEW --- */}
-        {isInvoiceMode && (
-            <div className="animate-in fade-in">
-                <div className="bg-white text-black rounded-xl p-8 shadow-2xl min-h-[600px] flex flex-col relative mb-24 border border-gray-200">
-                    <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-200">
-                        <div><p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">INVOICE</p><h1 className="text-3xl font-oswald font-bold text-gray-900 break-words max-w-[200px]">{jobName || 'Draft Project'}</h1></div>
-                        <div className="text-right"><p className="text-xs text-gray-500">Date Issued</p><p className="font-bold">{new Date().toLocaleDateString()}</p></div>
-                    </div>
-
-                    <table className="w-full mb-8 flex-1">
-                        <thead><tr className="border-b-2 border-black"><th className="py-2 text-left text-xs uppercase font-bold text-gray-600">Description</th><th className="py-2 text-right text-xs uppercase font-bold text-gray-600">Amount</th></tr></thead>
-                        <tbody className="text-sm">
-                            <tr className="border-b border-gray-100"><td className="py-4 font-medium">Materials & Supplies</td><td className="py-4 text-right">${matCost.toFixed(2)}</td></tr>
-                            <tr className="border-b border-gray-100"><td className="py-4 font-medium">Labor & Services</td><td className="py-4 text-right">${(finalBid - matCost - totalExpenses).toFixed(2)}</td></tr>
-                            {/* Dynamic Expenses on Invoice */}
-                            {expenses.map((item, i) => (
-                                item.name && (
-                                    <tr key={i} className="border-b border-gray-100 bg-gray-50">
-                                        <td className="py-4 font-medium pl-2">{item.name}</td>
-                                        <td className="py-4 text-right pr-2">${(parseFloat(item.cost) || 0).toFixed(2)}</td>
-                                    </tr>
-                                )
+                {/* --- CREW TAB --- */}
+                {adminTab === "CREW" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/30 space-y-3">
+                            <h3 className="text-blue-500 font-black text-xs uppercase">Add Personnel</h3>
+                            <input placeholder="WORKER NAME" value={newWorker.name} onChange={e => setNewWorker({...newWorker, name: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateWorker} disabled={creating} className="w-full bg-blue-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD WORKER"}</button>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Active Crew</p>
+                            {crewList.map(c => (
+                                <div key={c.id} className="flex justify-between items-center p-3 industrial-card rounded-lg border border-[var(--border-color)]">
+                                    <div className="flex items-center gap-3"><div className="w-6 h-6 rounded-full bg-blue-900/50 flex items-center justify-center text-[10px] font-bold text-blue-400">{c.name[0]}</div><span className="text-xs font-bold">{c.name}</span></div>
+                                    <button onClick={() => deleteResource('crew', c.id)} className="text-zinc-500 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                    </div>
+                )}
 
-                    <div className="bg-gray-100 rounded-lg p-4 flex justify-between items-end"><span className="text-sm font-bold text-gray-600 uppercase">Total Due</span><span className="text-4xl font-oswald font-bold">${finalBid.toFixed(2)}</span></div>
-                    <div className="mt-8 text-center text-xs text-gray-400"><p>Thank you for your business.</p></div>
-                </div>
+                {/* --- VAN TAB --- */}
+                {adminTab === "VAN" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/30 space-y-3">
+                            <h3 className="text-purple-500 font-black text-xs uppercase">Register Vehicle</h3>
+                            <input placeholder="VAN ID (E.G. VAN-04)" value={newVan.name} onChange={e => setNewVan({...newVan, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="LICENSE PLATE" value={newVan.plate} onChange={e => setNewVan({...newVan, plate: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateVan} disabled={creating} className="w-full bg-purple-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD VAN"}</button>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Fleet</p>
+                            {vanList.map(v => (
+                                <div key={v.id} className="flex justify-between items-center p-3 industrial-card rounded-lg border border-[var(--border-color)]">
+                                    <div className="flex items-center gap-3"><Truck size={14} className="text-purple-500"/><span className="text-xs font-bold">{v.name}</span><span className="text-[10px] text-zinc-500 font-mono">{v.plate_number}</span></div>
+                                    <button onClick={() => deleteResource('vans', v.id)} className="text-zinc-500 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
-                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex gap-3 z-50 shadow-2xl">
-                    <button onClick={() => setIsInvoiceMode(false)} className="bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-black transition border border-white/10"><ArrowLeft size={18} /> EDIT</button>
-                    <button onClick={handleShare} className="bg-[#FF6700] text-black px-8 py-3 rounded-full font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition flex items-center gap-2"><Share size={18} /> SHARE</button>
+                {/* --- CLIENT TAB --- */}
+                {adminTab === "CLIENT" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/30 space-y-3">
+                            <h3 className="text-green-500 font-black text-xs uppercase">Add Client</h3>
+                            <input placeholder="CUSTOMER NAME" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="ADDRESS / NOTES" value={newCustomer.address} onChange={e => setNewCustomer({...newCustomer, address: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateCustomer} disabled={creating} className="w-full bg-green-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD CLIENT"}</button>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Client List</p>
+                            {customerList.map(c => (
+                                <div key={c.id} className="flex justify-between items-center p-3 industrial-card rounded-lg border border-[var(--border-color)]">
+                                    <div className="flex items-center gap-3"><Users size={14} className="text-green-500"/><span className="text-xs font-bold">{c.name}</span></div>
+                                    <button onClick={() => deleteResource('customers', c.id)} className="text-zinc-500 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="pt-8 border-t border-[var(--border-color)]">
+                    <button onClick={toggleTheme} className="w-full flex justify-between items-center p-4 industrial-card rounded-xl border border-[var(--border-color)] hover:border-[#FF6700] transition mb-4">
+                        <div className="flex items-center gap-3"><Sun size={18}/><span className="text-xs font-bold">Theme Mode</span></div>
+                        <span className="text-[9px] font-black uppercase bg-zinc-800 text-white px-2 py-1 rounded">TOGGLE</span>
+                    </button>
+                    <button onClick={handleLogout} className="w-full py-4 bg-red-600/10 text-red-500 font-black text-xs rounded-xl border border-red-900/30 hover:bg-red-600 hover:text-white transition uppercase">Log Out</button>
                 </div>
             </div>
-        )}
+        </Drawer>
+      )}
 
-        {!isInvoiceMode && <div className="mt-12 text-center opacity-40"><p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-sub)]">POWERED BY FIELDDESKOPS</p></div>}
-        {toast && <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white font-bold animate-in slide-in-from-bottom-5 z-[60] ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>{toast.message}</div>}
+      {/* 3. ALERTS & FINANCE (Unchanged Drawers) */}
+      {activeDrawer === "ALERTS" && (
+        <Drawer title="SYSTEM ALERTS" close={() => setActiveDrawer(null)}>
+            <div className="space-y-3">
+                {alertList.length === 0 ? <div className="text-center py-10"><CheckCircle2 className="mx-auto mb-2 text-green-600" size={40}/><p className="text-xs font-black text-zinc-500">ALL SYSTEMS NOMINAL</p></div> : alertList.map((alert, i) => (
+                    <Link href={alert.link} key={i} className={`flex items-center gap-4 p-4 rounded-xl border ${alert.severity === "high" ? "bg-red-900/10 border-red-900/50" : "bg-yellow-900/10 border-yellow-900/30"}`}>
+                        <AlertTriangle className={alert.severity === "high" ? "text-red-500" : "text-yellow-500"} size={20} />
+                        <div><p className="text-[10px] font-black uppercase opacity-60">{alert.type}</p><p className="text-xs font-bold">{alert.msg}</p></div>
+                        <ChevronRight className="ml-auto opacity-50" size={16}/>
+                    </Link>
+                ))}
+            </div>
+        </Drawer>
+      )}
+      
+      {activeDrawer === "FINANCE" && (
+        <Drawer title="FINANCIAL INTEL" close={() => setActiveDrawer(null)}>
+            <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 text-center relative">
+                <p className="text-xs font-black text-zinc-500 uppercase mb-2">Net Profit Margin</p>
+                <p className={`text-4xl font-oswald font-bold ${metrics.profit >= 0 ? "text-[#FF6700]" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
+                <Link href="/apps/profitlock" className="absolute bottom-4 right-4 text-xs font-black text-[#FF6700] hover:underline flex items-center gap-1">
+                    <Plus size={12} /> New Invoice
+                </Link>
+            </div>
+        </Drawer>
+      )}
+
     </div>
   );
+}
+
+// --- SUBCOMPONENTS ---
+
+function AppCard({ href, label, sub, icon, color, status }) {
+    return (
+        <Link href={href} className="industrial-card flex flex-col items-center justify-center text-center rounded-2xl transition-all duration-300 group relative overflow-hidden hover:bg-[var(--bg-card)]/80 active:scale-95 border-2 border-transparent hover:border-zinc-700">
+            <div className="absolute top-3 right-3"><div className={`w-2 h-2 rounded-full ${status === "red" ? "bg-red-500 animate-pulse" : status === "yellow" ? "bg-yellow-500" : "bg-green-500/30"}`}></div></div>
+            <div className={`mb-3 p-4 rounded-full bg-black/5 dark:bg-white/5 ${color} group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
+            <h2 className="text-lg md:text-2xl font-black tracking-wider mb-1 group-hover:text-[var(--text-main)] transition-colors">{label}</h2>
+            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{sub}</p>
+        </Link>
+    );
+}
+
+function Drawer({ title, close, children }) {
+    return (
+        <div className="fixed inset-0 z-50 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
+            <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 text-[var(--text-main)]">
+                <div className="flex justify-between items-center mb-8 pb-4 border-b border-[var(--border-color)]">
+                    <h2 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase">{title}</h2>
+                    <button onClick={close} className="p-2 hover:bg-zinc-800 rounded-full transition"><X size={24}/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">{children}</div>
+            </div>
+        </div>
+    );
 }
