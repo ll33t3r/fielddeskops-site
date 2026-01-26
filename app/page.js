@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
   LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
-  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2, User as UserIcon
+  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2, User as UserIcon, MapPin
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [activeJobs, setActiveJobs] = useState([]);
   const [crewList, setCrewList] = useState([]);
   const [vanList, setVanList] = useState([]);
+  const [customerList, setCustomerList] = useState([]);
   const [alertList, setAlertList] = useState([]);
   const [financials, setFinancials] = useState({ income: 0, expense: 0 });
 
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [newJobData, setNewJobData] = useState({ name: "", client: "" });
   const [newWorker, setNewWorker] = useState({ name: "", role: "Tech" });
   const [newVan, setNewVan] = useState({ name: "", plate: "" });
+  const [newCustomer, setNewCustomer] = useState({ name: "", address: "" });
 
   // --- INIT ---
   useEffect(() => {
@@ -62,15 +64,16 @@ export default function Dashboard() {
     if (!user) { router.replace("/auth/login"); return; }
     setUser(user);
 
-    // 1. FETCH ALL RESOURCES
+    // 1. FETCH RESOURCES
     const { data: jobs } = await supabase.from("jobs").select("*").order("updated_at", { ascending: false });
     const { data: crew } = await supabase.from("crew").select("*").order("created_at", { ascending: false });
     const { data: vans } = await supabase.from("vans").select("*").order("created_at", { ascending: false });
+    const { data: customers } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
     const { data: bids } = await supabase.from("bids").select("sale_price, material_cost, status");
     const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
     const { data: drafts } = await supabase.from("contracts").select("project_name, created_at").eq("status", "DRAFT");
 
-    // 2. PROCESS FINANCIALS
+    // 2. FINANCIALS
     let income = 0, expense = 0, badBids = 0;
     if (bids) {
         bids.forEach(b => {
@@ -81,7 +84,7 @@ export default function Dashboard() {
         });
     }
 
-    // 3. PROCESS ALERTS
+    // 3. ALERTS
     let alerts = [];
     if (inventory) inventory.forEach(i => { if (i.quantity <= (i.min_quantity || 3)) alerts.push({ type: "STOCK", msg: `Low: ${i.name}`, link: "/apps/loadout", severity: "high" }); });
     if (drafts) {
@@ -94,12 +97,13 @@ export default function Dashboard() {
     setActiveJobs(jobs || []);
     setCrewList(crew || []);
     setVanList(vans || []);
+    setCustomerList(customers || []);
     setAlertList(alerts);
     setFinancials({ income, expense });
     setMetrics({ 
         revenue: income, 
         profit: income - expense, 
-        jobs: jobs?.filter(j => j.status === 'ACTIVE').length || 0, 
+        jobs: jobs?.filter(j => j.status === "ACTIVE").length || 0, 
         alerts: alerts.length 
     });
     setLoading(false);
@@ -125,7 +129,7 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          alert("Error creating job. Check DB policies.");
+          alert("Error creating job. Run the SQL script.");
       }
   };
 
@@ -141,9 +145,7 @@ export default function Dashboard() {
       if (!error && data) {
           setCrewList([data, ...crewList]);
           setNewWorker({ name: "", role: "Tech" });
-      } else {
-          alert("Error adding worker.");
-      }
+      } else alert("Error creating worker.");
   };
 
   const handleCreateVan = async () => {
@@ -158,23 +160,36 @@ export default function Dashboard() {
       if (!error && data) {
           setVanList([data, ...vanList]);
           setNewVan({ name: "", plate: "" });
-      } else {
-          alert("Error adding van.");
-      }
+      } else alert("Error creating van.");
+  };
+
+  const handleCreateCustomer = async () => {
+      if (!newCustomer.name) return;
+      setCreating(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.from("customers").insert({ 
+          user_id: user.id, name: newCustomer.name, address: newCustomer.address 
+      }).select().single();
+
+      setCreating(false);
+      if (!error && data) {
+          setCustomerList([data, ...customerList]);
+          setNewCustomer({ name: "", address: "" });
+      } else alert("Error creating customer.");
   };
 
   const deleteResource = async (table, id) => {
       if(!confirm("Delete this item?")) return;
       await supabase.from(table).delete().eq("id", id);
-      if (table === 'crew') setCrewList(crewList.filter(c => c.id !== id));
-      if (table === 'vans') setVanList(vanList.filter(v => v.id !== id));
-      if (table === 'jobs') setActiveJobs(activeJobs.filter(j => j.id !== id));
+      if (table === "crew") setCrewList(crewList.filter(c => c.id !== id));
+      if (table === "vans") setVanList(vanList.filter(v => v.id !== id));
+      if (table === "customers") setCustomerList(customerList.filter(c => c.id !== id));
+      if (table === "jobs") setActiveJobs(activeJobs.filter(j => j.id !== id));
   };
 
   const completeJob = async (jobId) => {
       await supabase.from("jobs").update({ status: "COMPLETED" }).eq("id", jobId);
-      // We update local state to reflect completion without removing it from history view entirely if we want
-      setActiveJobs(activeJobs.map(j => j.id === jobId ? {...j, status: 'COMPLETED'} : j));
+      setActiveJobs(activeJobs.map(j => j.id === jobId ? {...j, status: "COMPLETED"} : j));
       setMetrics({...metrics, jobs: metrics.jobs - 1});
   };
 
@@ -197,13 +212,15 @@ export default function Dashboard() {
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1 animate-pulse">FIELDDESKOPS</p>
-                <div className="flex items-baseline gap-2">
-                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)]">
+                <div className="flex items-center gap-2">
+                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
                         <span className="text-[#FF6700]">COMMAND</span>CENTER
                     </h1>
-                    <span className="text-xl font-mono text-zinc-500 font-bold tracking-widest">{time}</span>
                 </div>
-                <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide mt-1">{greeting}, {user?.email?.split("@")[0]}</p>
+                <div className="flex items-center gap-3 mt-1">
+                    <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide">{greeting}, {user?.email?.split("@")[0]}</p>
+                    <span className="text-[10px] font-mono text-zinc-600 font-bold tracking-widest pt-1">{time}</span>
+                </div>
             </div>
             
             <button onClick={() => setActiveDrawer("SETTINGS")} className="industrial-card p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:scale-105 transition-transform active:scale-95">
@@ -285,8 +302,8 @@ export default function Dashboard() {
       {/* 2. ADMIN DRAWER (Resource Management) */}
       {activeDrawer === "SETTINGS" && (
         <Drawer title="ADMIN CONSOLE" close={() => setActiveDrawer(null)}>
-            <div className="flex border-b border-[var(--border-color)] mb-6">
-                {["JOB", "CREW", "VAN"].map(tab => (
+            <div className="flex border-b border-[var(--border-color)] mb-6 overflow-x-auto">
+                {["JOB", "CREW", "VAN", "CLIENT"].map(tab => (
                     <button key={tab} onClick={() => setAdminTab(tab)} className={`flex-1 pb-3 font-black text-[10px] tracking-widest ${adminTab === tab ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-500"}`}>{tab}</button>
                 ))}
             </div>
@@ -354,6 +371,27 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* --- CLIENT TAB --- */}
+                {adminTab === "CLIENT" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/30 space-y-3">
+                            <h3 className="text-green-500 font-black text-xs uppercase">Add Client</h3>
+                            <input placeholder="CUSTOMER NAME" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="ADDRESS / NOTES" value={newCustomer.address} onChange={e => setNewCustomer({...newCustomer, address: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateCustomer} disabled={creating} className="w-full bg-green-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD CLIENT"}</button>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Client List</p>
+                            {customerList.map(c => (
+                                <div key={c.id} className="flex justify-between items-center p-3 industrial-card rounded-lg border border-[var(--border-color)]">
+                                    <div className="flex items-center gap-3"><Users size={14} className="text-green-500"/><span className="text-xs font-bold">{c.name}</span></div>
+                                    <button onClick={() => deleteResource('customers', c.id)} className="text-zinc-500 hover:text-red-500"><Trash2 size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="pt-8 border-t border-[var(--border-color)]">
                     <button onClick={toggleTheme} className="w-full flex justify-between items-center p-4 industrial-card rounded-xl border border-[var(--border-color)] hover:border-[#FF6700] transition mb-4">
                         <div className="flex items-center gap-3"><Sun size={18}/><span className="text-xs font-bold">Theme Mode</span></div>
@@ -396,27 +434,27 @@ export default function Dashboard() {
 // --- SUBCOMPONENTS ---
 
 function AppCard({ href, label, sub, icon, color, status }) {
-    return (
-        <Link href={href} className="industrial-card flex flex-col items-center justify-center text-center rounded-2xl transition-all duration-300 group relative overflow-hidden hover:bg-[var(--bg-card)]/80 active:scale-95 border-2 border-transparent hover:border-zinc-700">
-            <div className="absolute top-3 right-3"><div className={`w-2 h-2 rounded-full ${status === "red" ? "bg-red-500 animate-pulse" : status === "yellow" ? "bg-yellow-500" : "bg-green-500/30"}`}></div></div>
-            <div className={`mb-3 p-4 rounded-full bg-black/5 dark:bg-white/5 ${color} group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
-            <h2 className="text-lg md:text-2xl font-black tracking-wider mb-1 group-hover:text-[var(--text-main)] transition-colors">{label}</h2>
-            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{sub}</p>
-        </Link>
-    );
+    return (
+        <Link href={href} className="industrial-card flex flex-col items-center justify-center text-center rounded-2xl transition-all duration-300 group relative overflow-hidden hover:bg-[var(--bg-card)]/80 active:scale-95 border-2 border-transparent hover:border-zinc-700">
+            <div className="absolute top-3 right-3"><div className={`w-2 h-2 rounded-full ${status === "red" ? "bg-red-500 animate-pulse" : status === "yellow" ? "bg-yellow-500" : "bg-green-500/30"}`}></div></div>
+            <div className={`mb-3 p-4 rounded-full bg-black/5 dark:bg-white/5 ${color} group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
+            <h2 className="text-lg md:text-2xl font-black tracking-wider mb-1 group-hover:text-[var(--text-main)] transition-colors">{label}</h2>
+            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{sub}</p>
+        </Link>
+    );
 }
 
 function Drawer({ title, close, children }) {
-    return (
-        <div className="fixed inset-0 z-50 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
-            <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 text-[var(--text-main)]">
-                <div className="flex justify-between items-center mb-8 pb-4 border-b border-[var(--border-color)]">
-                    <h2 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase">{title}</h2>
-                    <button onClick={close} className="p-2 hover:bg-zinc-800 rounded-full transition"><X size={24}/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">{children}</div>
-            </div>
-        </div>
-    );
+    return (
+        <div className="fixed inset-0 z-50 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
+            <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 text-[var(--text-main)]">
+                <div className="flex justify-between items-center mb-8 pb-4 border-b border-[var(--border-color)]">
+                    <h2 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase">{title}</h2>
+                    <button onClick={close} className="p-2 hover:bg-zinc-800 rounded-full transition"><X size={24}/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">{children}</div>
+            </div>
+        </div>
+    );
 }
