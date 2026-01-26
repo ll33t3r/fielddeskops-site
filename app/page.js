@@ -119,7 +119,7 @@ export default function Dashboard() {
       const { data, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobData.name.toUpperCase(),
-          customer_name: newJobData.client,
+          customer_name: newJobData.client, // Text field, should work with SQL fix
           status: "ACTIVE"
       }).select().single();
 
@@ -130,13 +130,7 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          // This specific error handling helps debug the schema cache issue
-          console.error("Supabase Error:", error);
-          if(error.message.includes("schema cache")) {
-             alert("Browser cache error. Please refresh the page.");
-          } else {
-             alert(`Error creating job: ${error?.message || "Unknown error"}.`);
-          }
+          alert(`Error creating job: ${error?.message}`);
       }
   };
 
@@ -152,7 +146,7 @@ export default function Dashboard() {
       if (!error && data) {
           setCrewList([data, ...crewList]);
           setNewWorker({ name: "", role: "Tech" });
-      } else alert("Error creating worker.");
+      } else alert(`Error: ${error?.message}`);
   };
 
   const handleCreateVan = async () => {
@@ -167,7 +161,7 @@ export default function Dashboard() {
       if (!error && data) {
           setVanList([data, ...vanList]);
           setNewVan({ name: "", plate: "" });
-      } else alert("Error creating van.");
+      } else alert(`Error: ${error?.message}`);
   };
 
   const handleCreateCustomer = async () => {
@@ -182,7 +176,7 @@ export default function Dashboard() {
       if (!error && data) {
           setCustomerList([data, ...customerList]);
           setNewCustomer({ name: "", address: "" });
-      } else alert("Error creating customer.");
+      } else alert(`Error: ${error?.message}`);
   };
 
   const deleteResource = async (table, id) => {
@@ -278,7 +272,7 @@ export default function Dashboard() {
         <Drawer title="MISSION CONTROL" close={() => setActiveDrawer(null)}>
             {showNewJobModal ? (
                 <div className="animate-in slide-in-from-right space-y-4 p-1">
-                    <div className="flex items-center gap-2 mb-4 text-[#FF6700] cursor-pointer" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
+                    <div className="flex items-center gap-2 mb-4 text-[#FF6700]" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
                     <h3 className="text-sm font-black uppercase">New Job Dispatch</h3>
                     <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
                     <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
