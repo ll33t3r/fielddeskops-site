@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
   LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
-  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2
+  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2, User as UserIcon, MapPin
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -109,43 +109,18 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  // --- REWRITTEN ACTIONS ---
+  // --- ACTIONS (SIMPLIFIED) ---
 
   const handleCreateJob = async () => {
       if (!newJobData.name) return;
       setCreating(true);
       const { data: { user } } = await supabase.auth.getUser();
-
-      let targetCustomerId = null;
-
-      // STEP 1: Handle the Customer (The Database demands an ID)
-      if (newJobData.client) {
-        // A. Check if customer exists
-        const { data: existingCust } = await supabase.from('customers').select('id').eq('name', newJobData.client).single();
-        
-        if (existingCust) {
-            targetCustomerId = existingCust.id;
-        } else {
-            // B. If not, create them instantly to get an ID
-            const { data: newCust, error: custError } = await supabase.from('customers').insert({
-                user_id: user.id,
-                name: newJobData.client
-            }).select().single();
-            
-            if (!custError && newCust) {
-                targetCustomerId = newCust.id;
-                // Update local list so we see them immediately
-                setCustomerList([newCust, ...customerList]); 
-            }
-        }
-      }
       
-      // STEP 2: Create the Job with the ID (satisfies the NOT NULL constraint)
+      // DIRECT INSERT - No checks, no relations, just text.
       const { data, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobData.name.toUpperCase(),
-          customer_name: newJobData.client || "",
-          customer_id: targetCustomerId, // <--- This solves the error
+          customer_name: newJobData.client || "", // Just saves the text string
           status: "ACTIVE"
       }).select().single();
 
@@ -157,7 +132,8 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          alert(`Error: ${error?.message || "Database rejected the job."}`);
+          // If this fails, it's a connection or permission issue, not logic.
+          alert(`DB Error: ${error?.message}`);
       }
   };
 
