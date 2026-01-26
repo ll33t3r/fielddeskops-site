@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
   LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
-  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2, User as UserIcon, MapPin
+  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -109,28 +109,55 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  // --- ACTIONS ---
+  // --- REWRITTEN ACTIONS ---
 
   const handleCreateJob = async () => {
       if (!newJobData.name) return;
       setCreating(true);
       const { data: { user } } = await supabase.auth.getUser();
+
+      let targetCustomerId = null;
+
+      // STEP 1: Handle the Customer (The Database demands an ID)
+      if (newJobData.client) {
+        // A. Check if customer exists
+        const { data: existingCust } = await supabase.from('customers').select('id').eq('name', newJobData.client).single();
+        
+        if (existingCust) {
+            targetCustomerId = existingCust.id;
+        } else {
+            // B. If not, create them instantly to get an ID
+            const { data: newCust, error: custError } = await supabase.from('customers').insert({
+                user_id: user.id,
+                name: newJobData.client
+            }).select().single();
+            
+            if (!custError && newCust) {
+                targetCustomerId = newCust.id;
+                // Update local list so we see them immediately
+                setCustomerList([newCust, ...customerList]); 
+            }
+        }
+      }
       
+      // STEP 2: Create the Job with the ID (satisfies the NOT NULL constraint)
       const { data, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobData.name.toUpperCase(),
-          customer_name: newJobData.client, // Text field, should work with SQL fix
+          customer_name: newJobData.client || "",
+          customer_id: targetCustomerId, // <--- This solves the error
           status: "ACTIVE"
       }).select().single();
 
       setCreating(false);
+
       if (!error && data) {
           setActiveJobs([data, ...activeJobs]);
           setMetrics({...metrics, jobs: metrics.jobs + 1});
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          alert(`Error creating job: ${error?.message}`);
+          alert(`Error: ${error?.message || "Database rejected the job."}`);
       }
   };
 
@@ -272,7 +299,7 @@ export default function Dashboard() {
         <Drawer title="MISSION CONTROL" close={() => setActiveDrawer(null)}>
             {showNewJobModal ? (
                 <div className="animate-in slide-in-from-right space-y-4 p-1">
-                    <div className="flex items-center gap-2 mb-4 text-[#FF6700]" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
+                    <div className="flex items-center gap-2 mb-4 text-[#FF6700] cursor-pointer" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
                     <h3 className="text-sm font-black uppercase">New Job Dispatch</h3>
                     <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
                     <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
