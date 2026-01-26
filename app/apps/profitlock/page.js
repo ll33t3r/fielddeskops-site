@@ -1,10 +1,11 @@
 ﻿"use client";
 
 import { useState, useEffect } from "react";
+// FIX: Using 3 levels up to reach root utils folder
 import { createClient } from "../../../utils/supabase/client";
 import { 
-  Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Plus, Loader2, 
-  Briefcase, DollarSign, Lock, Unlock, ChevronDown, CheckCircle2, Box, Clock, AlertTriangle, Eye, EyeOff
+  Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Loader2, 
+  Briefcase, Lock, Unlock, ChevronDown, CheckCircle2, Box, Clock, AlertTriangle, PlayCircle
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,8 +40,13 @@ export default function ProfitLock() {
   
   // UI State
   const [showMenu, setShowMenu] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false); // New Job Modal
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // New Job Form State
+  const [newJobName, setNewJobName] = useState("");
+  const [newClientName, setNewClientName] = useState("");
 
   // --- INIT ---
   useEffect(() => { loadData(); }, []);
@@ -49,7 +55,7 @@ export default function ProfitLock() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Get Active Jobs
+    // 1. Get Active Jobs (Shared List)
     const { data: jobs } = await supabase.from("jobs").select("*").eq("status", "ACTIVE").order("updated_at", { ascending: false });
     setActiveJobs(jobs || []);
 
@@ -67,15 +73,11 @@ export default function ProfitLock() {
         const mat = parseFloat(simpleMaterials) || 0;
         const labor = (parseFloat(simpleHours) || 0) * hourlyRate;
         cost = mat + labor;
-        
         // ProfitLock Logic
-        // If Locked: We calculate Price based on Cost + Markup %
-        // If Unlocked: You could manually set price (future feature), for now we stick to Markup model
         price = cost * (1 + (defaultMarkup / 100));
     } else {
         lineItems.forEach(item => {
             const itemCost = (parseFloat(item.unit_cost) || 0) * (parseFloat(item.quantity) || 1);
-            // Use item specific markup, fallback to default
             const appliedMarkup = item.markup !== undefined ? parseFloat(item.markup) : defaultMarkup;
             const itemPrice = itemCost * (1 + (appliedMarkup / 100));
             
@@ -100,13 +102,50 @@ export default function ProfitLock() {
   
   const removeLineItem = (id) => setLineItems(lineItems.filter(item => item.id !== id));
 
+  // Handle Job Selection (Intercepts "NEW" value)
+  const handleJobSelect = (e) => {
+      const val = e.target.value;
+      if (val === "NEW_JOB_TRIGGER") {
+          setShowCreateModal(true);
+          // Don't actually select "NEW", keep previous selection or null
+      } else {
+          setSelectedJob(activeJobs.find(j => j.id === val));
+      }
+  };
+
+  const handleCreateNewJob = async () => {
+      if (!newJobName.trim()) return showToast("Job Name Required", "error");
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Create Job in Shared Table
+      const { data: job, error } = await supabase.from("jobs").insert({
+          user_id: user.id,
+          job_name: newJobName.toUpperCase(),
+          customer_name: newClientName,
+          status: "ACTIVE"
+      }).select().single();
+
+      if (error) {
+          showToast("Error creating job", "error");
+      } else {
+          // Success: Add to list, Select it, Close modal
+          setActiveJobs([job, ...activeJobs]);
+          setSelectedJob(job);
+          setShowCreateModal(false);
+          setNewJobName("");
+          setNewClientName("");
+          showToast("Job Created & Locked In", "success");
+      }
+      setLoading(false);
+  };
+
   const handleSave = async () => {
     if (!selectedJob) { showToast("Select a Job first!", "error"); return; }
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
-    // 1. Create Estimate Header
-    const { data: est, error } = await supabase.from("estimates").insert({
+    const { error } = await supabase.from("estimates").insert({
         user_id: user.id,
         job_id: selectedJob.id,
         name: mode === "SIMPLE" ? "Quick Estimate" : "Detailed Quote",
@@ -114,31 +153,10 @@ export default function ProfitLock() {
         total_price: price,
         margin_percent: margin,
         status: "DRAFT"
-    }).select().single();
+    });
 
-    if (error) { 
-        console.error(error);
-        showToast("Error: " + error.message, "error"); 
-        setLoading(false); 
-        return; 
-    }
-
-    // 2. Save Items
-    if (mode === "ADVANCED" && lineItems.length > 0) {
-        const itemsToSave = lineItems.map(i => ({
-            estimate_id: est.id,
-            user_id: user.id,
-            description: i.description,
-            quantity: i.quantity,
-            unit_cost: i.unit_cost,
-            markup_percent: i.markup,
-            total_price: (i.unit_cost * i.quantity) * (1 + (i.markup/100))
-        }));
-        await supabase.from("estimate_items").insert(itemsToSave);
-    }
-
-    showToast("Estimate Saved!", "success");
-    loadData();
+    if (error) { showToast("Error: " + error.message, "error"); } 
+    else { showToast("Estimate Saved!", "success"); }
     setLoading(false);
   };
 
@@ -222,17 +240,16 @@ export default function ProfitLock() {
         
         {/* JOB SELECTOR */}
         <div className="space-y-2">
-            <div className="flex justify-between items-center">
-                <label className="text-[10px] font-black text-zinc-500 uppercase ml-1">Connect to Job</label>
-                {!selectedJob && <span className="text-[10px] text-red-500 font-bold animate-pulse">REQUIRED</span>}
-            </div>
+            <label className="text-[10px] font-black text-zinc-500 uppercase ml-1">Connect to Job</label>
             <div className="relative">
                 <select 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-sm font-bold uppercase outline-none focus:border-[#FF6700] focus:shadow-[0_0_15px_rgba(255,103,0,0.1)] transition appearance-none text-white"
-                    onChange={(e) => setSelectedJob(activeJobs.find(j => j.id === e.target.value))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-sm font-bold uppercase outline-none focus:border-[#FF6700] transition appearance-none text-white"
+                    onChange={handleJobSelect}
                     value={selectedJob?.id || ""}
                 >
                     <option value="" disabled>-- Select Active Job --</option>
+                    <option value="NEW_JOB_TRIGGER" className="text-[#FF6700] font-black bg-zinc-900">+ DISPATCH NEW JOB</option>
+                    <option disabled className="text-zinc-700">────────────────</option>
                     {activeJobs.map(job => (
                         <option key={job.id} value={job.id}>{job.job_name}</option>
                     ))}
@@ -385,6 +402,41 @@ export default function ProfitLock() {
 
             </div>
         </div>
+      )}
+
+      {/* CREATE JOB MODAL */}
+      {showCreateModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+              <div className="bg-[#121212] border border-zinc-700 w-full max-w-sm rounded-2xl p-6 relative z-10 shadow-[0_0_50px_rgba(255,103,0,0.15)] animate-in zoom-in-95">
+                  <h3 className="text-xl font-oswald font-bold text-[#FF6700] uppercase mb-1">Dispatch New Job</h3>
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold mb-6">Create & Link to ProfitLock</p>
+                  
+                  <div className="space-y-4">
+                      <input 
+                          autoFocus
+                          placeholder="PROJECT NAME (E.G. MAIN ST)" 
+                          value={newJobName}
+                          onChange={(e) => setNewJobName(e.target.value.toUpperCase())}
+                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-white font-bold outline-none focus:border-[#FF6700] transition uppercase"
+                      />
+                      <input 
+                          placeholder="CLIENT NAME (OPTIONAL)" 
+                          value={newClientName}
+                          onChange={(e) => setNewClientName(e.target.value)}
+                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-white font-bold outline-none focus:border-[#FF6700] transition"
+                      />
+                      <button 
+                          onClick={handleCreateNewJob}
+                          disabled={loading}
+                          className="w-full py-4 bg-[#FF6700] text-black font-black uppercase rounded-xl hover:bg-[#ff8533] hover:shadow-[0_0_20px_rgba(255,103,0,0.4)] transition flex justify-center items-center gap-2"
+                      >
+                          {loading ? <Loader2 className="animate-spin"/> : <Briefcase size={18}/>} CREATE & LINK
+                      </button>
+                  </div>
+                  <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white p-2"><X size={20}/></button>
+              </div>
+          </div>
       )}
 
       {/* TOAST */}
