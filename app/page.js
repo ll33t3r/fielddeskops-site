@@ -150,14 +150,13 @@ export default function Dashboard() {
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1 animate-pulse">FIELDDESKOPS</p>
-                <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
-                    <span className="text-[#FF6700]">COMMAND</span>CENTER
-                </h1>
-                <div className="flex items-center gap-3 mt-1">
-                    <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide">{greeting}, {user?.email?.split("@")[0]}</p>
-                    <div className="h-4 w-[1px] bg-zinc-700"></div>
-                    <span className="text-[10px] font-mono text-zinc-600 font-bold tracking-widest pt-0.5">{time}</span>
+                <div className="flex items-baseline gap-2">
+                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)]">
+                        <span className="text-[#FF6700]">COMMAND</span>CENTER
+                    </h1>
+                    <span className="text-xl font-mono text-zinc-500 font-bold tracking-widest">{time}</span>
                 </div>
+                <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide mt-1">{greeting}, {user?.email?.split("@")[0]}</p>
             </div>
             
             <button onClick={() => setActiveDrawer("SETTINGS")} className="industrial-card p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:scale-105 transition-transform active:scale-95">
@@ -167,18 +166,23 @@ export default function Dashboard() {
 
         {/* --- METRIC TILES --- */}
         <div className="grid grid-cols-3 gap-3 mt-6">
+            {/* 1. REVENUE TILE */}
             <button onClick={() => setActiveDrawer("FINANCE")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden group ${metrics.profit < 0 ? "border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse" : "border-transparent hover:border-green-500/50"}`}>
                 <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">NET REVENUE</p>
-                <p className={`text-lg font-black tracking-tighter ${metrics.profit >= 0 ? "text-green-500" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
+                <p className={`text-lg font-black tracking-tighter ${metrics.profit >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    ${metrics.profit.toLocaleString()}
+                </p>
                 <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
             </button>
 
+            {/* 2. JOBS TILE */}
             <button onClick={() => setActiveDrawer("JOBS")} className="industrial-card rounded-xl p-3 text-center border-2 border-transparent hover:border-[#FF6700]/50 transition-all relative overflow-hidden group">
                 <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">ACTIVE OPS</p>
                 <p className="text-lg font-black tracking-tighter text-[var(--text-main)]">{metrics.jobs}</p>
                 <div className="absolute inset-0 bg-[#FF6700]/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
             </button>
 
+            {/* 3. ALERTS TILE */}
             <button onClick={() => setActiveDrawer("ALERTS")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden ${metrics.alerts > 0 ? "border-red-500/50 bg-red-900/10" : "border-transparent opacity-60"}`}>
                 <p className={`text-[9px] uppercase font-black tracking-widest mb-1 ${metrics.alerts > 0 ? "text-red-500" : "text-zinc-500"}`}>SYSTEM</p>
                 <div className="flex items-center justify-center gap-2">
