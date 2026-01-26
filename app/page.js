@@ -130,8 +130,8 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          console.error("Job Error:", error);
-          alert("Error creating job. Ensure you ran the updated SQL script.");
+          console.error("Supabase Error:", error);
+          alert(`Error creating job: ${error?.message || "Unknown error"}. Check console.`);
       }
   };
 
