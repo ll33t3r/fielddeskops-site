@@ -1,11 +1,11 @@
 ﻿"use client";
 
 import { useState, useEffect } from "react";
-// FIX: Using 3 levels up to reach root utils folder
+// Import path: apps -> profitlock -> page -> ../../../utils
 import { createClient } from "../../../utils/supabase/client";
 import { 
-  Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Loader2, 
-  Briefcase, Lock, Unlock, ChevronDown, CheckCircle2, Box, Clock, AlertTriangle, PlayCircle
+  Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Plus, Loader2, 
+  Briefcase, Lock, Unlock, ChevronDown, ChevronRight, CheckCircle2, Box, Clock, AlertTriangle, Eye, EyeOff
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,8 +20,8 @@ export default function ProfitLock() {
   const [estimateHistory, setEstimateHistory] = useState([]); 
 
   // --- CALCULATOR STATE ---
-  const [mode, setMode] = useState("SIMPLE"); // SIMPLE or ADVANCED
-  const [profitLocked, setProfitLocked] = useState(true); // The Feature
+  const [mode, setMode] = useState("SIMPLE");
+  const [profitLocked, setProfitLocked] = useState(true);
   const [isInvoiceMode, setIsInvoiceMode] = useState(false);
   
   // Simple Inputs
@@ -34,32 +34,66 @@ export default function ProfitLock() {
       { id: 2, description: "Labor", quantity: 1, unit_cost: 0, markup: 20 }
   ]); 
 
-  // --- CONFIG (Hidden in Menu) ---
+  // --- CONFIG & UI STATE ---
   const [hourlyRate, setHourlyRate] = useState(75);
   const [defaultMarkup, setDefaultMarkup] = useState(20);
   
-  // UI State
   const [showMenu, setShowMenu] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false); // New Job Modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showProfitDetails, setShowProfitDetails] = useState(false); // The "Eyelid"
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // New Job Form State
+  // New Job Form
   const [newJobName, setNewJobName] = useState("");
   const [newClientName, setNewClientName] = useState("");
 
   // --- INIT ---
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+      loadData(); 
+      loadSettings();
+  }, []);
+
+  // Scroll Lock when Menu is open
+  useEffect(() => {
+    if (showMenu) {
+        document.body.style.overflow = "hidden";
+    } else {
+        document.body.style.overflow = "unset";
+    }
+    return () => { document.body.style.overflow = "unset"; };
+  }, [showMenu]);
+
+  // Load Persisted Settings
+  const loadSettings = () => {
+      const saved = localStorage.getItem("profitlock_config");
+      if (saved) {
+          const config = JSON.parse(saved);
+          setHourlyRate(config.rate || 75);
+          setDefaultMarkup(config.markup || 20);
+      }
+  };
+
+  // Save Settings on Change
+  const updateConfig = (key, value) => {
+      const newVal = parseFloat(value) || 0;
+      if (key === "rate") setHourlyRate(newVal);
+      if (key === "markup") setDefaultMarkup(newVal);
+      
+      const currentConfig = {
+          rate: key === "rate" ? newVal : hourlyRate,
+          markup: key === "markup" ? newVal : defaultMarkup
+      };
+      localStorage.setItem("profitlock_config", JSON.stringify(currentConfig));
+  };
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Get Active Jobs (Shared List)
     const { data: jobs } = await supabase.from("jobs").select("*").eq("status", "ACTIVE").order("updated_at", { ascending: false });
     setActiveJobs(jobs || []);
 
-    // 2. Get Estimates
     const { data: est } = await supabase.from("estimates").select("*, jobs(job_name)").order("created_at", { ascending: false });
     setEstimateHistory(est || []);
   };
@@ -73,14 +107,12 @@ export default function ProfitLock() {
         const mat = parseFloat(simpleMaterials) || 0;
         const labor = (parseFloat(simpleHours) || 0) * hourlyRate;
         cost = mat + labor;
-        // ProfitLock Logic
         price = cost * (1 + (defaultMarkup / 100));
     } else {
         lineItems.forEach(item => {
             const itemCost = (parseFloat(item.unit_cost) || 0) * (parseFloat(item.quantity) || 1);
             const appliedMarkup = item.markup !== undefined ? parseFloat(item.markup) : defaultMarkup;
             const itemPrice = itemCost * (1 + (appliedMarkup / 100));
-            
             cost += itemCost;
             price += itemPrice;
         });
@@ -102,12 +134,10 @@ export default function ProfitLock() {
   
   const removeLineItem = (id) => setLineItems(lineItems.filter(item => item.id !== id));
 
-  // Handle Job Selection (Intercepts "NEW" value)
   const handleJobSelect = (e) => {
       const val = e.target.value;
       if (val === "NEW_JOB_TRIGGER") {
           setShowCreateModal(true);
-          // Don't actually select "NEW", keep previous selection or null
       } else {
           setSelectedJob(activeJobs.find(j => j.id === val));
       }
@@ -118,7 +148,6 @@ export default function ProfitLock() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Create Job in Shared Table
       const { data: job, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobName.toUpperCase(),
@@ -129,7 +158,6 @@ export default function ProfitLock() {
       if (error) {
           showToast("Error creating job", "error");
       } else {
-          // Success: Add to list, Select it, Close modal
           setActiveJobs([job, ...activeJobs]);
           setSelectedJob(job);
           setShowCreateModal(false);
@@ -166,10 +194,10 @@ export default function ProfitLock() {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
+    <div className="h-screen bg-[#121212] text-white font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
       
       {/* HEADER */}
-      <header className="p-6 flex justify-between items-start z-10">
+      <header className="p-6 shrink-0 flex justify-between items-start z-10">
         <div className="flex items-center gap-4">
             <Link href="/" className="p-3 rounded-xl bg-white/5 border border-white/10 hover:border-[#FF6700] hover:text-[#FF6700] transition">
                 <ArrowLeft size={24} />
@@ -186,8 +214,8 @@ export default function ProfitLock() {
 
       {/* INVOICE PREVIEW MODE */}
       {isInvoiceMode ? (
-          <div className="flex-1 p-6 animate-in slide-in-from-bottom-10 bg-white text-black m-4 rounded-xl shadow-2xl relative flex flex-col">
-              <div className="border-b border-gray-200 pb-6 mb-6 flex justify-between items-start">
+          <div className="flex-1 p-6 animate-in slide-in-from-bottom-10 bg-white text-black m-4 rounded-xl shadow-2xl relative flex flex-col overflow-hidden">
+              <div className="border-b border-gray-200 pb-6 mb-6 flex justify-between items-start shrink-0">
                   <div>
                       <h2 className="text-4xl font-oswald font-bold uppercase tracking-tighter">INVOICE</h2>
                       <p className="text-sm font-bold text-gray-500 uppercase">{selectedJob?.job_name || "DRAFT"}</p>
@@ -198,7 +226,7 @@ export default function ProfitLock() {
                   </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
                   <table className="w-full text-left">
                       <thead>
                           <tr className="border-b-2 border-black">
@@ -224,7 +252,7 @@ export default function ProfitLock() {
                   </table>
               </div>
 
-              <div className="bg-gray-100 p-6 rounded-xl flex justify-between items-end mt-6">
+              <div className="bg-gray-100 p-6 rounded-xl flex justify-between items-end mt-6 shrink-0">
                   <div>
                       <p className="text-xs font-black text-gray-400 uppercase">Total Amount Due</p>
                       <p className="text-xs text-gray-400">Payment due upon receipt</p>
@@ -236,14 +264,14 @@ export default function ProfitLock() {
           </div>
       ) : (
       /* MAIN CALCULATOR (Customer Safe View) */
-      <main className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6 pb-24">
+      <main className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6 overflow-y-auto custom-scrollbar pb-24">
         
         {/* JOB SELECTOR */}
         <div className="space-y-2">
             <label className="text-[10px] font-black text-zinc-500 uppercase ml-1">Connect to Job</label>
             <div className="relative">
                 <select 
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-sm font-bold uppercase outline-none focus:border-[#FF6700] transition appearance-none text-white"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-base font-bold uppercase outline-none focus:border-[#FF6700] transition appearance-none text-white"
                     onChange={handleJobSelect}
                     value={selectedJob?.id || ""}
                 >
@@ -267,13 +295,13 @@ export default function ProfitLock() {
                         <label className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2"><Box size={12}/> Materials ($)</label>
                         <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-mono">$</span>
-                            <input type="number" value={simpleMaterials} onChange={e => setSimpleMaterials(e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-xl p-4 pl-8 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-white" placeholder="0" />
+                            <input type="number" value={simpleMaterials} onChange={e => setSimpleMaterials(e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-xl p-4 pl-8 text-center font-mono font-bold text-xl text-base outline-none focus:border-[#FF6700] transition text-white" placeholder="0" />
                         </div>
                     </div>
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-zinc-500 uppercase flex items-center gap-2"><Clock size={12}/> Labor (Hrs)</label>
                         <div className="relative">
-                            <input type="number" value={simpleHours} onChange={e => setSimpleHours(e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-xl p-4 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-white" placeholder="0" />
+                            <input type="number" value={simpleHours} onChange={e => setSimpleHours(e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-xl p-4 text-center font-mono font-bold text-xl text-base outline-none focus:border-[#FF6700] transition text-white" placeholder="0" />
                         </div>
                     </div>
                 </div>
@@ -282,13 +310,13 @@ export default function ProfitLock() {
                     {lineItems.map((item, idx) => (
                         <div key={item.id} className="grid grid-cols-12 gap-2 items-center">
                             <div className="col-span-5">
-                                <input placeholder="Desc" value={item.description} onChange={(e) => updateLineItem(item.id, "description", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-xs font-bold outline-none focus:border-[#FF6700] text-white" />
+                                <input placeholder="Desc" value={item.description} onChange={(e) => updateLineItem(item.id, "description", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-base font-bold outline-none focus:border-[#FF6700] text-white" />
                             </div>
                             <div className="col-span-2">
-                                <input placeholder="#" type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-xs text-center outline-none focus:border-[#FF6700] text-white" />
+                                <input placeholder="#" type="number" value={item.quantity} onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-base text-center outline-none focus:border-[#FF6700] text-white" />
                             </div>
                             <div className="col-span-3">
-                                <input placeholder="$" type="number" value={item.unit_cost} onChange={(e) => updateLineItem(item.id, "unit_cost", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-xs text-center outline-none focus:border-[#FF6700] text-white" />
+                                <input placeholder="$" type="number" value={item.unit_cost} onChange={(e) => updateLineItem(item.id, "unit_cost", e.target.value)} className="w-full bg-black/20 border border-zinc-800 rounded-lg p-3 text-base text-center outline-none focus:border-[#FF6700] text-white" />
                             </div>
                             <div className="col-span-2 text-center">
                                 <button onClick={() => removeLineItem(item.id)} className="text-zinc-600 hover:text-red-500 transition"><Trash2 size={16}/></button>
@@ -331,19 +359,41 @@ export default function ProfitLock() {
                     <button onClick={() => setShowMenu(false)}><X className="text-zinc-500 hover:text-white" /></button>
                 </div>
 
-                {/* HIDDEN PROFIT REVEAL (The "Vault") */}
-                <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 mb-8 relative overflow-hidden">
+                {/* THE VAULT (Hidden Profit Reveal) */}
+                <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 mb-8 relative overflow-hidden transition-all duration-300">
                     <div className="flex justify-between items-center mb-2 relative z-10">
-                        <p className="text-xs font-black text-zinc-500 uppercase">Internal Profit</p>
-                        {profitLocked ? <Lock size={12} className="text-green-500"/> : <Unlock size={12} className="text-red-500"/>}
+                        <p className="text-xs font-black text-zinc-500 uppercase flex items-center gap-2">Internal Profit {profitLocked && <Lock size={10} className="text-green-500"/>}</p>
+                        <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="text-zinc-500 hover:text-white">
+                            {showProfitDetails ? <EyeOff size={16}/> : <Eye size={16}/>}
+                        </button>
                     </div>
-                    <p className={`text-3xl font-oswald font-bold relative z-10 ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
-                    <p className="text-xs text-zinc-500 font-bold mt-1 relative z-10">Margin: {margin.toFixed(1)}%</p>
                     
-                    {/* Background Meter */}
-                    <div className="absolute bottom-0 left-0 h-1 bg-zinc-800 w-full">
-                        <div className={`h-full ${profit > 0 ? "bg-green-500" : "bg-red-500"}`} style={{ width: `${Math.min(margin, 100)}%` }}></div>
-                    </div>
+                    {showProfitDetails ? (
+                        <div className="animate-in fade-in">
+                            <p className={`text-3xl font-oswald font-bold relative z-10 ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
+                            <div className="flex justify-between items-center mt-2">
+                                <p className="text-xs text-zinc-400 font-bold relative z-10">Margin: {margin.toFixed(1)}%</p>
+                                <p className="text-[10px] text-zinc-600 font-mono">Cost: ${cost.toFixed(0)}</p>
+                            </div>
+                            {/* Breakdown */}
+                            <div className="mt-3 pt-3 border-t border-zinc-800 text-[10px] text-zinc-500 font-mono">
+                                <p>Price: ${price.toFixed(2)}</p>
+                                <p>- Cost: ${cost.toFixed(2)}</p>
+                                <p>= Net:  ${profit.toFixed(2)}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-2">
+                            <p className="text-3xl font-oswald font-bold text-zinc-700 tracking-widest select-none">****</p>
+                        </div>
+                    )}
+                    
+                    {/* Background Meter (Only visible when open) */}
+                    {showProfitDetails && (
+                        <div className="absolute bottom-0 left-0 h-1 bg-zinc-800 w-full">
+                            <div className={`h-full ${profit > 0 ? "bg-green-500" : "bg-red-500"}`} style={{ width: `${Math.min(margin, 100)}%` }}></div>
+                        </div>
+                    )}
                 </div>
 
                 {/* SETTINGS TOGGLES */}
@@ -364,11 +414,11 @@ export default function ProfitLock() {
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <p className="text-[9px] text-zinc-500 mb-1">Hourly Rate ($)</p>
-                                <input type="number" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm text-white font-bold outline-none focus:border-[#FF6700]" />
+                                <input type="number" value={hourlyRate} onChange={e => updateConfig("rate", e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-base text-white font-bold outline-none focus:border-[#FF6700]" />
                             </div>
                             <div>
                                 <p className="text-[9px] text-zinc-500 mb-1">Markup %</p>
-                                <input type="number" value={defaultMarkup} onChange={e => setDefaultMarkup(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-sm text-white font-bold outline-none focus:border-[#FF6700]" />
+                                <input type="number" value={defaultMarkup} onChange={e => updateConfig("markup", e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-base text-white font-bold outline-none focus:border-[#FF6700]" />
                             </div>
                         </div>
                     </div>
@@ -418,13 +468,13 @@ export default function ProfitLock() {
                           placeholder="PROJECT NAME (E.G. MAIN ST)" 
                           value={newJobName}
                           onChange={(e) => setNewJobName(e.target.value.toUpperCase())}
-                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-white font-bold outline-none focus:border-[#FF6700] transition uppercase"
+                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-base font-bold outline-none focus:border-[#FF6700] transition uppercase text-white"
                       />
                       <input 
                           placeholder="CLIENT NAME (OPTIONAL)" 
                           value={newClientName}
                           onChange={(e) => setNewClientName(e.target.value)}
-                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-white font-bold outline-none focus:border-[#FF6700] transition"
+                          className="w-full bg-black/40 border border-zinc-700 p-4 rounded-xl text-base font-bold outline-none focus:border-[#FF6700] transition text-white"
                       />
                       <button 
                           onClick={handleCreateNewJob}
