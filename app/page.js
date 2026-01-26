@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { 
   Calculator, Package, Camera, PenTool, 
   LogOut, Sun, Moon, Loader2, AlertTriangle, CheckCircle2,
-  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus
+  X, ChevronRight, Users, Menu, Clock, Wallet, Briefcase, Activity, Plus, Truck, UserPlus
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -28,9 +28,13 @@ export default function Dashboard() {
 
   // UI State
   const [activeDrawer, setActiveDrawer] = useState(null); 
-  const [showNewJobModal, setShowNewJobModal] = useState(false);
-  const [creatingJob, setCreatingJob] = useState(false);
-  const [newJobData, setNewJobData] = useState({ name: "", client: "" });
+  const [adminTab, setAdminTab] = useState("JOB"); // JOB, CREW, VAN, CUSTOMER
+  
+  // Forms
+  const [creating, setCreating] = useState(false);
+  const [newJob, setNewJob] = useState({ name: "", client: "" });
+  const [newWorker, setNewWorker] = useState({ name: "", role: "Tech" });
+  const [newVan, setNewVan] = useState({ name: "", plate: "" });
 
   // --- INIT ---
   useEffect(() => {
@@ -55,11 +59,9 @@ export default function Dashboard() {
     if (!user) { router.replace("/auth/login"); return; }
     setUser(user);
 
-    // 1. JOBS
     const { data: jobs } = await supabase.from("jobs").select("*").eq("status", "ACTIVE").order("updated_at", { ascending: false });
-    
-    // 2. FINANCIALS
     const { data: bids } = await supabase.from("bids").select("sale_price, material_cost, status");
+    
     let income = 0, expense = 0, badBids = 0;
     if (bids) {
         bids.forEach(b => {
@@ -70,7 +72,6 @@ export default function Dashboard() {
         });
     }
 
-    // 3. ALERTS
     const { data: inventory } = await supabase.from("inventory").select("name, quantity, min_quantity");
     const { data: drafts } = await supabase.from("contracts").select("project_name, created_at").eq("status", "DRAFT");
     
@@ -89,40 +90,33 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const openJobCreator = () => {
-      setNewJobData({ name: "", client: "" }); // Reset form
-      setShowNewJobModal(true);
-  };
-
-  const closeJobCreator = () => {
-      setNewJobData({ name: "", client: "" }); // Clear on exit
-      setShowNewJobModal(false);
-  };
-
+  // --- CREATION HANDLERS ---
   const handleCreateJob = async () => {
-      if (!newJobData.name) return;
-      setCreatingJob(true);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Basic insert
-      const { data, error } = await supabase.from("jobs").insert({
-          user_id: user.id,
-          job_name: newJobData.name.toUpperCase(),
-          customer_name: newJobData.client,
-          status: "ACTIVE"
-      }).select().single();
+      if (!newJob.name) return;
+      setCreating(true);
+      const { error } = await supabase.from("jobs").insert({ user_id: user.id, job_name: newJob.name.toUpperCase(), customer_name: newJob.client, status: "ACTIVE" });
+      if (!error) { 
+          loadCommandData(); 
+          setNewJob({ name: "", client: "" }); 
+          alert("Job Dispatched"); 
+      } else alert("Error creating job.");
+      setCreating(false);
+  };
 
-      setCreatingJob(false);
+  const handleCreateWorker = async () => {
+      if (!newWorker.name) return;
+      setCreating(true);
+      const { error } = await supabase.from("crew").insert({ user_id: user.id, name: newWorker.name, role: newWorker.role });
+      if (!error) { setNewWorker({ name: "", role: "Tech" }); alert("Worker Added"); }
+      setCreating(false);
+  };
 
-      if (!error && data) {
-          setActiveJobs([data, ...activeJobs]);
-          setMetrics({...metrics, jobs: metrics.jobs + 1});
-          closeJobCreator();
-      } else {
-          console.error("Job Creation Failed:", error);
-          alert("Failed to create job. Check connection.");
-      }
+  const handleCreateVan = async () => {
+      if (!newVan.name) return;
+      setCreating(true);
+      const { error } = await supabase.from("vans").insert({ user_id: user.id, name: newVan.name, plate_number: newVan.plate });
+      if (!error) { setNewVan({ name: "", plate: "" }); alert("Van Added"); }
+      setCreating(false);
   };
 
   const completeJob = async (jobId) => {
@@ -150,13 +144,15 @@ export default function Dashboard() {
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1 animate-pulse">FIELDDESKOPS</p>
-                <div className="flex items-baseline gap-2">
-                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)]">
+                <div className="flex items-end gap-3">
+                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
                         <span className="text-[#FF6700]">COMMAND</span>CENTER
                     </h1>
-                    <span className="text-xl font-mono text-zinc-500 font-bold tracking-widest">{time}</span>
                 </div>
-                <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide mt-1">{greeting}, {user?.email?.split("@")[0]}</p>
+                <div className="flex items-center gap-2 mt-1">
+                    <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide">{greeting}, {user?.email?.split("@")[0]}</p>
+                    <span className="text-[10px] font-mono text-zinc-600 font-bold tracking-widest pt-1">{time}</span>
+                </div>
             </div>
             
             <button onClick={() => setActiveDrawer("SETTINGS")} className="industrial-card p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:scale-105 transition-transform active:scale-95">
@@ -166,23 +162,18 @@ export default function Dashboard() {
 
         {/* --- METRIC TILES --- */}
         <div className="grid grid-cols-3 gap-3 mt-6">
-            {/* 1. REVENUE TILE */}
             <button onClick={() => setActiveDrawer("FINANCE")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden group ${metrics.profit < 0 ? "border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.3)] animate-pulse" : "border-transparent hover:border-green-500/50"}`}>
                 <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">NET REVENUE</p>
-                <p className={`text-lg font-black tracking-tighter ${metrics.profit >= 0 ? "text-green-500" : "text-red-500"}`}>
-                    ${metrics.profit.toLocaleString()}
-                </p>
+                <p className={`text-lg font-black tracking-tighter ${metrics.profit >= 0 ? "text-green-500" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
                 <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
             </button>
 
-            {/* 2. JOBS TILE */}
             <button onClick={() => setActiveDrawer("JOBS")} className="industrial-card rounded-xl p-3 text-center border-2 border-transparent hover:border-[#FF6700]/50 transition-all relative overflow-hidden group">
                 <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mb-1">ACTIVE OPS</p>
                 <p className="text-lg font-black tracking-tighter text-[var(--text-main)]">{metrics.jobs}</p>
                 <div className="absolute inset-0 bg-[#FF6700]/5 opacity-0 group-hover:opacity-100 transition-opacity"/>
             </button>
 
-            {/* 3. ALERTS TILE */}
             <button onClick={() => setActiveDrawer("ALERTS")} className={`industrial-card rounded-xl p-3 text-center border-2 transition-all relative overflow-hidden ${metrics.alerts > 0 ? "border-red-500/50 bg-red-900/10" : "border-transparent opacity-60"}`}>
                 <p className={`text-[9px] uppercase font-black tracking-widest mb-1 ${metrics.alerts > 0 ? "text-red-500" : "text-zinc-500"}`}>SYSTEM</p>
                 <div className="flex items-center justify-center gap-2">
@@ -205,57 +196,77 @@ export default function Dashboard() {
 
       {/* --- DRAWERS --- */}
       
-      {/* 1. JOB MANAGER + CREATE MODAL */}
+      {/* 1. JOB LIST DRAWER (View Only) */}
       {activeDrawer === "JOBS" && (
         <Drawer title="MISSION CONTROL" close={() => setActiveDrawer(null)}>
-            {showNewJobModal ? (
-                <div className="animate-in slide-in-from-right space-y-4 p-1">
-                    <div className="flex items-center gap-2 mb-4 text-[#FF6700] cursor-pointer" onClick={closeJobCreator}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
-                    <h3 className="text-sm font-black uppercase">New Job Dispatch</h3>
-                    <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
-                    <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
-                    <button onClick={handleCreateJob} disabled={creatingJob} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase shadow-lg flex items-center justify-center gap-2">
-                        {creatingJob ? <Loader2 className="animate-spin" size={18}/> : "CREATE JOB"}
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    <button onClick={openJobCreator} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/10 uppercase transition-colors">+ DISPATCH NEW JOB</button>
-                    {activeJobs.length === 0 ? <p className="text-center text-zinc-500 text-xs font-bold py-10">NO ACTIVE OPS</p> : activeJobs.map(job => (
-                        <div key={job.id} className="industrial-card p-4 rounded-xl border border-[var(--border-color)] flex justify-between items-center group">
-                            <div>
-                                <h3 className="font-black text-[#FF6700] uppercase text-sm">{job.job_name}</h3>
-                                <p className="text-[10px] font-bold text-zinc-500 uppercase">{job.customer_name || "NO CLIENT ASSIGNED"}</p>
-                            </div>
-                            <button onClick={() => completeJob(job.id)} className="px-3 py-2 bg-zinc-800 text-zinc-400 text-[9px] font-black rounded hover:bg-green-600 hover:text-white transition uppercase">Complete</button>
+            <div className="space-y-4">
+                {activeJobs.length === 0 ? <p className="text-center text-zinc-500 text-xs font-bold py-10">NO ACTIVE OPS</p> : activeJobs.map(job => (
+                    <div key={job.id} className="industrial-card p-4 rounded-xl border border-[var(--border-color)] flex justify-between items-center group">
+                        <div>
+                            <h3 className="font-black text-[#FF6700] uppercase text-sm">{job.job_name}</h3>
+                            <p className="text-[10px] font-bold text-zinc-500 uppercase">{job.customer_name || "NO CLIENT ASSIGNED"}</p>
                         </div>
-                    ))}
-                </div>
-            )}
-        </Drawer>
-      )}
-
-      {/* 2. FINANCE DRAWER */}
-      {activeDrawer === "FINANCE" && (
-        <Drawer title="FINANCIAL INTEL" close={() => setActiveDrawer(null)}>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="p-4 rounded-xl bg-green-900/10 border border-green-900/30 text-center">
-                    <p className="text-[9px] font-black text-green-600 uppercase">Gross Revenue</p>
-                    <p className="text-xl font-black text-green-500">${financials.income.toLocaleString()}</p>
-                </div>
-                <div className="p-4 rounded-xl bg-red-900/10 border border-red-900/30 text-center">
-                    <p className="text-[9px] font-black text-red-600 uppercase">Est. Expenses</p>
-                    <p className="text-xl font-black text-red-500">${financials.expense.toLocaleString()}</p>
-                </div>
-            </div>
-            <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 text-center">
-                <p className="text-xs font-black text-zinc-500 uppercase mb-2">Net Profit Margin</p>
-                <p className={`text-4xl font-oswald font-bold ${metrics.profit >= 0 ? "text-[#FF6700]" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
+                        <button onClick={() => completeJob(job.id)} className="px-3 py-2 bg-zinc-800 text-zinc-400 text-[9px] font-black rounded hover:bg-green-600 hover:text-white transition uppercase">Complete</button>
+                    </div>
+                ))}
             </div>
         </Drawer>
       )}
 
-      {/* 3. ALERTS DRAWER */}
+      {/* 2. SETTINGS / ADMIN DRAWER (Create Resources) */}
+      {activeDrawer === "SETTINGS" && (
+        <Drawer title="ADMIN CONSOLE" close={() => setActiveDrawer(null)}>
+            <div className="flex border-b border-[var(--border-color)] mb-6">
+                {["JOB", "CREW", "VAN"].map(tab => (
+                    <button key={tab} onClick={() => setAdminTab(tab)} className={`flex-1 pb-3 font-black text-[10px] tracking-widest ${adminTab === tab ? "text-[#FF6700] border-b-2 border-[#FF6700]" : "text-zinc-500"}`}>{tab}</button>
+                ))}
+            </div>
+
+            <div className="space-y-6">
+                {adminTab === "JOB" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-[#FF6700]/5 border border-[#FF6700]/30 space-y-3">
+                            <h3 className="text-[#FF6700] font-black text-xs uppercase">Dispatch New Job</h3>
+                            <input placeholder="JOB NAME (E.G. 101 MAPLE)" value={newJob.name} onChange={e => setNewJob({...newJob, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="CLIENT NAME" value={newJob.client} onChange={e => setNewJob({...newJob, client: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateJob} disabled={creating} className="w-full bg-[#FF6700] text-black font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "CREATE JOB"}</button>
+                        </div>
+                    </div>
+                )}
+
+                {adminTab === "CREW" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/30 space-y-3">
+                            <h3 className="text-blue-500 font-black text-xs uppercase">Add Personnel</h3>
+                            <input placeholder="WORKER NAME" value={newWorker.name} onChange={e => setNewWorker({...newWorker, name: e.target.value})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateWorker} disabled={creating} className="w-full bg-blue-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD WORKER"}</button>
+                        </div>
+                    </div>
+                )}
+
+                {adminTab === "VAN" && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/30 space-y-3">
+                            <h3 className="text-purple-500 font-black text-xs uppercase">Register Vehicle</h3>
+                            <input placeholder="VAN ID (E.G. VAN-04)" value={newVan.name} onChange={e => setNewVan({...newVan, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <input placeholder="LICENSE PLATE" value={newVan.plate} onChange={e => setNewVan({...newVan, plate: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-main)] p-3 rounded-lg text-xs font-bold outline-none uppercase border border-[var(--border-color)]" />
+                            <button onClick={handleCreateVan} disabled={creating} className="w-full bg-purple-600 text-white font-black py-3 rounded-lg text-xs uppercase flex justify-center">{creating ? <Loader2 className="animate-spin"/> : "ADD VAN"}</button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="pt-8 border-t border-[var(--border-color)]">
+                    <button onClick={toggleTheme} className="w-full flex justify-between items-center p-4 industrial-card rounded-xl border border-[var(--border-color)] hover:border-[#FF6700] transition mb-4">
+                        <div className="flex items-center gap-3"><Sun size={18}/><span className="text-xs font-bold">Theme Mode</span></div>
+                        <span className="text-[9px] font-black uppercase bg-zinc-800 text-white px-2 py-1 rounded">TOGGLE</span>
+                    </button>
+                    <button onClick={handleLogout} className="w-full py-4 bg-red-600/10 text-red-500 font-black text-xs rounded-xl border border-red-900/30 hover:bg-red-600 hover:text-white transition uppercase">Log Out</button>
+                </div>
+            </div>
+        </Drawer>
+      )}
+
+      {/* 3. ALERTS & FINANCE DRAWERS (UNCHANGED) */}
       {activeDrawer === "ALERTS" && (
         <Drawer title="SYSTEM ALERTS" close={() => setActiveDrawer(null)}>
             <div className="space-y-3">
@@ -269,35 +280,16 @@ export default function Dashboard() {
             </div>
         </Drawer>
       )}
-
-      {/* 4. SETTINGS DRAWER */}
-      {activeDrawer === "SETTINGS" && (
-        <Drawer title="SETTINGS" close={() => setActiveDrawer(null)}>
-            <div className="space-y-6">
-                <div className="industrial-card p-6 rounded-xl border border-[var(--border-color)]">
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="w-12 h-12 rounded-full bg-[#FF6700] flex items-center justify-center text-black font-black text-xl">{user?.email?.[0].toUpperCase()}</div>
-                        <div><p className="text-sm font-bold uppercase">{user?.email}</p><span className="text-[9px] bg-[#FF6700]/20 text-[#FF6700] px-2 py-0.5 rounded font-black border border-[#FF6700]/30">PRO TIER</span></div>
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Preferences</p>
-                    <button onClick={toggleTheme} className="w-full flex justify-between items-center p-4 industrial-card rounded-xl border border-[var(--border-color)] hover:border-[#FF6700] transition">
-                        <div className="flex items-center gap-3"><Sun size={18}/><span className="text-xs font-bold">Theme Mode</span></div>
-                        <span className="text-[9px] font-black uppercase bg-zinc-800 text-white px-2 py-1 rounded">TOGGLE</span>
-                    </button>
-                </div>
-                <div className="space-y-2">
-                    <p className="text-[9px] font-black text-zinc-500 uppercase ml-1">Team</p>
-                    <button className="w-full flex justify-between items-center p-4 industrial-card rounded-xl border border-[var(--border-color)] hover:border-[#FF6700] transition opacity-50 cursor-not-allowed">
-                        <div className="flex items-center gap-3"><Users size={18}/><span className="text-xs font-bold">Crew Management</span></div>
-                        <span className="text-[9px] font-black uppercase text-[#FF6700]">SOON</span>
-                    </button>
-                </div>
-                <button onClick={handleLogout} className="w-full py-4 bg-red-600/10 text-red-500 font-black text-xs rounded-xl border border-red-900/30 hover:bg-red-600 hover:text-white transition uppercase mt-8">Log Out System</button>
+      
+      {activeDrawer === "FINANCE" && (
+        <Drawer title="FINANCIAL INTEL" close={() => setActiveDrawer(null)}>
+            <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 text-center">
+                <p className="text-xs font-black text-zinc-500 uppercase mb-2">Net Profit Margin</p>
+                <p className={`text-4xl font-oswald font-bold ${metrics.profit >= 0 ? "text-[#FF6700]" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
             </div>
         </Drawer>
       )}
+
     </div>
   );
 }
