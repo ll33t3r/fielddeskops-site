@@ -115,6 +115,7 @@ export default function Dashboard() {
       if (!newJobData.name) return;
       setCreating(true);
       const { data: { user } } = await supabase.auth.getUser();
+      
       const { data, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobData.name.toUpperCase(),
@@ -129,7 +130,8 @@ export default function Dashboard() {
           setShowNewJobModal(false);
           setNewJobData({ name: "", client: "" });
       } else {
-          alert("Error creating job. Run the SQL script.");
+          console.error("Job Error:", error);
+          alert("Error creating job. Ensure you ran the updated SQL script.");
       }
   };
 
@@ -211,10 +213,10 @@ export default function Dashboard() {
       <header className="px-6 pt-6 pb-2 shrink-0 z-10 relative">
         <div className="flex justify-between items-start">
             <div>
-                <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1 animate-pulse">FIELDDESKOPS</p>
+                <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1">FIELDDESKOPS</p>
                 <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
-                        <span className="text-[#FF6700]">COMMAND</span>CENTER
+                        <span className="text-[#FF6700] animate-pulse">COMMAND</span>CENTER
                     </h1>
                 </div>
                 <div className="flex items-center gap-3 mt-1">
@@ -420,9 +422,12 @@ export default function Dashboard() {
       
       {activeDrawer === "FINANCE" && (
         <Drawer title="FINANCIAL INTEL" close={() => setActiveDrawer(null)}>
-            <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 text-center">
+            <div className="p-6 rounded-xl bg-zinc-900 border border-zinc-800 text-center relative">
                 <p className="text-xs font-black text-zinc-500 uppercase mb-2">Net Profit Margin</p>
                 <p className={`text-4xl font-oswald font-bold ${metrics.profit >= 0 ? "text-[#FF6700]" : "text-red-500"}`}>${metrics.profit.toLocaleString()}</p>
+                <Link href="/apps/profitlock" className="absolute bottom-4 right-4 text-xs font-black text-[#FF6700] hover:underline flex items-center gap-1">
+                    <Plus size={12} /> New Invoice
+                </Link>
             </div>
         </Drawer>
       )}
@@ -434,27 +439,27 @@ export default function Dashboard() {
 // --- SUBCOMPONENTS ---
 
 function AppCard({ href, label, sub, icon, color, status }) {
-    return (
-        <Link href={href} className="industrial-card flex flex-col items-center justify-center text-center rounded-2xl transition-all duration-300 group relative overflow-hidden hover:bg-[var(--bg-card)]/80 active:scale-95 border-2 border-transparent hover:border-zinc-700">
-            <div className="absolute top-3 right-3"><div className={`w-2 h-2 rounded-full ${status === "red" ? "bg-red-500 animate-pulse" : status === "yellow" ? "bg-yellow-500" : "bg-green-500/30"}`}></div></div>
-            <div className={`mb-3 p-4 rounded-full bg-black/5 dark:bg-white/5 ${color} group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
-            <h2 className="text-lg md:text-2xl font-black tracking-wider mb-1 group-hover:text-[var(--text-main)] transition-colors">{label}</h2>
-            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{sub}</p>
-        </Link>
-    );
+    return (
+        <Link href={href} className="industrial-card flex flex-col items-center justify-center text-center rounded-2xl transition-all duration-300 group relative overflow-hidden hover:bg-[var(--bg-card)]/80 active:scale-95 border-2 border-transparent hover:border-zinc-700">
+            <div className="absolute top-3 right-3"><div className={`w-2 h-2 rounded-full ${status === "red" ? "bg-red-500 animate-pulse" : status === "yellow" ? "bg-yellow-500" : "bg-green-500/30"}`}></div></div>
+            <div className={`mb-3 p-4 rounded-full bg-black/5 dark:bg-white/5 ${color} group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
+            <h2 className="text-lg md:text-2xl font-black tracking-wider mb-1 group-hover:text-[var(--text-main)] transition-colors">{label}</h2>
+            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{sub}</p>
+        </Link>
+    );
 }
 
 function Drawer({ title, close, children }) {
-    return (
-        <div className="fixed inset-0 z-50 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
-            <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 text-[var(--text-main)]">
-                <div className="flex justify-between items-center mb-8 pb-4 border-b border-[var(--border-color)]">
-                    <h2 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase">{title}</h2>
-                    <button onClick={close} className="p-2 hover:bg-zinc-800 rounded-full transition"><X size={24}/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">{children}</div>
-            </div>
-        </div>
-    );
+    return (
+        <div className="fixed inset-0 z-50 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={close} />
+            <div className="absolute right-0 top-0 bottom-0 w-full sm:w-[400px] bg-[var(--bg-main)] border-l border-[var(--border-color)] p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 text-[var(--text-main)]">
+                <div className="flex justify-between items-center mb-8 pb-4 border-b border-[var(--border-color)]">
+                    <h2 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase">{title}</h2>
+                    <button onClick={close} className="p-2 hover:bg-zinc-800 rounded-full transition"><X size={24}/></button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">{children}</div>
+            </div>
+        </div>
+    );
 }
