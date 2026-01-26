@@ -29,6 +29,7 @@ export default function Dashboard() {
   // UI State
   const [activeDrawer, setActiveDrawer] = useState(null); 
   const [showNewJobModal, setShowNewJobModal] = useState(false);
+  const [creatingJob, setCreatingJob] = useState(false);
   const [newJobData, setNewJobData] = useState({ name: "", client: "" });
 
   // --- INIT ---
@@ -88,10 +89,23 @@ export default function Dashboard() {
     setLoading(false);
   };
 
+  const openJobCreator = () => {
+      setNewJobData({ name: "", client: "" }); // Reset form
+      setShowNewJobModal(true);
+  };
+
+  const closeJobCreator = () => {
+      setNewJobData({ name: "", client: "" }); // Clear on exit
+      setShowNewJobModal(false);
+  };
+
   const handleCreateJob = async () => {
       if (!newJobData.name) return;
+      setCreatingJob(true);
+      
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Basic insert
       const { data, error } = await supabase.from("jobs").insert({
           user_id: user.id,
           job_name: newJobData.name.toUpperCase(),
@@ -99,11 +113,15 @@ export default function Dashboard() {
           status: "ACTIVE"
       }).select().single();
 
+      setCreatingJob(false);
+
       if (!error && data) {
           setActiveJobs([data, ...activeJobs]);
           setMetrics({...metrics, jobs: metrics.jobs + 1});
-          setShowNewJobModal(false);
-          setNewJobData({ name: "", client: "" });
+          closeJobCreator();
+      } else {
+          console.error("Job Creation Failed:", error);
+          alert("Failed to create job. Check connection.");
       }
   };
 
@@ -132,13 +150,14 @@ export default function Dashboard() {
         <div className="flex justify-between items-start">
             <div>
                 <p className="text-[#FF6700] font-black text-[10px] tracking-[0.3em] uppercase mb-1 animate-pulse">FIELDDESKOPS</p>
-                <div className="flex items-baseline gap-2">
-                    <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)]">
-                        COMMANDCENTER
-                    </h1>
-                    <span className="text-xl font-mono text-zinc-500 font-bold tracking-widest">{time}</span>
+                <h1 className="text-3xl font-oswald font-bold tracking-tighter uppercase text-[var(--text-main)] leading-none">
+                    <span className="text-[#FF6700]">COMMAND</span>CENTER
+                </h1>
+                <div className="flex items-center gap-3 mt-1">
+                    <p className="text-lg text-zinc-400 font-bold uppercase tracking-wide">{greeting}, {user?.email?.split("@")[0]}</p>
+                    <div className="h-4 w-[1px] bg-zinc-700"></div>
+                    <span className="text-[10px] font-mono text-zinc-600 font-bold tracking-widest pt-0.5">{time}</span>
                 </div>
-                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mt-0.5 ml-0.5">{greeting}, {user?.email?.split("@")[0]}</p>
             </div>
             
             <button onClick={() => setActiveDrawer("SETTINGS")} className="industrial-card p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:scale-105 transition-transform active:scale-95">
@@ -187,15 +206,17 @@ export default function Dashboard() {
         <Drawer title="MISSION CONTROL" close={() => setActiveDrawer(null)}>
             {showNewJobModal ? (
                 <div className="animate-in slide-in-from-right space-y-4 p-1">
-                    <div className="flex items-center gap-2 mb-4 text-[#FF6700]" onClick={() => setShowNewJobModal(false)}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
+                    <div className="flex items-center gap-2 mb-4 text-[#FF6700] cursor-pointer" onClick={closeJobCreator}><ChevronRight className="rotate-180" size={16}/><span className="text-xs font-black uppercase">Back to List</span></div>
                     <h3 className="text-sm font-black uppercase">New Job Dispatch</h3>
-                    <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase" />
-                    <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase" />
-                    <button onClick={handleCreateJob} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase shadow-lg">CREATE JOB</button>
+                    <input autoFocus placeholder="PROJECT NAME (E.G. 123 MAIN ST)" value={newJobData.name} onChange={e => setNewJobData({...newJobData, name: e.target.value.toUpperCase()})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
+                    <input placeholder="CLIENT NAME (OPTIONAL)" value={newJobData.client} onChange={e => setNewJobData({...newJobData, client: e.target.value})} className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] p-3 rounded-lg text-xs font-bold outline-none uppercase text-[var(--text-main)]" />
+                    <button onClick={handleCreateJob} disabled={creatingJob} className="w-full bg-[#FF6700] text-black font-black py-4 rounded-xl uppercase shadow-lg flex items-center justify-center gap-2">
+                        {creatingJob ? <Loader2 className="animate-spin" size={18}/> : "CREATE JOB"}
+                    </button>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    <button onClick={() => setShowNewJobModal(true)} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/10 uppercase transition-colors">+ DISPATCH NEW JOB</button>
+                    <button onClick={openJobCreator} className="w-full py-4 border-2 border-dashed border-[#FF6700] text-[#FF6700] font-black rounded-xl text-xs hover:bg-[#FF6700]/10 uppercase transition-colors">+ DISPATCH NEW JOB</button>
                     {activeJobs.length === 0 ? <p className="text-center text-zinc-500 text-xs font-bold py-10">NO ACTIVE OPS</p> : activeJobs.map(job => (
                         <div key={job.id} className="industrial-card p-4 rounded-xl border border-[var(--border-color)] flex justify-between items-center group">
                             <div>
