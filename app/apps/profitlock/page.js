@@ -676,7 +676,7 @@ export default function ProfitLock() {
                       <ChevronDown size={14} className={`transition ${showMethodMenu ? "rotate-180" : ""}`}/>
                     </button>
 
-                    {showMethodMenu && (
+                    {                    {showMethodMenu && (
                       <button
                         onClick={() => setShowMethodDetails(!showMethodDetails)}
                         className="w-full p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] rounded text-xs font-bold text-left flex items-center justify-between hover:bg-[var(--input-bg)] transition"
@@ -707,7 +707,7 @@ export default function ProfitLock() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-black text-[var(--text-sub)] uppercase block">Target %</label>
+                          <label className="text-xs font-black text-[var(--text-sub)] uppercase block">Target Value</label>
                           <input 
                             type="number" 
                             inputMode="decimal"
@@ -718,14 +718,14 @@ export default function ProfitLock() {
                           />
                           <p className="text-[10px] text-[var(--text-sub)] mt-2">
                             {profitMethod === "MARKUP" ? (
-                              <>Markup: Cost × (1 + {targetValue}%) = Price</>
+                              <>Cost × (1 + {targetValue}<span className="text-[var(--text-sub)]">%</span>) = Price</>
                             ) : (
-                              <>Margin: Cost ÷ (1 - {targetValue}%) = Price</>
+                              <>Cost ÷ (1 - {targetValue}<span className="text-[var(--text-sub)]">%</span>) = Price</>
                             )}
                           </p>
                         </div>
                       </div>
-                    )}
+                    )}}
 
                     <div className={`p-3 rounded bg-[var(--bg-surface)] border border-[var(--border-color)]`}>
                         <div className="flex justify-between items-center">
@@ -873,3 +873,4 @@ export default function ProfitLock() {
     </div>
   );
 }
+
