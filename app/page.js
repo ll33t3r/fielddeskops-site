@@ -9,7 +9,8 @@ import {
   FilePlus, Play, RefreshCw, Trash2, CheckCircle2,
   Sun, Moon, Eye, EyeOff, Menu, LogOut, AlertTriangle,
   Users, Truck, UserCircle, Phone, Mail, MapPin, FileText,
-  Edit2, Check, Search, ChevronDown, Briefcase
+  Edit2, Check, Search, ChevronDown, Briefcase, MoreVertical,
+  Archive, RotateCcw
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,6 @@ export default function Dashboard() {
   const supabase = createClient();
   const router = useRouter();
 
-  // --- THE BRAIN ---
   const { jobs: liveJobs, loading: brainLoading, refresh: refreshBrain } = useLiveBrain();
   const { activeJob, setActiveJob } = useActiveJob();
   const [quickJobName, setQuickJobName] = useState("");
@@ -27,19 +27,18 @@ export default function Dashboard() {
   const [showJobDropdown, setShowJobDropdown] = useState(false);
   const inputRef = useRef(null);
 
-  // --- STATE ---
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("HELLO");
   const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, alerts: 0 });
   const [theme, setTheme] = useState("dark");
   
-  // MODALS
   const [showHamburger, setShowHamburger] = useState(false);
   const [showSpeedDial, setShowSpeedDial] = useState(false);
+  const [showActiveJobsModal, setShowActiveJobsModal] = useState(false);
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [alertList, setAlertList] = useState([]); 
   const [refreshing, setRefreshing] = useState(false);
 
-  // RESOURCE STATE
   const [activeTab, setActiveTab] = useState("JOBS");
   const [workers, setWorkers] = useState([]);
   const [fleet, setFleet] = useState([]);
@@ -47,13 +46,17 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [expandedCustomer, setExpandedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [jobFilter, setJobFilter] = useState("ACTIVE"); // ACTIVE, INACTIVE, COMPLETED
 
-  // FORM STATE
   const [newJobTitle, setNewJobTitle] = useState("");
   const [editingJob, setEditingJob] = useState(null);
+  const [jobMenuOpen, setJobMenuOpen] = useState(null);
   const [newWorker, setNewWorker] = useState({ name: "", role: "" });
   const [newRig, setNewRig] = useState({ name: "", plate: "" });
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
+
+  // Job assignment state
+  const [assigningJob, setAssigningJob] = useState(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") || "dark";
@@ -71,7 +74,6 @@ export default function Dashboard() {
     loadDashboardData();
   }, []);
 
-  // Sync liveJobs from brain hook to local state
   useEffect(() => {
     if (liveJobs) {
       setJobs(liveJobs);
@@ -79,7 +81,6 @@ export default function Dashboard() {
     }
   }, [liveJobs]);
 
-  // --- ACTIONS ---
   const handleCreateJob = async (e) => {
     e.preventDefault();
     if (!quickJobName.trim()) return;
@@ -96,7 +97,6 @@ export default function Dashboard() {
       setActiveJob(data);
       setQuickJobName("");
       setShowJobDropdown(false);
-      // Refresh jobs list immediately
       await refreshBrain();
       await loadJobs();
     }
@@ -129,6 +129,7 @@ export default function Dashboard() {
     const { error } = await supabase.from("jobs").update(updates).eq("id", id);
     if (!error) {
       setEditingJob(null);
+      setJobMenuOpen(null);
       await refreshBrain();
       await loadJobs();
     }
@@ -139,9 +140,15 @@ export default function Dashboard() {
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (!error) {
       if (activeJob?.id === id) setActiveJob(null);
+      setJobMenuOpen(null);
       await refreshBrain();
       await loadJobs();
     }
+  };
+
+  const assignToJob = async (jobId, field, valueId) => {
+    await supabase.from("jobs").update({ [field]: valueId }).eq("id", jobId);
+    await loadJobs();
   };
 
   const addWorker = async () => {
@@ -156,9 +163,6 @@ export default function Dashboard() {
     if (data && !error) {
       setNewWorker({ name: "", role: "" });
       await loadResources();
-    } else {
-      console.error("Worker insert error:", error);
-      alert("Failed to add worker: " + (error?.message || "Unknown error"));
     }
   };
 
@@ -230,7 +234,7 @@ export default function Dashboard() {
   };
 
   const loadJobs = async () => {
-    const { data } = await supabase.from("jobs").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("jobs").select("*, customers(name), fleet(name)").order("created_at", { ascending: false });
     if (data) {
       setJobs(data);
       setMetrics(prev => ({ ...prev, jobs: data.filter(j => j.status === 'ACTIVE').length }));
@@ -300,7 +304,14 @@ export default function Dashboard() {
     c.address?.toLowerCase().includes(customerSearch.toLowerCase())
   );
 
-  const recentJobs = jobs ? jobs.slice(0, 5) : [];
+  const filteredJobs = jobs.filter(j => {
+    if (jobFilter === "ACTIVE") return j.status === "ACTIVE";
+    if (jobFilter === "INACTIVE") return j.status === "INACTIVE";
+    if (jobFilter === "COMPLETED") return j.status === "COMPLETED";
+    return true;
+  });
+
+  const recentJobs = jobs ? jobs.filter(j => j.status === 'ACTIVE').slice(0, 5) : [];
 
   if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
 
@@ -330,7 +341,7 @@ export default function Dashboard() {
         {/* QUICK JOB INPUT */}
         <div className="relative mb-3">
           <form onSubmit={handleCreateJob} className="relative group">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF6700]">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF6700] z-10">
                   {isCreating ? <Loader2 size={18} className="animate-spin"/> : <Plus size={18} />}
               </div>
               <input 
@@ -345,26 +356,29 @@ export default function Dashboard() {
               <button 
                 type="button"
                 onClick={() => setShowJobDropdown(!showJobDropdown)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-sub)] hover:text-[#FF6700]"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-sub)] hover:text-[#FF6700] z-10"
               >
                 <ChevronDown size={18} />
               </button>
           </form>
 
           {showJobDropdown && recentJobs.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl z-50 overflow-hidden">
-              <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3">Recent Jobs</div>
-              {recentJobs.map(job => (
-                <button
-                  key={job.id}
-                  onClick={() => selectExistingJob(job)}
-                  className="w-full text-left px-3 py-2 hover:bg-[var(--bg-surface)] transition flex justify-between items-center group"
-                >
-                  <span className="text-sm text-[var(--text-main)] group-hover:text-[#FF6700]">{job.title}</span>
-                  <span className="text-xs text-[var(--text-sub)]">{new Date(job.created_at).toLocaleDateString()}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setShowJobDropdown(false)} />
+              <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0a0a] border border-[var(--border-color)] rounded-xl shadow-2xl z-30 overflow-hidden">
+                <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3 bg-black/60">Recent Jobs</div>
+                {recentJobs.map(job => (
+                  <button
+                    key={job.id}
+                    onClick={() => selectExistingJob(job)}
+                    className="w-full text-left px-3 py-2 hover:bg-[#FF6700]/10 transition flex justify-between items-center group border-b border-white/5 last:border-0"
+                  >
+                    <span className="text-sm text-[var(--text-main)] group-hover:text-[#FF6700]">{job.title}</span>
+                    <span className="text-xs text-[var(--text-sub)]">{new Date(job.created_at).toLocaleDateString()}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -395,12 +409,15 @@ export default function Dashboard() {
                   {privacyMode ? <EyeOff size={12} className="text-[#FF6700]"/> : <Eye size={12} className="text-[var(--text-sub)]"/>}
                 </button>
             </div>
-            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center">
+            <button 
+              onClick={() => setShowActiveJobsModal(true)}
+              className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center hover:bg-[var(--bg-surface)] transition active:scale-95"
+            >
                 <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Active Jobs</p>
                 <p className="font-oswald text-lg tracking-tight text-[var(--text-main)]">{metrics.jobs}</p>
-            </div>
+            </button>
             <button 
-              onClick={() => setShowHamburger(true)} 
+              onClick={() => metrics.alerts > 0 ? setShowAlertsModal(true) : alert("No system alerts!")} 
               className={`bg-[var(--bg-card)] border rounded-lg p-3 text-center transition active:scale-95 relative ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : "border-[var(--border-color)]"}`}
             >
                 {metrics.alerts > 0 && <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>}
@@ -453,6 +470,66 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* ACTIVE JOBS MODAL */}
+      {showActiveJobsModal && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setShowActiveJobsModal(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">
+              <h2 className="font-oswald text-xl text-[#FF6700]">ACTIVE JOBS ({metrics.jobs})</h2>
+              <button onClick={() => setShowActiveJobsModal(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="p-4 space-y-2 overflow-y-auto">
+              {jobs.filter(j => j.status === 'ACTIVE').map(job => (
+                <div key={job.id} className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-3 flex justify-between items-center">
+                  <div className="flex-1 cursor-pointer" onClick={() => { setActiveJob(job); setShowActiveJobsModal(false); }}>
+                    <p className="font-oswald text-sm text-[var(--text-main)]">{job.title}</p>
+                    <p className="text-xs text-[var(--text-sub)]">{new Date(job.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <button 
+                    onClick={() => updateJob(job.id, { status: "COMPLETED" })}
+                    className="p-2 hover:bg-green-500/10 rounded text-[var(--text-sub)] hover:text-green-500 transition"
+                    title="Mark Complete"
+                  >
+                    <CheckCircle2 size={18}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ALERTS MODAL */}
+      {showAlertsModal && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setShowAlertsModal(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">
+              <h2 className="font-oswald text-xl text-red-500">SYSTEM ALERTS ({alertList.length})</h2>
+              <button onClick={() => setShowAlertsModal(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="p-4 space-y-2 overflow-y-auto">
+              {alertList.map((alert, i) => (
+                <div key={alert.id} className={`border-l-4 ${alert.border} ${alert.bg} p-3 rounded flex justify-between items-start`}>
+                  <div>
+                    <p className={`text-xs font-bold ${alert.color}`}>{alert.title}</p>
+                    <p className="text-sm text-[var(--text-main)] mt-1">{alert.msg}</p>
+                  </div>
+                  <button onClick={() => { dismissAlert(i); if (alertList.length === 1) setShowAlertsModal(false); }} className="text-[var(--text-sub)] hover:text-[var(--text-main)] p-1">
+                    <X size={14}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* HAMBURGER MENU */}
       {showHamburger && (
         <>
@@ -497,10 +574,23 @@ export default function Dashboard() {
                     </div>
                   </div>
 
+                  {/* Filter */}
+                  <div className="flex gap-2 text-xs">
+                    {["ACTIVE", "INACTIVE", "COMPLETED"].map(filter => (
+                      <button 
+                        key={filter}
+                        onClick={() => setJobFilter(filter)}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition ${jobFilter === filter ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] text-[var(--text-sub)]"}`}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+
                   <div>
-                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">All Jobs ({jobs.length})</h3>
+                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">{jobFilter} Jobs ({filteredJobs.length})</h3>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {jobs && jobs.map(job => (
+                      {filteredJobs.map(job => (
                         <div 
                           key={job.id} 
                           className={`p-3 rounded-lg border transition-all ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700] shadow-[0_0_10px_rgba(255,103,0,0.15)]" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}
@@ -522,27 +612,55 @@ export default function Dashboard() {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex justify-between items-center">
-                              <div className="flex-1 cursor-pointer" onClick={() => { setActiveJob(job); setShowHamburger(false); }}>
-                                <p className={`font-oswald text-sm ${activeJob?.id === job.id ? "text-[#FF6700]" : "text-[var(--text-main)]"}`}>{job.title}</p>
-                                <p className="text-[10px] text-[var(--text-sub)]">{job.status} • {new Date(job.created_at).toLocaleDateString()}</p>
+                            <>
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1 cursor-pointer" onClick={() => { setActiveJob(job); setShowHamburger(false); }}>
+                                  <p className={`font-oswald text-sm ${activeJob?.id === job.id ? "text-[#FF6700]" : "text-[var(--text-main)]"}`}>{job.title}</p>
+                                  <p className="text-[10px] text-[var(--text-sub)]">{job.status} • {new Date(job.created_at).toLocaleDateString()}</p>
+                                </div>
+                                <div className="relative">
+                                  <button onClick={() => setJobMenuOpen(jobMenuOpen === job.id ? null : job.id)} className="p-1.5 hover:bg-white/10 rounded">
+                                    <MoreVertical size={16} className="text-[var(--text-sub)]"/>
+                                  </button>
+                                  {jobMenuOpen === job.id && (
+                                    <div className="absolute right-0 top-full mt-1 bg-[#0a0a0a] border border-[var(--border-color)] rounded-lg shadow-xl z-10 min-w-[140px]">
+                                      <button onClick={() => { setEditingJob(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2">
+                                        <Edit2 size={12}/> Edit
+                                      </button>
+                                      {job.status === "ACTIVE" && (
+                                        <button onClick={() => updateJob(job.id, { status: "COMPLETED" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-green-500">
+                                          <CheckCircle2 size={12}/> Complete
+                                        </button>
+                                      )}
+                                      {job.status === "ACTIVE" && (
+                                        <button onClick={() => updateJob(job.id, { status: "INACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-gray-400">
+                                          <Archive size={12}/> Make Inactive
+                                        </button>
+                                      )}
+                                      {job.status === "INACTIVE" && (
+                                        <button onClick={() => updateJob(job.id, { status: "ACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-blue-400">
+                                          <RotateCcw size={12}/> Reactivate
+                                        </button>
+                                      )}
+                                      <button onClick={() => { setAssigningJob(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 border-t border-white/10">
+                                        <Users size={12}/> Assign Resources
+                                      </button>
+                                      <button onClick={() => deleteJob(job.id)} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-red-500 border-t border-white/10">
+                                        <Trash2 size={12}/> Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex gap-1">
-                                <button onClick={() => setEditingJob(job)} className="p-1.5 hover:bg-white/10 rounded text-[var(--text-sub)] hover:text-[var(--text-main)]">
-                                  <Edit2 size={14}/>
-                                </button>
-                                <button 
-                                  onClick={() => updateJob(job.id, { status: job.status === "ACTIVE" ? "COMPLETED" : "ACTIVE" })} 
-                                  className={`p-1.5 hover:bg-white/10 rounded ${job.status === "COMPLETED" ? "text-green-500" : "text-[var(--text-sub)]"} hover:text-green-500`}
-                                  title={job.status === "ACTIVE" ? "Mark Complete" : "Reopen"}
-                                >
-                                  <CheckCircle2 size={14}/>
-                                </button>
-                                <button onClick={() => deleteJob(job.id)} className="p-1.5 hover:bg-white/10 rounded text-[var(--text-sub)] hover:text-red-500">
-                                  <Trash2 size={14}/>
-                                </button>
-                              </div>
-                            </div>
+
+                              {/* Show Assignments */}
+                              {(job.customers || job.fleet) && (
+                                <div className="text-xs text-[var(--text-sub)] space-y-1 mt-2 pt-2 border-t border-white/10">
+                                  {job.customers && <p className="flex items-center gap-1"><UserCircle size={10}/> {job.customers.name}</p>}
+                                  {job.fleet && <p className="flex items-center gap-1"><Truck size={10}/> {job.fleet.name}</p>}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       ))}
@@ -766,6 +884,50 @@ export default function Dashboard() {
                   <span className="text-sm">Sign Out</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ASSIGN RESOURCES MODAL */}
+      {assigningJob && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setAssigningJob(null)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95">
+            <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">
+              <h2 className="font-oswald text-lg text-[#FF6700]">ASSIGN TO: {assigningJob.title}</h2>
+              <button onClick={() => setAssigningJob(null)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-wider mb-2 block">Customer</label>
+                <select 
+                  value={assigningJob.customer_id || ""}
+                  onChange={(e) => assignToJob(assigningJob.id, "customer_id", e.target.value || null)}
+                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] focus:border-[#FF6700] outline-none"
+                >
+                  <option value="">None</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-wider mb-2 block">Rig</label>
+                <select 
+                  value={assigningJob.fleet_id || ""}
+                  onChange={(e) => assignToJob(assigningJob.id, "fleet_id", e.target.value || null)}
+                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] focus:border-[#FF6700] outline-none"
+                >
+                  <option value="">None</option>
+                  {fleet.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </div>
+
+              <button onClick={() => setAssigningJob(null)} className="w-full bg-[#FF6700] text-black py-3 rounded-lg font-bold">
+                Done
+              </button>
             </div>
           </div>
         </>
