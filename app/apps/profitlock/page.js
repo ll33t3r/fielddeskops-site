@@ -167,13 +167,10 @@ export default function ProfitLock() {
     const discount = parseFloat(discountAmount) || 0;
     const cost = subtotal - discount;
 
-    // PROFITLOCK AUTO-ADJUSTMENT
     let price = 0;
     if (profitMethod === "MARKUP") {
-      // Markup: Price = Cost × (1 + Markup%)
       price = cost * (1 + (targetValue / 100));
     } else {
-      // Margin: Price = Cost / (1 - Margin%)
       const marginDecimal = targetValue / 100;
       if (marginDecimal >= 1) {
         price = cost * 2;
@@ -497,7 +494,7 @@ export default function ProfitLock() {
       {showJobSelect && (
         <>
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={() => setShowJobSelect(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl max-h-[75vh] overflow-hidden flex flex-col">
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[51] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl max-h-[75vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-[var(--border-color)] flex justify-between items-center">
               <h2 className="font-oswald text-lg text-[#FF6700]">Select Job</h2>
               <button onClick={() => setShowJobSelect(false)}><X size={18}/></button>
@@ -541,8 +538,8 @@ export default function ProfitLock() {
       {/* CREATE JOB MODAL */}
       {showCreateJob && (
         <>
-          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateJob(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[60] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl p-4">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateJob(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[51] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl p-4">
             <h2 className="font-oswald text-lg text-[#FF6700] mb-3">Create Job</h2>
             <input 
               autoFocus
@@ -565,13 +562,13 @@ export default function ProfitLock() {
 
       {/* CONTROL PANEL */}
       {showMenu && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowMenu(false)} />
-            <div className="w-80 max-w-[85vw] bg-[var(--bg-card)] border-l border-[var(--border-color)] h-full shadow-2xl p-4 flex flex-col overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
+            <div className="absolute inset-0 bg-black/90 backdrop-blur-sm pointer-events-auto z-40" onClick={() => setShowMenu(false)} />
+            <div className="w-80 max-w-[85vw] bg-[var(--bg-card)] border-l border-[var(--border-color)] h-full shadow-2xl p-4 flex flex-col overflow-y-auto z-50 pointer-events-auto relative">
                 
-                <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-4 sticky top-0 bg-[var(--bg-card)] pb-2 z-10">
                     <h2 className="font-oswald text-lg font-bold text-[#FF6700] uppercase">Settings</h2>
-                    <button onClick={() => setShowMenu(false)}><X size={18}/></button>
+                    <button onClick={() => setShowMenu(false)} className="p-1 hover:bg-[var(--bg-surface)] rounded"><X size={18}/></button>
                 </div>
 
                 {/* TABS */}
@@ -580,7 +577,7 @@ export default function ProfitLock() {
                     <button 
                       key={tab}
                       onClick={() => setMenuTab(tab)}
-                      className={`py-2 rounded text-[9px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)]"}`}
+                      className={`py-2 rounded text-[9px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
                     >
                       {tab}
                     </button>
@@ -593,7 +590,7 @@ export default function ProfitLock() {
                     <div className={`p-3 rounded border ${isBelowTarget && profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
                         <div className="flex justify-between items-center mb-2">
                             <p className="text-xs font-black text-[var(--text-sub)] uppercase">Profit {profitLocked && <Lock size={10} className="text-green-500 inline ml-1"/>}</p>
-                            <button onClick={() => setShowProfitDetails(!showProfitDetails)}>
+                            <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="p-1 hover:bg-black/20 rounded">
                                 {showProfitDetails ? <EyeOff size={14}/> : <Eye size={14}/>}
                             </button>
                         </div>
@@ -612,15 +609,15 @@ export default function ProfitLock() {
                     <div>
                         <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-2 block">Method</label>
                         <div className="flex gap-2">
-                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>Markup</button>
-                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>Margin</button>
+                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700]"}`}>Markup</button>
+                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700]"}`}>Margin</button>
                         </div>
                     </div>
 
                     <div>
                         <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 flex items-center gap-1">
                           Target {profitMethod === "MARKUP" ? "Markup" : "Margin"} %
-                          <button onClick={() => setShowCalcInfo(!showCalcInfo)} className="hover:text-[#FF6700]">
+                          <button onClick={() => setShowCalcInfo(!showCalcInfo)} className="hover:text-[#FF6700] p-0.5">
                             <Info size={12}/>
                           </button>
                         </label>
@@ -633,16 +630,18 @@ export default function ProfitLock() {
                           style={{ fontSize: '16px' }}
                         />
                         {showCalcInfo && (
-                          <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded text-[9px] text-blue-300">
-                            <p className="font-bold mb-1">Markup Example:</p>
-                            <p>Cost: $100 + 50% = $150 price</p>
-                            <p className="mt-1 font-bold">Margin Example:</p>
-                            <p>Cost: $100 ÷ (1-50%) = $200 price</p>
+                          <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded text-[9px] text-blue-300 space-y-1">
+                            <p className="font-bold">Markup:</p>
+                            <p>Cost × (1 + %) = Price</p>
+                            <p>$100 × 1.50 = $150</p>
+                            <p className="font-bold mt-2">Margin:</p>
+                            <p>Cost ÷ (1 - %) = Price</p>
+                            <p>$100 ÷ 0.50 = $200</p>
                           </div>
                         )}
                     </div>
 
-                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full p-2 rounded border text-xs font-bold transition ${profitLocked ? "bg-green-900/20 border-green-500/50 text-green-500" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
+                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full p-2 rounded border text-xs font-bold transition ${profitLocked ? "bg-green-900/20 border-green-500/50 text-green-500 hover:bg-green-900/30" : "bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[#FF6700]"}`}>
                         {profitLocked ? "🔒 ProfitLock ON" : "🔓 ProfitLock OFF"}
                     </button>
                   </div>
@@ -727,13 +726,14 @@ export default function ProfitLock() {
                 {/* HISTORY TAB */}
                 {menuTab === "HISTORY" && (
                   <div className="space-y-2">
-                    <p className="text-[8px] font-black text-[var(--text-sub)] uppercase">Recent ({estimateHistory.length})</p>
+                    <p className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-2">Recent ({estimateHistory.length})</p>
                     {estimateHistory.slice(0,8).map(est => (
-                        <div key={est.id} className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] text-[9px]">
+                        <div key={est.id} className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700] transition text-[9px]">
                             <p className="font-bold text-[var(--text-main)]">{est.jobs?.title}</p>
                             <p className="text-[var(--text-sub)]">${est.total_price?.toFixed(0)}</p>
                         </div>
                     ))}
+                    {estimateHistory.length === 0 && <p className="text-[9px] text-[var(--text-sub)] text-center py-4">No estimates yet</p>}
                   </div>
                 )}
 
@@ -756,4 +756,3 @@ export default function ProfitLock() {
     </div>
   );
 }
-
