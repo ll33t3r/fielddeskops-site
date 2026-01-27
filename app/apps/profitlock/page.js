@@ -257,14 +257,14 @@ export default function ProfitLock() {
   return (
     <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
       
-      <header className="p-6 shrink-0 flex justify-between items-start z-10">
+      <header className="p-6 shrink-0 flex justify-between items-start z-10 border-b border-[var(--border-color)]">
         <div className="flex items-center gap-4">
             <Link href="/" className="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] hover:text-[#FF6700] transition">
                 <ArrowLeft size={24} />
             </Link>
             <div>
-                <h1 className="text-3xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_10px_rgba(255,103,0,0.5)]">PROFITLOCK</h1>
-                <p className="text-[10px] font-bold text-[var(--text-sub)] uppercase tracking-widest">ESTIMATING SUITE</p>
+                <h1 className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_10px_rgba(255,103,0,0.5)]">FIELDDESKOPS</h1>
+                <p className="text-[9px] font-bold text-[var(--text-sub)] uppercase tracking-widest">PROFITLOCK ESTIMATING</p>
             </div>
         </div>
         <button onClick={() => setShowMenu(true)} className="p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95">
@@ -272,7 +272,7 @@ export default function ProfitLock() {
         </button>
       </header>
 
-      <div className="mx-6 mb-4">
+      <div className="mx-6 mt-4 mb-4">
         <label className="text-[10px] font-black text-[var(--text-sub)] uppercase ml-1 mb-2 block">Connect to Job</label>
         <button 
           onClick={() => setShowJobSelect(true)}
@@ -290,7 +290,7 @@ export default function ProfitLock() {
         </button>
       </div>
 
-      <main className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6 overflow-y-auto pb-24">
+      <main className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6 overflow-y-auto pb-32">
         <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border-color)] space-y-6">
             
             {mode === "SIMPLE" ? (
@@ -432,6 +432,13 @@ export default function ProfitLock() {
         </div>
       </main>
 
+      {/* FOOTER BRANDING */}
+      <footer className="shrink-0 border-t border-[var(--border-color)] bg-[var(--bg-card)] p-4 text-center">
+        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest">
+          POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
+        </p>
+      </footer>
+
       {/* JOB SELECT MODAL */}
       {showJobSelect && (
         <>
@@ -519,7 +526,7 @@ export default function ProfitLock() {
         </>
       )}
 
-      {/* CONTROL PANEL - Simplified for now */}
+      {/* CONTROL PANEL */}
       {showMenu && (
         <div className="fixed inset-0 z-50 flex justify-end">
             <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={() => setShowMenu(false)} />
