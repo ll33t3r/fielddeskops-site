@@ -28,6 +28,12 @@ export default function ProfitLock() {
   const [profitMethod, setProfitMethod] = useState("MARKUP");
   const [profitLocked, setProfitLocked] = useState(true);
   const [isInvoiceMode, setIsInvoiceMode] = useState(false);
+  const [discountType, setDiscountType] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("profitlock_discount_type") || "DOLLAR";
+    }
+    return "DOLLAR";
+  });
   
   const [simpleMaterials, setSimpleMaterials] = useState(""); 
   const [simpleHours, setSimpleHours] = useState("");
@@ -83,6 +89,10 @@ export default function ProfitLock() {
   useEffect(() => {
     localStorage.setItem("profitlock_mode", mode);
   }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem("profitlock_discount_type", discountType);
+  }, [discountType]);
 
   const loadSettings = () => {
       const saved = localStorage.getItem("profitlock_config");
@@ -174,7 +184,15 @@ export default function ProfitLock() {
         });
     }
 
-    const discount = parseFloat(discountAmount) || 0;
+    let discount = 0;
+    if (showDiscount && parseFloat(discountAmount)) {
+      if (discountType === "DOLLAR") {
+        discount = parseFloat(discountAmount);
+      } else {
+        discount = subtotal * (parseFloat(discountAmount) / 100);
+      }
+    }
+    
     const cost = subtotal - discount;
 
     let price = 0;
@@ -278,6 +296,13 @@ export default function ProfitLock() {
         { id: 2, description: "Labor", quantity: "", unit_cost: "" }
       ]);
     }
+    setShowMenu(false);
+  };
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
+    setShowDiscount(false);
+    setDiscountAmount("");
   };
 
   const showToast = (msg, type) => {
@@ -298,7 +323,7 @@ export default function ProfitLock() {
             </Link>
             <div>
                 <h1 className="text-[11px] font-oswald font-bold text-[#FF6700] tracking-wide uppercase">FIELDDESKOPS</h1>
-                <p className="text-xl font-oswald font-bold text-[var(--text-main)] tracking-wide uppercase">PROFITLOCK</p>
+                <p className="text-base font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_8px_rgba(255,103,0,0.5)]">PROFITLOCK</p>
             </div>
         </div>
         <button onClick={() => setShowMenu(true)} className="p-2 rounded-lg bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95">
@@ -307,18 +332,18 @@ export default function ProfitLock() {
       </header>
 
       <div className="mx-4 my-3">
-        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase ml-1 mb-1.5 block">Connect to Job</label>
+        <label className="text-xs font-black text-[var(--text-sub)] uppercase ml-1 mb-1.5 block">Connect to Job</label>
         <button 
           onClick={() => setShowJobSelect(true)}
-          className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-left font-bold text-sm uppercase outline-none hover:border-[#FF6700] transition flex justify-between items-center"
+          className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-left font-bold uppercase outline-none hover:border-[#FF6700] transition flex justify-between items-center"
         >
           {activeJob ? (
             <div>
-              <p className="text-xs text-[var(--text-main)]">{activeJob.title}</p>
-              {customer && <p className="text-[10px] text-[var(--text-sub)] font-normal">{customer.name}</p>}
+              <p className="text-sm text-[var(--text-main)]">{activeJob.title}</p>
+              {customer && <p className="text-xs text-[var(--text-sub)] font-normal">{customer.name}</p>}
             </div>
           ) : (
-            <p className="text-xs text-[var(--text-sub)]">-- Select Job --</p>
+            <p className="text-sm text-[var(--text-sub)]">-- Select Job --</p>
           )}
           <ChevronDown size={16} className="text-[var(--text-sub)]"/>
         </button>
@@ -341,9 +366,9 @@ export default function ProfitLock() {
                   <table className="w-full text-left text-sm">
                       <thead>
                           <tr className="border-b border-gray-300">
-                              <th className="py-1 text-[10px] font-black uppercase text-gray-600">Description</th>
-                              <th className="py-1 text-[10px] font-black uppercase text-gray-600 text-right">Qty</th>
-                              <th className="py-1 text-[10px] font-black uppercase text-gray-600 text-right">Total</th>
+                              <th className="py-1 text-xs font-black uppercase text-gray-600">Description</th>
+                              <th className="py-1 text-xs font-black uppercase text-gray-600 text-right">Qty</th>
+                              <th className="py-1 text-xs font-black uppercase text-gray-600 text-right">Total</th>
                           </tr>
                       </thead>
                       <tbody className="font-mono text-xs">
@@ -377,7 +402,7 @@ export default function ProfitLock() {
                             <tr className="border-b border-gray-100">
                               <td className="py-2 font-bold text-red-600">Discount</td>
                               <td></td>
-                              <td className="py-2 text-right text-red-600">-${parseFloat(discountAmount).toFixed(2)}</td>
+                              <td className="py-2 text-right text-red-600">-${(discountType === "DOLLAR" ? parseFloat(discountAmount) : (subtotal * parseFloat(discountAmount) / 100)).toFixed(2)}</td>
                             </tr>
                           )}
                       </tbody>
@@ -386,8 +411,8 @@ export default function ProfitLock() {
 
               <div className="bg-black text-white p-4 rounded-lg flex justify-between items-end mt-4 shrink-0">
                   <div>
-                      <p className="text-[8px] font-black text-gray-300 uppercase">Amount Due</p>
-                      <p className="text-[10px] text-gray-300 mt-1">{paymentTerms === "DUE_ON_RECEIPT" && "Due on receipt"}</p>
+                      <p className="text-xs font-black text-gray-300 uppercase">Amount Due</p>
+                      <p className="text-xs text-gray-300 mt-1">{paymentTerms === "DUE_ON_RECEIPT" && "Due on receipt"}</p>
                   </div>
                   <p className="text-4xl font-oswald font-bold text-[#FF6700]">${total.toFixed(2)}</p>
               </div>
@@ -400,14 +425,14 @@ export default function ProfitLock() {
             
             <div className="flex gap-2">
               <button 
-                onClick={() => setMode("SIMPLE")}
-                className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}
+                onClick={() => handleModeChange("SIMPLE")}
+                className={`flex-1 py-2 text-sm font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}
               >
                 Simple
               </button>
               <button 
-                onClick={() => setMode("ADVANCED")}
-                className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}
+                onClick={() => handleModeChange("ADVANCED")}
+                className={`flex-1 py-2 text-sm font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}
               >
                 Advanced
               </button>
@@ -416,7 +441,7 @@ export default function ProfitLock() {
             {mode === "SIMPLE" ? (
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase"><Box size={10} className="inline mr-1"/>Materials</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase"><Box size={10} className="inline mr-1"/>Materials</label>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)] font-bold">$</span>
                             <input 
@@ -431,7 +456,7 @@ export default function ProfitLock() {
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase"><Clock size={10} className="inline mr-1"/>Labor (Hrs)</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase"><Clock size={10} className="inline mr-1"/>Labor (Hrs)</label>
                         <input 
                           type="number" 
                           inputMode="decimal"
@@ -483,10 +508,10 @@ export default function ProfitLock() {
                             </div>
                         </div>
                     ))}
-                    <button onClick={addLineItem} className="w-full py-2 border border-dashed border-[var(--border-color)] text-[var(--text-sub)] rounded text-[10px] font-bold hover:text-[#FF6700] hover:border-[#FF6700] transition uppercase">+ Add</button>
+                    <button onClick={addLineItem} className="w-full py-2 border border-dashed border-[var(--border-color)] text-[var(--text-sub)] rounded text-xs font-bold hover:text-[#FF6700] hover:border-[#FF6700] transition uppercase">+ Add</button>
                     
                     {!showDiscount && (
-                      <button onClick={() => setShowDiscount(true)} className="w-full py-2 border border-dashed border-[var(--border-color)] text-[var(--text-sub)] rounded text-[10px] font-bold hover:text-red-500 hover:border-red-500 transition uppercase">- Discount ($)</button>
+                      <button onClick={() => setShowDiscount(true)} className="w-full py-2 border border-dashed border-[var(--border-color)] text-[var(--text-sub)] rounded text-xs font-bold hover:text-red-500 hover:border-red-500 transition uppercase">- Discount</button>
                     )}
 
                     {showDiscount && (
@@ -494,10 +519,23 @@ export default function ProfitLock() {
                         <div className="col-span-5">
                           <p className="text-xs font-bold text-red-500">Discount</p>
                         </div>
-                        <div className="col-span-2"></div>
+                        <div className="col-span-2 flex gap-1">
+                          <button 
+                            onClick={() => setDiscountType("DOLLAR")}
+                            className={`flex-1 py-1 rounded text-[10px] font-bold transition ${discountType === "DOLLAR" ? "bg-red-500 text-black" : "bg-black/20 text-red-500"}`}
+                          >
+                            $
+                          </button>
+                          <button 
+                            onClick={() => setDiscountType("PERCENT")}
+                            className={`flex-1 py-1 rounded text-[10px] font-bold transition ${discountType === "PERCENT" ? "bg-red-500 text-black" : "bg-black/20 text-red-500"}`}
+                          >
+                            %
+                          </button>
+                        </div>
                         <div className="col-span-3">
                           <input 
-                            placeholder="$0" 
+                            placeholder="0" 
                             type="number" 
                             inputMode="decimal"
                             value={discountAmount} 
@@ -515,7 +553,7 @@ export default function ProfitLock() {
             )}
 
             <div className="bg-[var(--bg-surface)] rounded-lg p-6 border border-[var(--border-color)] text-center">
-                <p className="text-[8px] text-[var(--text-sub)] uppercase tracking-wider font-bold mb-1">Quoted Price</p>
+                <p className="text-xs text-[var(--text-sub)] uppercase tracking-wider font-black mb-1">Quoted Price</p>
                 <p className="text-5xl font-oswald font-bold text-[var(--text-main)] tracking-tight">${price.toFixed(0)}</p>
             </div>
 
@@ -538,7 +576,7 @@ export default function ProfitLock() {
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={() => setShowJobSelect(false)} />
           <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[51] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl max-h-[75vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-[var(--border-color)] flex justify-between items-center">
-              <h2 className="font-oswald text-lg text-[#FF6700]">Select Job</h2>
+              <h2 className="font-oswald text-lg font-bold text-[#FF6700]">SELECT JOB</h2>
               <button onClick={() => setShowJobSelect(false)}><X size={18}/></button>
             </div>
             
@@ -567,9 +605,9 @@ export default function ProfitLock() {
                 <button
                   key={job.id}
                   onClick={() => { setActiveJob(job); setShowJobSelect(false); }}
-                  className={`w-full text-left p-2 rounded border text-xs transition ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700]" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}
+                  className={`w-full text-left p-2 rounded border text-xs transition font-bold ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700]" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}
                 >
-                  <p className="font-bold">{job.title}</p>
+                  <p>{job.title}</p>
                 </button>
               ))}
             </div>
@@ -582,7 +620,7 @@ export default function ProfitLock() {
         <>
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateJob(false)} />
           <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[51] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl p-4">
-            <h2 className="font-oswald text-lg text-[#FF6700] mb-3">Create Job</h2>
+            <h2 className="font-oswald text-lg font-bold text-[#FF6700] mb-3">CREATE JOB</h2>
             <input 
               autoFocus
               placeholder="Job title..." 
@@ -609,7 +647,7 @@ export default function ProfitLock() {
             <div className="w-80 max-w-[85vw] bg-[var(--bg-card)] border-l border-[var(--border-color)] h-full shadow-2xl p-4 flex flex-col overflow-y-auto z-50 pointer-events-auto relative">
                 
                 <div className="flex justify-between items-center mb-4 sticky top-0 bg-[var(--bg-card)] pb-2 z-10">
-                    <h2 className="font-oswald text-lg font-bold text-[#FF6700] uppercase">Settings</h2>
+                    <h2 className="font-oswald text-base font-bold text-[#FF6700] uppercase">SETTINGS</h2>
                     <button onClick={() => setShowMenu(false)} className="p-1 hover:bg-[var(--bg-surface)] rounded"><X size={18}/></button>
                 </div>
 
@@ -619,7 +657,7 @@ export default function ProfitLock() {
                     <button 
                       key={tab}
                       onClick={() => setMenuTab(tab)}
-                      className={`py-2 rounded text-[9px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
+                      className={`py-2 rounded text-xs font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
                     >
                       {tab}
                     </button>
@@ -629,7 +667,7 @@ export default function ProfitLock() {
                 {/* PROFIT TAB */}
                 {menuTab === "PROFIT" && (
                   <div className="space-y-4">
-                    <div className={`p-3 rounded border ${isBelowTarget && profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
+                    <div className={`p-3 rounded bg-[var(--bg-surface)] border border-[var(--border-color)]`}>
                         <div className="flex justify-between items-center mb-2">
                             <p className="text-xs font-black text-[var(--text-sub)] uppercase">Profit {profitLocked && <Lock size={10} className="text-green-500 inline ml-1"/>}</p>
                             <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="p-1 hover:bg-black/20 rounded">
@@ -639,11 +677,11 @@ export default function ProfitLock() {
                         
                         {showProfitDetails ? (
                             <div>
-                                <p className={`text-2xl font-oswald font-bold ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
-                                <p className="text-[10px] text-[var(--text-sub)] mt-1">Margin: {margin.toFixed(1)}%</p>
-                                {isBelowTarget && profitLocked && <p className="text-[10px] text-green-500 font-bold mt-1">✓ ProfitLock protecting</p>}
+                                <p className={`text-xl font-oswald font-bold ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
+                                <p className="text-xs text-[var(--text-sub)] mt-1">Margin: {margin.toFixed(1)}%</p>
+                                {isBelowTarget && profitLocked && <p className="text-xs text-green-500 font-bold mt-1">✓ ProfitLock protecting</p>}
                                 {showCalcInfo && (
-                                  <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded text-[9px] text-blue-300 space-y-1">
+                                  <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded text-xs text-blue-300 space-y-1">
                                     <p className="font-bold">Markup:</p>
                                     <p>Cost × (1 + %) = Price</p>
                                     <p>$100 × 1.50 = $150</p>
@@ -659,28 +697,11 @@ export default function ProfitLock() {
                     </div>
 
                     <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-2 block">Method</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-2 block">Discount Type</label>
                         <div className="flex gap-2">
-                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700]"}`}>Markup</button>
-                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700]"}`}>Margin</button>
+                            <button onClick={() => setDiscountType("DOLLAR")} className={`flex-1 py-2 text-xs font-bold rounded transition ${discountType === "DOLLAR" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>Dollar ($)</button>
+                            <button onClick={() => setDiscountType("PERCENT")} className={`flex-1 py-2 text-xs font-bold rounded transition ${discountType === "PERCENT" ? "bg-[#FF6700] text-black" : "bg-[var(--bg-surface)] border border-[var(--border-color)]"}`}>Percent (%)</button>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 flex items-center gap-1">
-                          Target {profitMethod === "MARKUP" ? "Markup" : "Margin"} %
-                          <button onClick={() => setShowCalcInfo(!showCalcInfo)} className="hover:text-[#FF6700] p-0.5">
-                            <Info size={12}/>
-                          </button>
-                        </label>
-                        <input 
-                          type="number" 
-                          inputMode="decimal"
-                          value={targetValue} 
-                          onChange={e => setTargetValue(parseFloat(e.target.value) || 0)} 
-                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
-                          style={{ fontSize: '16px' }}
-                        />
                     </div>
 
                     <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full p-2 rounded border text-xs font-bold transition ${profitLocked ? "bg-green-900/20 border-green-500/50 text-green-500 hover:bg-green-900/30" : "bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[#FF6700]"}`}>
@@ -693,7 +714,7 @@ export default function ProfitLock() {
                 {menuTab === "CONFIG" && (
                   <div className="space-y-4">
                     <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 block">Hourly Rate</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Hourly Rate</label>
                         <div className="relative">
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-sub)]">$</span>
                             <input 
@@ -701,14 +722,14 @@ export default function ProfitLock() {
                               inputMode="decimal"
                               value={hourlyRate} 
                               onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 pl-6 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 pl-6 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
                               style={{ fontSize: '16px' }}
                             />
                         </div>
                     </div>
 
                     <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-2 block">Tax</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-2 block">Tax</label>
                         <div className="flex items-center justify-between p-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded mb-2">
                           <span className="text-xs font-bold">Include</span>
                           <button 
@@ -720,13 +741,13 @@ export default function ProfitLock() {
                         </div>
                         {includeTax && (
                           <div>
-                            <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 block">Rate %</label>
+                            <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Rate %</label>
                             <input 
                               type="number" 
                               inputMode="decimal"
                               value={taxRate} 
                               onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
                               style={{ fontSize: '16px' }}
                             />
                           </div>
@@ -734,7 +755,7 @@ export default function ProfitLock() {
                     </div>
 
                     <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 block">Payment Terms</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Payment Terms</label>
                         <select 
                           value={paymentTerms}
                           onChange={(e) => setPaymentTerms(e.target.value)}
@@ -749,14 +770,14 @@ export default function ProfitLock() {
                     </div>
 
                     <div>
-                        <label className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-1 block">Quote Valid For</label>
+                        <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Quote Valid For</label>
                         <div className="flex items-center gap-2">
                           <input 
                             type="number" 
                             inputMode="numeric"
                             value={quoteValidDays} 
                             onChange={e => setQuoteValidDays(parseInt(e.target.value) || 30)} 
-                            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
                             style={{ fontSize: '16px' }}
                           />
                           <span className="text-xs text-[var(--text-sub)]">days</span>
@@ -768,18 +789,18 @@ export default function ProfitLock() {
                 {/* HISTORY TAB */}
                 {menuTab === "HISTORY" && (
                   <div className="space-y-2">
-                    <p className="text-[8px] font-black text-[var(--text-sub)] uppercase mb-2">Recent ({estimateHistory.length})</p>
+                    <p className="text-xs font-black text-[var(--text-sub)] uppercase mb-2">Recent ({estimateHistory.length})</p>
                     {estimateHistory.slice(0,8).map(est => (
                         <button 
                           key={est.id} 
-                          onClick={() => { loadEstimate(est.id); setShowMenu(false); }}
-                          className="w-full text-left p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700] transition text-[9px]"
+                          onClick={() => { loadEstimate(est.id); }}
+                          className="w-full text-left p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700] transition text-xs"
                         >
                             <p className="font-bold text-[var(--text-main)]">{est.jobs?.title}</p>
                             <p className="text-[var(--text-sub)]">${est.total_price?.toFixed(0)}</p>
                         </button>
                     ))}
-                    {estimateHistory.length === 0 && <p className="text-[9px] text-[var(--text-sub)] text-center py-4">No estimates yet</p>}
+                    {estimateHistory.length === 0 && <p className="text-xs text-[var(--text-sub)] text-center py-4">No estimates yet</p>}
                   </div>
                 )}
 
@@ -788,7 +809,7 @@ export default function ProfitLock() {
       )}
 
       {/* FOOTER - Centered Fielddeskops */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-[8px] font-bold text-[#FF6700] uppercase tracking-widest pointer-events-none">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-xs font-bold text-[#FF6700] uppercase tracking-widest pointer-events-none">
         fielddeskops
       </div>
 
