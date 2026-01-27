@@ -9,7 +9,7 @@ import {
   FilePlus, Play, RefreshCw, Trash2, CheckCircle2,
   Sun, Moon, Eye, EyeOff, Menu, LogOut, AlertTriangle,
   Users, Truck, UserCircle, Phone, Mail, MapPin, FileText,
-  Edit2, Check, Search, ChevronDown
+  Edit2, Check, Search, ChevronDown, Briefcase
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,11 +19,11 @@ export default function Dashboard() {
   const router = useRouter();
 
   // --- THE BRAIN ---
-  const { jobs, loading: brainLoading } = useLiveBrain();
+  const { jobs: liveJobs, loading: brainLoading, refresh: refreshBrain } = useLiveBrain();
   const { activeJob, setActiveJob } = useActiveJob();
   const [quickJobName, setQuickJobName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [privacyMode, setPrivacyMode] = useState(true); // Default hidden
+  const [privacyMode, setPrivacyMode] = useState(true);
   const [showJobDropdown, setShowJobDropdown] = useState(false);
   const inputRef = useRef(null);
 
@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [workers, setWorkers] = useState([]);
   const [fleet, setFleet] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [expandedCustomer, setExpandedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
 
@@ -59,7 +60,6 @@ export default function Dashboard() {
     setTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
 
-    // Load privacy mode from localStorage
     const savedPrivacy = localStorage.getItem("privacyMode");
     if (savedPrivacy !== null) {
       setPrivacyMode(savedPrivacy === "true");
@@ -71,6 +71,14 @@ export default function Dashboard() {
     loadDashboardData();
   }, []);
 
+  // Sync liveJobs from brain hook to local state
+  useEffect(() => {
+    if (liveJobs) {
+      setJobs(liveJobs);
+      setMetrics(prev => ({ ...prev, jobs: liveJobs.filter(j => j.status === 'ACTIVE').length }));
+    }
+  }, [liveJobs]);
+
   // --- ACTIONS ---
   const handleCreateJob = async (e) => {
     e.preventDefault();
@@ -78,17 +86,19 @@ export default function Dashboard() {
     setIsCreating(true);
 
     const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from("jobs").insert({
+    const { data, error } = await supabase.from("jobs").insert({
       user_id: user.id,
       title: quickJobName,
       status: "ACTIVE"
     }).select().single();
 
-    if (data) {
+    if (data && !error) {
       setActiveJob(data);
       setQuickJobName("");
       setShowJobDropdown(false);
-      await loadDashboardData();
+      // Refresh jobs list immediately
+      await refreshBrain();
+      await loadJobs();
     }
     setIsCreating(false);
   };
@@ -102,62 +112,74 @@ export default function Dashboard() {
   const addJobFromMenu = async () => {
     if (!newJobTitle.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from("jobs").insert({
+    const { data, error } = await supabase.from("jobs").insert({
       user_id: user.id,
       title: newJobTitle,
       status: "ACTIVE"
     }).select().single();
     
-    if (data) {
+    if (data && !error) {
       setNewJobTitle("");
-      await loadDashboardData();
+      await refreshBrain();
+      await loadJobs();
     }
   };
 
   const updateJob = async (id, updates) => {
-    await supabase.from("jobs").update(updates).eq("id", id);
-    setEditingJob(null);
-    await loadDashboardData();
+    const { error } = await supabase.from("jobs").update(updates).eq("id", id);
+    if (!error) {
+      setEditingJob(null);
+      await refreshBrain();
+      await loadJobs();
+    }
   };
 
   const deleteJob = async (id) => {
     if (!confirm("Delete this job?")) return;
-    await supabase.from("jobs").delete().eq("id", id);
-    if (activeJob?.id === id) setActiveJob(null);
-    await loadDashboardData();
+    const { error } = await supabase.from("jobs").delete().eq("id", id);
+    if (!error) {
+      if (activeJob?.id === id) setActiveJob(null);
+      await refreshBrain();
+      await loadJobs();
+    }
   };
 
   const addWorker = async () => {
     if (!newWorker.name.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("crew").insert({
+    const { data, error } = await supabase.from("crew").insert({
       user_id: user.id,
       name: newWorker.name,
       role: newWorker.role || "Tech"
-    });
+    }).select().single();
     
-    if (!error) {
+    if (data && !error) {
       setNewWorker({ name: "", role: "" });
       await loadResources();
+    } else {
+      console.error("Worker insert error:", error);
+      alert("Failed to add worker: " + (error?.message || "Unknown error"));
     }
   };
 
   const addRig = async () => {
     if (!newRig.name.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("fleet").insert({
+    const { error } = await supabase.from("fleet").insert({
       user_id: user.id,
       name: newRig.name,
       plate_number: newRig.plate || ""
     });
-    setNewRig({ name: "", plate: "" });
-    await loadResources();
+    if (!error) {
+      setNewRig({ name: "", plate: "" });
+      await loadResources();
+    }
   };
 
   const addCustomer = async () => {
     if (!newCustomer.name.trim()) return;
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("customers").insert({
+    const { error } = await supabase.from("customers").insert({
       user_id: user.id,
       name: newCustomer.name,
       phone: newCustomer.phone,
@@ -165,8 +187,10 @@ export default function Dashboard() {
       address: newCustomer.address,
       notes: newCustomer.notes
     });
-    setNewCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
-    await loadResources();
+    if (!error) {
+      setNewCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
+      await loadResources();
+    }
   };
 
   const deleteWorker = async (id) => {
@@ -205,6 +229,14 @@ export default function Dashboard() {
     document.documentElement.setAttribute("data-theme", newTheme);
   };
 
+  const loadJobs = async () => {
+    const { data } = await supabase.from("jobs").select("*").order("created_at", { ascending: false });
+    if (data) {
+      setJobs(data);
+      setMetrics(prev => ({ ...prev, jobs: data.filter(j => j.status === 'ACTIVE').length }));
+    }
+  };
+
   const loadDashboardData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.replace("/auth/login"); return; }
@@ -224,8 +256,9 @@ export default function Dashboard() {
     })) || [];
     
     setAlertList(stockAlerts);
-    setMetrics({ revenue, jobs: bids ? bids.length : 0, alerts: stockAlerts.length });
+    setMetrics(prev => ({ ...prev, revenue, alerts: stockAlerts.length }));
     
+    await loadJobs();
     await loadResources();
     setLoading(false);
   };
@@ -261,20 +294,18 @@ export default function Dashboard() {
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.replace("/auth/login"); };
 
-  // Filter customers by search
   const filteredCustomers = customers.filter(c => 
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.phone?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.address?.toLowerCase().includes(customerSearch.toLowerCase())
   );
 
-  // Get last 5 jobs for dropdown
   const recentJobs = jobs ? jobs.slice(0, 5) : [];
 
   if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40}/></div>;
 
   return (
-    <div className="h-screen w-full bg-[#121212] text-white font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black">
+    <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
       
       {/* HEADER */}
       <header className="px-6 pt-4 pb-3 shrink-0">
@@ -283,12 +314,11 @@ export default function Dashboard() {
                 <p className="text-[#FF6700] font-bold text-[9px] tracking-[0.25em] uppercase mb-2">FIELDDESKOPS</p>
                 <h1 className="text-4xl font-oswald font-bold tracking-tight leading-none mb-0.5">
                   <span className="text-[#FF6700] drop-shadow-[0_0_12px_rgba(255,103,0,0.5)]">COMMAND</span>
-                  <span className="text-white">CENTER</span>
+                  <span className="text-[var(--text-main)]">CENTER</span>
                 </h1>
-                <p className="text-[9px] text-gray-600 font-medium tracking-wider uppercase">{greeting}</p>
+                <p className="text-[9px] text-[var(--text-sub)] font-medium tracking-wider uppercase opacity-60">{greeting}</p>
             </div>
             
-            {/* HAMBURGER BUTTON */}
             <button 
               onClick={() => setShowHamburger(true)} 
               className="p-3 rounded-xl bg-[#FF6700] text-black shadow-[0_0_15px_rgba(255,103,0,0.4)] hover:shadow-[0_0_20px_rgba(255,103,0,0.5)] active:scale-95 transition-all"
@@ -297,7 +327,7 @@ export default function Dashboard() {
             </button>
         </div>
 
-        {/* QUICK JOB INPUT WITH DROPDOWN */}
+        {/* QUICK JOB INPUT */}
         <div className="relative mb-3">
           <form onSubmit={handleCreateJob} className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF6700]">
@@ -310,29 +340,28 @@ export default function Dashboard() {
                   value={quickJobName}
                   onChange={(e) => setQuickJobName(e.target.value)}
                   onFocus={() => setShowJobDropdown(true)}
-                  className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl py-3 pl-12 pr-12 text-base text-white placeholder:text-gray-600 focus:outline-none focus:border-[#FF6700] focus:shadow-[0_0_15px_rgba(255,103,0,0.2)] transition-all"
+                  className="w-full bg-[var(--bg-card)] backdrop-blur-xl border border-[var(--border-color)] rounded-xl py-3 pl-12 pr-12 text-base text-[var(--text-main)] placeholder:text-[var(--text-sub)] focus:outline-none focus:border-[#FF6700] focus:shadow-[0_0_15px_rgba(255,103,0,0.2)] transition-all"
               />
               <button 
                 type="button"
                 onClick={() => setShowJobDropdown(!showJobDropdown)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#FF6700]"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-sub)] hover:text-[#FF6700]"
               >
                 <ChevronDown size={18} />
               </button>
           </form>
 
-          {/* DROPDOWN */}
           {showJobDropdown && recentJobs.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-              <div className="p-2 border-b border-white/10 text-xs text-gray-500 uppercase tracking-wider px-3">Recent Jobs</div>
+            <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3">Recent Jobs</div>
               {recentJobs.map(job => (
                 <button
                   key={job.id}
                   onClick={() => selectExistingJob(job)}
-                  className="w-full text-left px-3 py-2 hover:bg-white/5 transition flex justify-between items-center group"
+                  className="w-full text-left px-3 py-2 hover:bg-[var(--bg-surface)] transition flex justify-between items-center group"
                 >
-                  <span className="text-sm text-white group-hover:text-[#FF6700]">{job.title}</span>
-                  <span className="text-xs text-gray-600">{new Date(job.created_at).toLocaleDateString()}</span>
+                  <span className="text-sm text-[var(--text-main)] group-hover:text-[#FF6700]">{job.title}</span>
+                  <span className="text-xs text-[var(--text-sub)]">{new Date(job.created_at).toLocaleDateString()}</span>
                 </button>
               ))}
             </div>
@@ -341,17 +370,47 @@ export default function Dashboard() {
 
         {/* ACTIVE JOB INDICATOR */}
         {activeJob && (
-           <div className="flex items-center justify-between bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-lg p-3 shadow-[0_0_10px_rgba(255,103,0,0.15)]">
+           <div className="flex items-center justify-between bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-lg p-3 mb-3 shadow-[0_0_10px_rgba(255,103,0,0.15)]">
               <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-[#FF6700] shadow-[0_0_8px_#FF6700] animate-pulse"></div>
                   <div>
                       <p className="text-[10px] text-[#FF6700] font-bold uppercase tracking-wider">ACTIVE MISSION</p>
-                      <p className="font-oswald text-sm text-white tracking-wide">{activeJob.title}</p>
+                      <p className="font-oswald text-sm text-[var(--text-main)] tracking-wide">{activeJob.title}</p>
                   </div>
               </div>
               <button onClick={() => setActiveJob(null)} className="p-2 hover:bg-[#FF6700]/20 rounded text-[#FF6700]"><X size={14}/></button>
            </div>
         )}
+
+        {/* METRICS BAR */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center relative group">
+                <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Revenue</p>
+                <p className="text-[#22c55e] font-oswald text-lg tracking-tight">{formatCurrency(metrics.revenue)}</p>
+                <button 
+                  onClick={togglePrivacyMode}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded"
+                  title={privacyMode ? "Show" : "Hide"}
+                >
+                  {privacyMode ? <EyeOff size={12} className="text-[#FF6700]"/> : <Eye size={12} className="text-[var(--text-sub)]"/>}
+                </button>
+            </div>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center">
+                <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Active Jobs</p>
+                <p className="font-oswald text-lg tracking-tight text-[var(--text-main)]">{metrics.jobs}</p>
+            </div>
+            <button 
+              onClick={() => setShowHamburger(true)} 
+              className={`bg-[var(--bg-card)] border rounded-lg p-3 text-center transition active:scale-95 relative ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : "border-[var(--border-color)]"}`}
+            >
+                {metrics.alerts > 0 && <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500 animate-pulse"></span>}
+                <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">System</p>
+                <div className="flex items-center justify-center gap-1">
+                    {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500"/>}
+                    <p className={`font-oswald text-lg tracking-tight ${metrics.alerts > 0 ? "text-red-500" : "text-[var(--text-main)]"}`}>{metrics.alerts > 0 ? metrics.alerts : "OK"}</p>
+                </div>
+            </button>
+        </div>
       </header>
 
       {/* MAIN CONTENT - APPS GRID */}
@@ -367,7 +426,7 @@ export default function Dashboard() {
       {/* FOOTER BRANDING */}
       <div className="pb-4 text-center shrink-0">
         <p className="text-[9px] font-bold uppercase tracking-widest">
-          <span className="text-gray-600">POWERED BY </span>
+          <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
           <span className="text-[#FF6700]">FIELDDESKOPS</span>
         </p>
       </div>
@@ -377,18 +436,18 @@ export default function Dashboard() {
         {showSpeedDial && (
             <div className="flex flex-col items-end gap-3 animate-in slide-in-from-bottom-10 fade-in duration-200">
                 <Link href="/apps/profitlock" className="flex items-center gap-3" onClick={() => setShowSpeedDial(false)}>
-                    <span className="bg-white/10 backdrop-blur-xl text-white text-xs px-3 py-1.5 rounded-lg shadow-lg border border-white/20">New Bid</span>
-                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-green-500 flex items-center justify-center shadow-[0_0_15px_rgba(34,197,94,0.25)]"><FilePlus size={20}/></div>
+                    <span className="bg-[var(--bg-card)] backdrop-blur-xl text-[var(--text-main)] text-xs px-3 py-1.5 rounded-lg shadow-lg border border-[var(--border-color)]">New Bid</span>
+                    <div className="w-12 h-12 rounded-full bg-[var(--bg-card)] backdrop-blur-xl border border-[var(--border-color)] text-green-500 flex items-center justify-center shadow-[0_0_15px_rgba(34,197,94,0.25)]"><FilePlus size={20}/></div>
                 </Link>
                 <Link href="/apps/loadout" className="flex items-center gap-3" onClick={() => setShowSpeedDial(false)}>
-                    <span className="bg-white/10 backdrop-blur-xl text-white text-xs px-3 py-1.5 rounded-lg shadow-lg border border-white/20">Add Item</span>
-                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-blue-400 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.25)]"><Package size={20}/></div>
+                    <span className="bg-[var(--bg-card)] backdrop-blur-xl text-[var(--text-main)] text-xs px-3 py-1.5 rounded-lg shadow-lg border border-[var(--border-color)]">Add Item</span>
+                    <div className="w-12 h-12 rounded-full bg-[var(--bg-card)] backdrop-blur-xl border border-[var(--border-color)] text-blue-400 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.25)]"><Package size={20}/></div>
                 </Link>
             </div>
         )}
         <button 
             onClick={() => setShowSpeedDial(!showSpeedDial)}
-            className={`w-16 h-16 rounded-full flex items-center justify-center shadow-[0_0_25px_rgba(255,103,0,0.4)] transition-all duration-300 ${showSpeedDial ? "bg-white/10 backdrop-blur-xl text-white rotate-45 border border-white/20" : "bg-[#FF6700] text-black hover:scale-110"}`}
+            className={`w-16 h-16 rounded-full flex items-center justify-center shadow-[0_0_25px_rgba(255,103,0,0.4)] transition-all duration-300 ${showSpeedDial ? "bg-[var(--bg-card)] backdrop-blur-xl text-[var(--text-main)] rotate-45 border border-[var(--border-color)]" : "bg-[#FF6700] text-black hover:scale-110"}`}
         >
             <Plus size={36} strokeWidth={2.5} />
         </button>
@@ -398,43 +457,39 @@ export default function Dashboard() {
       {showHamburger && (
         <>
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={() => setShowHamburger(false)} />
-          <div className="fixed right-0 top-0 bottom-0 w-96 max-w-[90vw] z-50 bg-[#1a1a1a] border-l border-white/10 shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
+          <div className="fixed right-0 top-0 bottom-0 w-96 max-w-[90vw] z-50 bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
             
-            {/* Header */}
-            <div className="sticky top-0 bg-[#1a1a1a] border-b border-white/10 p-5 flex justify-between items-center backdrop-blur-xl z-10">
+            <div className="sticky top-0 bg-[var(--bg-card)] border-b border-[var(--border-color)] p-5 flex justify-between items-center backdrop-blur-xl z-10">
               <h2 className="font-oswald text-xl text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">COMMAND MENU</h2>
-              <button onClick={() => setShowHamburger(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 transition">
+              <button onClick={() => setShowHamburger(false)} className="p-2 hover:bg-white/10 rounded-lg text-[var(--text-sub)] transition">
                 <X size={20}/>
               </button>
             </div>
 
-            {/* Content */}
             <div className="p-5 space-y-6">
               
-              {/* TABS */}
               <div className="grid grid-cols-4 gap-1 bg-black/40 p-1 rounded-lg">
                 {["JOBS", "WORKERS", "FLEET", "CUSTOMERS"].map(tab => (
                   <button 
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`py-2 px-1 rounded text-[10px] font-bold transition ${activeTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-gray-400 hover:text-white"}`}
+                    className={`py-2 px-1 rounded text-[10px] font-bold transition ${activeTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
                   >
                     {tab}
                   </button>
                 ))}
               </div>
 
-              {/* JOBS TAB */}
               {activeTab === "JOBS" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Create Job</label>
+                    <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Create Job</label>
                     <div className="flex gap-2">
                       <input 
                         placeholder="Job Title..." 
                         value={newJobTitle}
                         onChange={(e) => setNewJobTitle(e.target.value)}
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <button onClick={addJobFromMenu} className="bg-[#FF6700] text-black px-4 rounded-lg font-bold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition">
                         <Plus size={18}/>
@@ -443,19 +498,19 @@ export default function Dashboard() {
                   </div>
 
                   <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">All Jobs</h3>
+                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">All Jobs ({jobs.length})</h3>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                       {jobs && jobs.map(job => (
                         <div 
                           key={job.id} 
-                          className={`p-3 rounded-lg border transition-all ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700] shadow-[0_0_10px_rgba(255,103,0,0.15)]" : "bg-white/5 border-white/10"}`}
+                          className={`p-3 rounded-lg border transition-all ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700] shadow-[0_0_10px_rgba(255,103,0,0.15)]" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}
                         >
                           {editingJob?.id === job.id ? (
                             <div className="space-y-2">
                               <input 
                                 value={editingJob.title}
                                 onChange={(e) => setEditingJob({...editingJob, title: e.target.value})}
-                                className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white"
+                                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
                               />
                               <div className="flex gap-2">
                                 <button onClick={() => updateJob(job.id, { title: editingJob.title })} className="flex-1 bg-green-600 text-white py-1 rounded text-xs font-bold">
@@ -468,21 +523,22 @@ export default function Dashboard() {
                             </div>
                           ) : (
                             <div className="flex justify-between items-center">
-                              <div className="flex-1" onClick={() => { setActiveJob(job); setShowHamburger(false); }}>
-                                <p className={`font-oswald text-sm cursor-pointer ${activeJob?.id === job.id ? "text-[#FF6700]" : "text-white"}`}>{job.title}</p>
-                                <p className="text-[10px] text-gray-500">{job.status} • {new Date(job.created_at).toLocaleDateString()}</p>
+                              <div className="flex-1 cursor-pointer" onClick={() => { setActiveJob(job); setShowHamburger(false); }}>
+                                <p className={`font-oswald text-sm ${activeJob?.id === job.id ? "text-[#FF6700]" : "text-[var(--text-main)]"}`}>{job.title}</p>
+                                <p className="text-[10px] text-[var(--text-sub)]">{job.status} • {new Date(job.created_at).toLocaleDateString()}</p>
                               </div>
                               <div className="flex gap-1">
-                                <button onClick={() => setEditingJob(job)} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white">
+                                <button onClick={() => setEditingJob(job)} className="p-1.5 hover:bg-white/10 rounded text-[var(--text-sub)] hover:text-[var(--text-main)]">
                                   <Edit2 size={14}/>
                                 </button>
                                 <button 
                                   onClick={() => updateJob(job.id, { status: job.status === "ACTIVE" ? "COMPLETED" : "ACTIVE" })} 
-                                  className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-green-500"
+                                  className={`p-1.5 hover:bg-white/10 rounded ${job.status === "COMPLETED" ? "text-green-500" : "text-[var(--text-sub)]"} hover:text-green-500`}
+                                  title={job.status === "ACTIVE" ? "Mark Complete" : "Reopen"}
                                 >
                                   <CheckCircle2 size={14}/>
                                 </button>
-                                <button onClick={() => deleteJob(job.id)} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-red-500">
+                                <button onClick={() => deleteJob(job.id)} className="p-1.5 hover:bg-white/10 rounded text-[var(--text-sub)] hover:text-red-500">
                                   <Trash2 size={14}/>
                                 </button>
                               </div>
@@ -495,23 +551,22 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* WORKERS TAB */}
               {activeTab === "WORKERS" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Add Worker</label>
+                    <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Worker</label>
                     <div className="space-y-2">
                       <input 
                         placeholder="Name..." 
                         value={newWorker.name}
                         onChange={(e) => setNewWorker({...newWorker, name: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <input 
                         placeholder="Role (Optional)..." 
                         value={newWorker.role}
                         onChange={(e) => setNewWorker({...newWorker, role: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <button onClick={addWorker} className="w-full bg-[#FF6700] text-black py-2 rounded-lg font-bold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition">
                         Add Worker
@@ -520,18 +575,18 @@ export default function Dashboard() {
                   </div>
 
                   <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Team ({workers.length})</h3>
+                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">Team ({workers.length})</h3>
                     <div className="space-y-2">
                       {workers.map(worker => (
-                        <div key={worker.id} className="bg-white/5 border border-white/10 p-3 rounded-lg flex justify-between items-center">
+                        <div key={worker.id} className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-3 rounded-lg flex justify-between items-center">
                           <div className="flex items-center gap-3">
                             <Users size={16} className="text-[#FF6700]"/>
                             <div>
-                              <p className="font-bold text-sm text-white">{worker.name}</p>
-                              <p className="text-xs text-gray-500">{worker.role || "Tech"}</p>
+                              <p className="font-bold text-sm text-[var(--text-main)]">{worker.name}</p>
+                              <p className="text-xs text-[var(--text-sub)]">{worker.role || "Tech"}</p>
                             </div>
                           </div>
-                          <button onClick={() => deleteWorker(worker.id)} className="text-gray-500 hover:text-red-500">
+                          <button onClick={() => deleteWorker(worker.id)} className="text-[var(--text-sub)] hover:text-red-500">
                             <Trash2 size={14}/>
                           </button>
                         </div>
@@ -541,23 +596,22 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* FLEET TAB */}
               {activeTab === "FLEET" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Add Rig</label>
+                    <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Rig</label>
                     <div className="space-y-2">
                       <input 
                         placeholder="Rig Name..." 
                         value={newRig.name}
                         onChange={(e) => setNewRig({...newRig, name: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <input 
                         placeholder="Plate # (Optional)..." 
                         value={newRig.plate}
                         onChange={(e) => setNewRig({...newRig, plate: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <button onClick={addRig} className="w-full bg-[#FF6700] text-black py-2 rounded-lg font-bold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition">
                         Add Rig
@@ -566,18 +620,18 @@ export default function Dashboard() {
                   </div>
 
                   <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Fleet ({fleet.length})</h3>
+                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">Fleet ({fleet.length})</h3>
                     <div className="space-y-2">
                       {fleet.map(rig => (
-                        <div key={rig.id} className="bg-white/5 border border-white/10 p-3 rounded-lg flex justify-between items-center">
+                        <div key={rig.id} className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-3 rounded-lg flex justify-between items-center">
                           <div className="flex items-center gap-3">
                             <Truck size={16} className="text-[#FF6700]"/>
                             <div>
-                              <p className="font-bold text-sm text-white">{rig.name}</p>
-                              <p className="text-xs text-gray-500">{rig.plate_number || "No Plate"}</p>
+                              <p className="font-bold text-sm text-[var(--text-main)]">{rig.name}</p>
+                              <p className="text-xs text-[var(--text-sub)]">{rig.plate_number || "No Plate"}</p>
                             </div>
                           </div>
-                          <button onClick={() => deleteRig(rig.id)} className="text-gray-500 hover:text-red-500">
+                          <button onClick={() => deleteRig(rig.id)} className="text-[var(--text-sub)] hover:text-red-500">
                             <Trash2 size={14}/>
                           </button>
                         </div>
@@ -587,42 +641,44 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* CUSTOMERS TAB */}
               {activeTab === "CUSTOMERS" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Add Customer</label>
+                    <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Customer</label>
                     <div className="space-y-2">
                       <input 
                         placeholder="Name..." 
                         value={newCustomer.name}
                         onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <input 
+                        type="tel"
+                        inputMode="numeric"
                         placeholder="Phone..." 
                         value={newCustomer.phone}
-                        onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value.replace(/[^0-9]/g, '')})}
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <input 
+                        type="email"
                         placeholder="Email..." 
                         value={newCustomer.email}
                         onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <input 
                         placeholder="Address..." 
                         value={newCustomer.address}
                         onChange={(e) => setNewCustomer({...newCustomer, address: e.target.value})}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                       <textarea 
                         placeholder="Notes..." 
                         value={newCustomer.notes}
                         onChange={(e) => setNewCustomer({...newCustomer, notes: e.target.value})}
                         rows={3}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none resize-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none resize-none"
                       />
                       <button onClick={addCustomer} className="w-full bg-[#FF6700] text-black py-2 rounded-lg font-bold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition">
                         Add Customer
@@ -631,43 +687,40 @@ export default function Dashboard() {
                   </div>
 
                   <div>
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Customers ({customers.length})</h3>
+                    <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">Customers ({customers.length})</h3>
                     
-                    {/* Search */}
                     <div className="relative mb-3">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16}/>
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)]" size={16}/>
                       <input 
                         placeholder="Search by name, phone, address..." 
                         value={customerSearch}
                         onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-[#FF6700] outline-none"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg pl-10 pr-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       />
                     </div>
 
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                       {filteredCustomers.map(customer => (
-                        <div key={customer.id} className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
-                          {/* Collapsed View */}
+                        <div key={customer.id} className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg overflow-hidden">
                           <button 
                             onClick={() => setExpandedCustomer(expandedCustomer === customer.id ? null : customer.id)}
-                            className="w-full p-3 flex justify-between items-center hover:bg-white/5 transition"
+                            className="w-full p-3 flex justify-between items-center hover:bg-[var(--bg-surface)] transition"
                           >
                             <div className="flex items-center gap-3 text-left">
                               <UserCircle size={16} className="text-[#FF6700] shrink-0"/>
                               <div>
-                                <p className="font-bold text-sm text-white">{customer.name}</p>
-                                <p className="text-xs text-gray-500">{customer.phone || "No Phone"}</p>
+                                <p className="font-bold text-sm text-[var(--text-main)]">{customer.name}</p>
+                                <p className="text-xs text-[var(--text-sub)]">{customer.phone || "No Phone"}</p>
                               </div>
                             </div>
-                            <ChevronDown size={16} className={`text-gray-500 transition-transform ${expandedCustomer === customer.id ? "rotate-180" : ""}`}/>
+                            <ChevronDown size={16} className={`text-[var(--text-sub)] transition-transform ${expandedCustomer === customer.id ? "rotate-180" : ""}`}/>
                           </button>
 
-                          {/* Expanded View */}
                           {expandedCustomer === customer.id && (
-                            <div className="px-3 pb-3 space-y-2 border-t border-white/10 pt-3">
-                              {customer.email && <p className="text-xs text-gray-400 flex items-center gap-2"><Mail size={12}/>{customer.email}</p>}
-                              {customer.address && <p className="text-xs text-gray-400 flex items-center gap-2"><MapPin size={12}/>{customer.address}</p>}
-                              {customer.notes && <p className="text-xs text-gray-500 flex items-start gap-2 bg-black/40 p-2 rounded"><FileText size={12} className="mt-0.5 shrink-0"/>{customer.notes}</p>}
+                            <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-color)] pt-3">
+                              {customer.email && <p className="text-xs text-[var(--text-sub)] flex items-center gap-2"><Mail size={12}/>{customer.email}</p>}
+                              {customer.address && <p className="text-xs text-[var(--text-sub)] flex items-center gap-2"><MapPin size={12}/>{customer.address}</p>}
+                              {customer.notes && <p className="text-xs text-[var(--text-sub)] flex items-start gap-2 bg-black/40 p-2 rounded"><FileText size={12} className="mt-0.5 shrink-0"/>{customer.notes}</p>}
                               <button onClick={() => deleteCustomer(customer.id)} className="w-full bg-red-900/20 border border-red-500/30 text-red-500 py-2 rounded text-xs font-bold hover:bg-red-900/40 transition flex items-center justify-center gap-2">
                                 <Trash2 size={12}/> Delete Customer
                               </button>
@@ -680,50 +733,16 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* SYSTEM CONTROLS */}
-              <div className="border-t border-white/10 pt-6 space-y-3">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">SYSTEM</h3>
+              <div className="border-t border-[var(--border-color)] pt-6 space-y-3">
+                <h3 className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-3">SYSTEM</h3>
                 
-                {/* Metrics */}
-                <div className="space-y-2">
-                  <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex justify-between items-center">
-                    <span className="text-xs text-gray-400 uppercase">Revenue</span>
-                    <span className="text-[#22c55e] font-oswald text-lg">{formatCurrency(metrics.revenue)}</span>
-                  </div>
-                  <div className="bg-white/5 border border-white/10 rounded-lg p-3 flex justify-between items-center">
-                    <span className="text-xs text-gray-400 uppercase">Jobs</span>
-                    <span className="font-oswald text-lg text-white">{metrics.jobs}</span>
-                  </div>
-                  <div className={`bg-white/5 border rounded-lg p-3 flex justify-between items-center ${metrics.alerts > 0 ? "border-red-500/50 bg-red-500/10" : "border-white/10"}`}>
-                    <span className="text-xs text-gray-400 uppercase">Alerts</span>
-                    <div className="flex items-center gap-2">
-                      {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500"/>}
-                      <span className={`font-oswald text-lg ${metrics.alerts > 0 ? "text-red-500" : "text-white"}`}>{metrics.alerts > 0 ? metrics.alerts : "OK"}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <button 
-                  onClick={togglePrivacyMode} 
-                  className="w-full bg-white/5 border border-white/10 p-3 rounded-lg flex items-center justify-between hover:bg-white/10 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    {privacyMode ? <EyeOff size={18} className="text-[#FF6700]"/> : <Eye size={18} className="text-gray-400"/>}
-                    <span className="text-sm font-bold text-white">Privacy Mode</span>
-                  </div>
-                  <div className={`w-10 h-5 rounded-full transition-colors ${privacyMode ? "bg-[#FF6700]" : "bg-gray-700"}`}>
-                    <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${privacyMode ? "translate-x-5" : ""}`}></div>
-                  </div>
-                </button>
-
                 <button 
                   onClick={toggleTheme} 
-                  className="w-full bg-white/5 border border-white/10 p-3 rounded-lg flex items-center justify-between hover:bg-white/10 transition"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-color)] p-3 rounded-lg flex items-center justify-between hover:bg-[var(--bg-card)] transition"
                 >
                   <div className="flex items-center gap-3">
-                    {theme === 'dark' ? <Moon size={18} className="text-[#FF6700]"/> : <Sun size={18} className="text-gray-400"/>}
-                    <span className="text-sm font-bold text-white">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
+                    {theme === 'dark' ? <Moon size={18} className="text-[#FF6700]"/> : <Sun size={18} className="text-[var(--text-sub)]"/>}
+                    <span className="text-sm font-bold text-[var(--text-main)]">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</span>
                   </div>
                   <div className={`w-10 h-5 rounded-full transition-colors ${theme === 'dark' ? "bg-[#FF6700]" : "bg-gray-700"}`}>
                     <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${theme === 'dark' ? "translate-x-5" : ""}`}></div>
@@ -733,10 +752,10 @@ export default function Dashboard() {
                 <button 
                   onClick={manualRefresh} 
                   disabled={refreshing}
-                  className="w-full bg-white/5 border border-white/10 p-3 rounded-lg flex items-center gap-3 hover:bg-white/10 transition"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-color)] p-3 rounded-lg flex items-center gap-3 hover:bg-[var(--bg-card)] transition"
                 >
-                  <RefreshCw size={18} className={refreshing ? "animate-spin text-[#FF6700]" : "text-gray-400"}/>
-                  <span className="text-sm font-bold text-white">Refresh Data</span>
+                  <RefreshCw size={18} className={refreshing ? "animate-spin text-[#FF6700]" : "text-[var(--text-sub)]"}/>
+                  <span className="text-sm font-bold text-[var(--text-main)]">Refresh Data</span>
                 </button>
 
                 <button 
@@ -756,17 +775,16 @@ export default function Dashboard() {
   );
 }
 
-// Reusable App Card
 function AppCard({ href, label, sub, icon, active }) {
     return (
-        <Link href={href} className={`bg-white/5 backdrop-blur-xl border p-6 rounded-2xl hover:bg-white/10 active:scale-95 transition-all group relative overflow-hidden ${active ? "border-[#FF6700] shadow-[0_0_15px_rgba(255,103,0,0.2)]" : "border-white/10"}`}>
+        <Link href={href} className={`bg-[var(--bg-card)] backdrop-blur-xl border p-6 rounded-2xl hover:bg-[var(--bg-surface)] active:scale-95 transition-all group relative overflow-hidden ${active ? "border-[#FF6700] shadow-[0_0_15px_rgba(255,103,0,0.2)]" : "border-[var(--border-color)]"}`}>
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-white/10 to-transparent rounded-full translate-x-12 -translate-y-12 group-hover:translate-x-8 group-hover:-translate-y-8 transition-transform duration-500 pointer-events-none"></div>
             <div className="relative z-10">
               <div className="mb-4 text-[#FF6700] group-hover:drop-shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-all">
                   {icon}
               </div>
-              <h2 className="text-base font-oswald font-bold text-white group-hover:text-[#FF6700] transition-colors mb-1">{label}</h2>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">{sub}</p>
+              <h2 className="text-base font-oswald font-bold text-[var(--text-main)] group-hover:text-[#FF6700] transition-colors mb-1">{label}</h2>
+              <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-wide">{sub}</p>
             </div>
         </Link>
     );
