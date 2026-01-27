@@ -672,16 +672,16 @@ export default function ProfitLock() {
                       onClick={() => setShowMethodMenu(!showMethodMenu)}
                       className="w-full p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] rounded text-xs font-bold text-left flex items-center justify-between hover:bg-[var(--input-bg)] transition"
                     >
-                      <span>{profitMethod} - {targetValue}%</span>
+                      <span>Profit Method</span>
                       <ChevronDown size={14} className={`transition ${showMethodMenu ? "rotate-180" : ""}`}/>
                     </button>
 
-                    {                    {showMethodMenu && (
+                    {showMethodMenu && (
                       <button
                         onClick={() => setShowMethodDetails(!showMethodDetails)}
                         className="w-full p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] rounded text-xs font-bold text-left flex items-center justify-between hover:bg-[var(--input-bg)] transition"
                       >
-                        <span>Method Details</span>
+                        <span>View Details</span>
                         <ChevronDown size={14} className={`transition ${showMethodDetails ? "rotate-180" : ""}`}/>
                       </button>
                     )}
@@ -718,14 +718,14 @@ export default function ProfitLock() {
                           />
                           <p className="text-[10px] text-[var(--text-sub)] mt-2">
                             {profitMethod === "MARKUP" ? (
-                              <>Cost × (1 + {targetValue}<span className="text-[var(--text-sub)]">%</span>) = Price</>
+                              <>Cost <span className="text-[var(--text-sub)]">×</span> (1 <span className="text-[var(--text-sub)]">+</span> {targetValue}) <span className="text-[var(--text-sub)]">=</span> Price</>
                             ) : (
-                              <>Cost ÷ (1 - {targetValue}<span className="text-[var(--text-sub)]">%</span>) = Price</>
+                              <>Cost <span className="text-[var(--text-sub)]">÷</span> (1 <span className="text-[var(--text-sub)]">−</span> {targetValue}) <span className="text-[var(--text-sub)]">=</span> Price</>
                             )}
                           </p>
                         </div>
                       </div>
-                    )}}
+                    )}
 
                     <div className={`p-3 rounded bg-[var(--bg-surface)] border border-[var(--border-color)]`}>
                         <div className="flex justify-between items-center">
@@ -791,7 +791,7 @@ export default function ProfitLock() {
                         </div>
                         {includeTax && (
                           <div>
-                            <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Rate %</label>
+                            <label className="text-xs font-black text-[var(--text-sub)] uppercase mb-1 block">Rate</label>
                             <input 
                               type="number" 
                               inputMode="decimal"
@@ -873,4 +873,3 @@ export default function ProfitLock() {
     </div>
   );
 }
-
