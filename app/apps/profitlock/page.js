@@ -6,7 +6,7 @@ import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
   Trash2, Save, FileText, Share, Settings, Menu, X, ArrowLeft, Plus, Loader2, 
   Briefcase, Lock, Unlock, ChevronDown, ChevronRight, CheckCircle2, Box, Clock, 
-  AlertTriangle, Eye, EyeOff, Calculator, DollarSign, Percent, Camera
+  AlertTriangle, Eye, EyeOff, Calculator, DollarSign, Percent, Camera, Search
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,8 +33,8 @@ export default function ProfitLock() {
   
   // Advanced Inputs
   const [lineItems, setLineItems] = useState([
-      { id: 1, description: "Materials", quantity: 1, unit_cost: 0 },
-      { id: 2, description: "Labor", quantity: 1, unit_cost: 0 }
+      { id: 1, description: "Materials", quantity: "", unit_cost: "" },
+      { id: 2, description: "Labor", quantity: "", unit_cost: "" }
   ]); 
 
   // --- CONFIG & UI STATE ---
@@ -49,10 +49,16 @@ export default function ProfitLock() {
   const [showMenu, setShowMenu] = useState(false);
   const [showProfitDetails, setShowProfitDetails] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
-  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [menuTab, setMenuTab] = useState("PROFIT");
+  
+  // Job selection
+  const [showJobSelect, setShowJobSelect] = useState(false);
+  const [showCreateJob, setShowCreateJob] = useState(false);
+  const [newJobTitle, setNewJobTitle] = useState("");
+  const [jobSearch, setJobSearch] = useState("");
 
   // --- INIT ---
   useEffect(() => { 
@@ -63,18 +69,20 @@ export default function ProfitLock() {
   useEffect(() => {
     if (activeJob?.customer_id) {
       loadCustomer(activeJob.customer_id);
+    } else {
+      setCustomer(null);
     }
   }, [activeJob]);
 
   // Scroll Lock when Menu is open
   useEffect(() => {
-    if (showMenu) {
+    if (showMenu || showJobSelect) {
         document.body.style.overflow = "hidden";
     } else {
         document.body.style.overflow = "unset";
     }
     return () => { document.body.style.overflow = "unset"; };
-  }, [showMenu]);
+  }, [showMenu, showJobSelect]);
 
   // Load Persisted Settings
   const loadSettings = () => {
@@ -127,6 +135,36 @@ export default function ProfitLock() {
     setEstimateHistory(est || []);
   };
 
+  // --- JOB ACTIONS ---
+  const handleCreateJob = async () => {
+    if (!newJobTitle.trim()) { showToast("Job title required", "error"); return; }
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const { data: job, error } = await supabase.from("jobs").insert({
+      user_id: user.id,
+      title: newJobTitle,
+      status: "ACTIVE"
+    }).select().single();
+
+    if (error) {
+      showToast("Error creating job", "error");
+    } else {
+      setActiveJob(job);
+      setAllJobs([job, ...allJobs]);
+      setNewJobTitle("");
+      setShowCreateJob(false);
+      setShowJobSelect(false);
+      showToast("Job created!", "success");
+    }
+    setLoading(false);
+  };
+
+  const filteredJobs = allJobs.filter(j => 
+    j.title?.toLowerCase().includes(jobSearch.toLowerCase()) &&
+    (j.status === "ACTIVE" || j.status === "PENDING")
+  );
+
   // --- LOGIC ENGINE ---
   const calculateTotals = () => {
     let subtotal = 0;
@@ -137,7 +175,7 @@ export default function ProfitLock() {
         subtotal = mat + labor;
     } else {
         lineItems.forEach(item => {
-            const itemCost = (parseFloat(item.unit_cost) || 0) * (parseFloat(item.quantity) || 1);
+            const itemCost = (parseFloat(item.unit_cost) || 0) * (parseFloat(item.quantity) || 0);
             subtotal += itemCost;
         });
     }
@@ -177,7 +215,7 @@ export default function ProfitLock() {
   const isBelowTarget = profitMethod === "MARGIN" && margin < targetValue;
 
   // --- ACTIONS ---
-  const addLineItem = () => setLineItems([...lineItems, { id: Date.now(), description: "", quantity: 1, unit_cost: 0 }]);
+  const addLineItem = () => setLineItems([...lineItems, { id: Date.now(), description: "", quantity: "", unit_cost: "" }]);
   
   const updateLineItem = (id, field, value) => {
       setLineItems(lineItems.map(item => item.id === id ? { ...item, [field]: value } : item));
@@ -212,21 +250,24 @@ export default function ProfitLock() {
 
     // Save line items
     if (mode === "ADVANCED") {
-        const items = lineItems.map(item => ({
+        const items = lineItems.filter(item => item.description && (item.quantity || item.unit_cost)).map(item => ({
             estimate_id: estimate.id,
             description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_cost,
-            total: item.quantity * item.unit_cost
+            quantity: parseFloat(item.quantity) || 0,
+            unit_price: parseFloat(item.unit_cost) || 0,
+            total: (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_cost) || 0)
         }));
-        await supabase.from("line_items").insert(items);
+        if (items.length > 0) await supabase.from("line_items").insert(items);
     } else {
         // Save simple mode as line items
-        const items = [
-            { estimate_id: estimate.id, description: "Materials", quantity: 1, unit_price: parseFloat(simpleMaterials) || 0, total: parseFloat(simpleMaterials) || 0 },
-            { estimate_id: estimate.id, description: "Labor", quantity: parseFloat(simpleHours) || 0, unit_price: hourlyRate, total: (parseFloat(simpleHours) || 0) * hourlyRate }
-        ];
-        await supabase.from("line_items").insert(items);
+        const items = [];
+        if (parseFloat(simpleMaterials) > 0) {
+          items.push({ estimate_id: estimate.id, description: "Materials", quantity: 1, unit_price: parseFloat(simpleMaterials), total: parseFloat(simpleMaterials) });
+        }
+        if (parseFloat(simpleHours) > 0) {
+          items.push({ estimate_id: estimate.id, description: "Labor", quantity: parseFloat(simpleHours), unit_price: hourlyRate, total: parseFloat(simpleHours) * hourlyRate });
+        }
+        if (items.length > 0) await supabase.from("line_items").insert(items);
     }
 
     showToast("Estimate Saved!", "success");
@@ -261,31 +302,24 @@ export default function ProfitLock() {
         </button>
       </header>
 
-      {/* ACTIVE JOB INDICATOR */}
-      {activeJob && (
-        <div className="mx-6 mb-4 flex items-center justify-between bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-lg p-3 shadow-[0_0_10px_rgba(255,103,0,0.15)]">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-[#FF6700] shadow-[0_0_8px_#FF6700] animate-pulse"></div>
+      {/* JOB SELECTOR */}
+      <div className="mx-6 mb-4">
+        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase ml-1 mb-2 block">Connect to Job</label>
+        <button 
+          onClick={() => setShowJobSelect(true)}
+          className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 text-left font-bold uppercase outline-none hover:border-[#FF6700] transition flex justify-between items-center"
+        >
+          {activeJob ? (
             <div>
-              <p className="text-[10px] text-[#FF6700] font-bold uppercase tracking-wider">LOCKED TO JOB</p>
-              <p className="font-oswald text-sm text-[var(--text-main)] tracking-wide">{activeJob.title}</p>
-              {customer && <p className="text-xs text-[var(--text-sub)]">{customer.name}</p>}
+              <p className="text-sm text-[var(--text-main)]">{activeJob.title}</p>
+              {customer && <p className="text-xs text-[var(--text-sub)] font-normal">{customer.name}</p>}
             </div>
-          </div>
-          <button onClick={() => setActiveJob(null)} className="p-2 hover:bg-[#FF6700]/20 rounded text-[#FF6700]">
-            <X size={14}/>
-          </button>
-        </div>
-      )}
-
-      {!activeJob && (
-        <div className="mx-6 mb-4 p-4 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg text-center">
-          <p className="text-sm text-[var(--text-sub)] mb-2">No active job selected</p>
-          <Link href="/" className="text-[#FF6700] text-sm font-bold hover:underline">
-            ← Select job in Command Center
-          </Link>
-        </div>
-      )}
+          ) : (
+            <p className="text-sm text-[var(--text-sub)]">-- Select Job --</p>
+          )}
+          <ChevronDown size={16} className="text-[var(--text-sub)]"/>
+        </button>
+      </div>
 
       {/* INVOICE PREVIEW MODE */}
       {isInvoiceMode ? (
@@ -322,31 +356,35 @@ export default function ProfitLock() {
                       <tbody className="font-mono text-sm">
                           {mode === "SIMPLE" ? (
                               <>
-                                <tr className="border-b border-gray-100">
-                                  <td className="py-4 font-bold">Materials & Hardware</td>
-                                  <td className="py-4 text-right">1</td>
-                                  <td className="py-4 text-right">${(parseFloat(simpleMaterials)||0).toFixed(2)}</td>
-                                </tr>
-                                <tr className="border-b border-gray-100">
-                                  <td className="py-4 font-bold">Labor Services</td>
-                                  <td className="py-4 text-right">{simpleHours || 0} hrs</td>
-                                  <td className="py-4 text-right">${((parseFloat(simpleHours)||0)*hourlyRate).toFixed(2)}</td>
-                                </tr>
+                                {parseFloat(simpleMaterials) > 0 && (
+                                  <tr className="border-b border-gray-100">
+                                    <td className="py-4 font-bold">Materials & Hardware</td>
+                                    <td className="py-4 text-right">1</td>
+                                    <td className="py-4 text-right">${(parseFloat(simpleMaterials)).toFixed(2)}</td>
+                                  </tr>
+                                )}
+                                {parseFloat(simpleHours) > 0 && (
+                                  <tr className="border-b border-gray-100">
+                                    <td className="py-4 font-bold">Labor Services</td>
+                                    <td className="py-4 text-right">{simpleHours} hrs</td>
+                                    <td className="py-4 text-right">${((parseFloat(simpleHours))*hourlyRate).toFixed(2)}</td>
+                                  </tr>
+                                )}
                               </>
                           ) : (
-                              lineItems.map((item, i) => (
+                              lineItems.filter(item => item.description && (parseFloat(item.quantity) > 0 || parseFloat(item.unit_cost) > 0)).map((item, i) => (
                                   <tr key={i} className="border-b border-gray-100">
-                                      <td className="py-4 font-bold">{item.description || "Item"}</td>
-                                      <td className="py-4 text-right">{item.quantity}</td>
-                                      <td className="py-4 text-right">${(item.unit_cost * item.quantity).toFixed(2)}</td>
+                                      <td className="py-4 font-bold">{item.description}</td>
+                                      <td className="py-4 text-right">{item.quantity || 0}</td>
+                                      <td className="py-4 text-right">${((parseFloat(item.unit_cost) || 0) * (parseFloat(item.quantity) || 0)).toFixed(2)}</td>
                                   </tr>
                               ))
                           )}
-                          {showDiscount && discount > 0 && (
+                          {showDiscount && parseFloat(discountAmount) > 0 && (
                             <tr className="border-b border-gray-100">
                               <td className="py-4 font-bold text-red-600">Discount</td>
                               <td className="py-4 text-right">-</td>
-                              <td className="py-4 text-right text-red-600">-${discount.toFixed(2)}</td>
+                              <td className="py-4 text-right text-red-600">-${parseFloat(discountAmount).toFixed(2)}</td>
                             </tr>
                           )}
                       </tbody>
@@ -400,10 +438,11 @@ export default function ProfitLock() {
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-sub)] font-mono">$</span>
                             <input 
                               type="number" 
+                              inputMode="decimal"
                               value={simpleMaterials} 
                               onChange={e => setSimpleMaterials(e.target.value)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 pl-8 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)]" 
-                              placeholder="0" 
+                              placeholder="0"
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 pl-8 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
                             />
                         </div>
                     </div>
@@ -412,10 +451,11 @@ export default function ProfitLock() {
                         <div className="relative">
                             <input 
                               type="number" 
+                              inputMode="decimal"
                               value={simpleHours} 
                               onChange={e => setSimpleHours(e.target.value)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)]" 
-                              placeholder="0" 
+                              placeholder="0"
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
                             />
                         </div>
                     </div>
@@ -434,20 +474,22 @@ export default function ProfitLock() {
                             </div>
                             <div className="col-span-2">
                                 <input 
-                                  placeholder="Qty" 
+                                  placeholder="0" 
                                   type="number" 
+                                  inputMode="decimal"
                                   value={item.quantity} 
                                   onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)]" 
+                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
                                 />
                             </div>
                             <div className="col-span-3">
                                 <input 
-                                  placeholder="Cost" 
+                                  placeholder="0" 
                                   type="number" 
+                                  inputMode="decimal"
                                   value={item.unit_cost} 
                                   onChange={(e) => updateLineItem(item.id, "unit_cost", e.target.value)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)]" 
+                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
                                 />
                             </div>
                             <div className="col-span-2 text-center">
@@ -469,15 +511,16 @@ export default function ProfitLock() {
                         <div className="col-span-2"></div>
                         <div className="col-span-3">
                           <input 
-                            placeholder="Amount" 
+                            placeholder="0" 
                             type="number" 
+                            inputMode="decimal"
                             value={discountAmount} 
                             onChange={(e) => setDiscountAmount(e.target.value)} 
-                            className="w-full bg-black/20 border border-red-500/30 rounded-lg p-3 text-sm text-center outline-none focus:border-red-500 text-red-500" 
+                            className="w-full bg-black/20 border border-red-500/30 rounded-lg p-3 text-sm text-center outline-none focus:border-red-500 text-red-500 placeholder:text-red-500 placeholder:opacity-30" 
                           />
                         </div>
                         <div className="col-span-2 text-center">
-                          <button onClick={() => { setShowDiscount(false); setDiscountAmount(0); }} className="text-[var(--text-sub)] hover:text-red-500 transition"><X size={16}/></button>
+                          <button onClick={() => { setShowDiscount(false); setDiscountAmount(""); }} className="text-[var(--text-sub)] hover:text-red-500 transition"><X size={16}/></button>
                         </div>
                       </div>
                     )}
@@ -526,24 +569,109 @@ export default function ProfitLock() {
       </main>
       )}
 
+      {/* JOB SELECT MODAL */}
+      {showJobSelect && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setShowJobSelect(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center shrink-0">
+              <h2 className="font-oswald text-xl text-[#FF6700]">SELECT JOB</h2>
+              <button onClick={() => setShowJobSelect(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X size={20}/>
+              </button>
+            </div>
+            
+            <div className="p-4 border-b border-[var(--border-color)] shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)]" size={16}/>
+                <input 
+                  placeholder="Search jobs..." 
+                  value={jobSearch}
+                  onChange={(e) => setJobSearch(e.target.value)}
+                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg pl-10 pr-3 py-2 text-sm text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <button 
+                onClick={() => { setShowJobSelect(false); setShowCreateJob(true); }}
+                className="w-full p-3 bg-[#FF6700] text-black font-bold rounded-lg hover:bg-[#ff8533] transition flex items-center justify-center gap-2"
+              >
+                <Plus size={18}/> CREATE NEW JOB
+              </button>
+              
+              {filteredJobs.map(job => (
+                <button
+                  key={job.id}
+                  onClick={() => { setActiveJob(job); setShowJobSelect(false); }}
+                  className={`w-full text-left p-3 rounded-lg border transition flex justify-between items-center ${activeJob?.id === job.id ? "bg-[#FF6700]/10 border-[#FF6700]" : "bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[#FF6700]"}`}
+                >
+                  <div>
+                    <p className="font-oswald text-sm text-[var(--text-main)]">{job.title}</p>
+                    <p className="text-xs text-[var(--text-sub)]">{new Date(job.created_at).toLocaleDateString()}</p>
+                  </div>
+                  {activeJob?.id === job.id && <CheckCircle2 size={18} className="text-[#FF6700]"/>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* CREATE JOB MODAL */}
+      {showCreateJob && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={() => setShowCreateJob(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-[60] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="font-oswald text-xl text-[#FF6700]">CREATE JOB</h2>
+                <p className="text-xs text-[var(--text-sub)]">Quick dispatch from ProfitLock</p>
+              </div>
+              <button onClick={() => setShowCreateJob(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X size={20}/>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <input 
+                autoFocus
+                placeholder="Job Title..." 
+                value={newJobTitle}
+                onChange={(e) => setNewJobTitle(e.target.value)}
+                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-4 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+              />
+              <button 
+                onClick={handleCreateJob}
+                disabled={loading}
+                className="w-full py-4 bg-[#FF6700] text-black font-black uppercase rounded-lg hover:bg-[#ff8533] transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="animate-spin"/> : <Briefcase size={18}/>} CREATE & SELECT
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* CONTROL PANEL */}
       {showMenu && (
         <div className="fixed inset-0 z-50 flex justify-end">
             <div className="absolute inset-0 bg-black/90 backdrop-blur-sm animate-in fade-in" onClick={() => setShowMenu(false)} />
-            <div className="w-96 max-w-[90vw] bg-[var(--bg-card)] border-l border-[var(--border-color)] h-full shadow-2xl relative animate-in slide-in-from-right p-6 flex flex-col overflow-y-auto">
+            <div className="w-96 max-w-[90vw] bg-[#0a0a0a] border-l border-zinc-800 h-full shadow-2xl relative animate-in slide-in-from-right p-6 flex flex-col overflow-y-auto">
                 
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-oswald font-bold text-[#FF6700] uppercase">CONTROL PANEL</h2>
-                    <button onClick={() => setShowMenu(false)}><X className="text-[var(--text-sub)] hover:text-[var(--text-main)]" /></button>
+                    <button onClick={() => setShowMenu(false)}><X className="text-zinc-400 hover:text-white" /></button>
                 </div>
 
                 {/* TABS */}
-                <div className="grid grid-cols-3 gap-1 bg-[var(--bg-surface)] p-1 rounded-lg mb-6">
+                <div className="grid grid-cols-3 gap-1 bg-black p-1 rounded-lg mb-6">
                   {["PROFIT", "SETTINGS", "HISTORY"].map(tab => (
                     <button 
                       key={tab}
                       onClick={() => setMenuTab(tab)}
-                      className={`py-2 px-1 rounded text-[10px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
+                      className={`py-2 px-1 rounded text-[10px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-zinc-500 hover:text-white"}`}
                     >
                       {tab}
                     </button>
@@ -554,12 +682,12 @@ export default function ProfitLock() {
                 {menuTab === "PROFIT" && (
                   <div className="space-y-6 animate-in fade-in">
                     {/* THE VAULT */}
-                    <div className={`p-4 rounded-xl border relative overflow-hidden transition-all duration-300 ${isBelowTarget ? "bg-red-900/10 border-red-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
+                    <div className={`p-4 rounded-xl border relative overflow-hidden transition-all duration-300 ${isBelowTarget ? "bg-red-900/10 border-red-500/50" : "bg-zinc-900 border-zinc-800"}`}>
                         <div className="flex justify-between items-center mb-2 relative z-10">
-                            <p className="text-xs font-black text-[var(--text-sub)] uppercase flex items-center gap-2">
+                            <p className="text-xs font-black text-zinc-400 uppercase flex items-center gap-2">
                               Internal Profit {profitLocked && <Lock size={10} className="text-green-500"/>}
                             </p>
-                            <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="text-[var(--text-sub)] hover:text-[var(--text-main)]">
+                            <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="text-zinc-400 hover:text-white">
                                 {showProfitDetails ? <EyeOff size={16}/> : <Eye size={16}/>}
                             </button>
                         </div>
@@ -568,13 +696,13 @@ export default function ProfitLock() {
                             <div className="animate-in fade-in">
                                 <p className={`text-3xl font-oswald font-bold relative z-10 ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
                                 <div className="flex justify-between items-center mt-2">
-                                    <p className="text-xs text-[var(--text-sub)] font-bold relative z-10">Margin: {margin.toFixed(1)}%</p>
-                                    <p className="text-[10px] text-[var(--text-sub)] font-mono">Cost: ${cost.toFixed(0)}</p>
+                                    <p className="text-xs text-zinc-400 font-bold relative z-10">Margin: {margin.toFixed(1)}%</p>
+                                    <p className="text-[10px] text-zinc-500 font-mono">Cost: ${cost.toFixed(0)}</p>
                                 </div>
                                 {isBelowTarget && (
                                   <p className="text-xs text-red-500 mt-2">⚠️ Below target margin ({targetValue}%)</p>
                                 )}
-                                <div className="mt-3 pt-3 border-t border-[var(--border-color)] text-[10px] text-[var(--text-sub)] font-mono">
+                                <div className="mt-3 pt-3 border-t border-zinc-800 text-[10px] text-zinc-500 font-mono">
                                     <p>Price: ${price.toFixed(2)}</p>
                                     <p>- Cost: ${cost.toFixed(2)}</p>
                                     <p>= Net:  ${profit.toFixed(2)}</p>
@@ -582,12 +710,12 @@ export default function ProfitLock() {
                             </div>
                         ) : (
                             <div className="py-2">
-                                <p className="text-3xl font-oswald font-bold text-[var(--text-sub)] tracking-widest select-none">****</p>
+                                <p className="text-3xl font-oswald font-bold text-zinc-700 tracking-widest select-none">****</p>
                             </div>
                         )}
                         
                         {showProfitDetails && (
-                            <div className="absolute bottom-0 left-0 h-1 bg-[var(--bg-surface)] w-full">
+                            <div className="absolute bottom-0 left-0 h-1 bg-zinc-800 w-full">
                                 <div className={`h-full ${profit > 0 ? "bg-green-500" : "bg-red-500"}`} style={{ width: `${Math.min(margin, 100)}%` }}></div>
                             </div>
                         )}
@@ -595,17 +723,17 @@ export default function ProfitLock() {
 
                     {/* Mode Toggle */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Calculator Mode</label>
-                        <div className="flex bg-[var(--bg-surface)] rounded-lg p-1 border border-[var(--border-color)]">
-                            <button onClick={() => setMode("SIMPLE")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>Simple</button>
-                            <button onClick={() => setMode("ADVANCED")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>Advanced</button>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Calculator Mode</label>
+                        <div className="flex bg-black rounded-lg p-1 border border-zinc-800">
+                            <button onClick={() => setMode("SIMPLE")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>Simple</button>
+                            <button onClick={() => setMode("ADVANCED")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>Advanced</button>
                         </div>
                     </div>
 
                     {/* ProfitLock Feature */}
-                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full flex items-center justify-between p-3 rounded-lg border transition ${profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
-                        <span className={`text-xs font-bold ${profitLocked ? "text-green-500" : "text-[var(--text-sub)]"}`}>ProfitLock™ {profitLocked ? "Active" : "Off"}</span>
-                        {profitLocked ? <Lock size={14} className="text-green-500"/> : <Unlock size={14} className="text-[var(--text-sub)]"/>}
+                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full flex items-center justify-between p-3 rounded-lg border transition ${profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-zinc-900 border-zinc-800"}`}>
+                        <span className={`text-xs font-bold ${profitLocked ? "text-green-500" : "text-zinc-500"}`}>ProfitLock™ {profitLocked ? "Active" : "Off"}</span>
+                        {profitLocked ? <Lock size={14} className="text-green-500"/> : <Unlock size={14} className="text-zinc-600"/>}
                     </button>
                   </div>
                 )}
@@ -616,66 +744,64 @@ export default function ProfitLock() {
                     
                     {/* Profit Method Toggle */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Profit Calculation</label>
-                        <div className="flex bg-[var(--bg-surface)] rounded-lg p-1 border border-[var(--border-color)] mb-3">
-                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Profit Method</label>
+                        <div className="flex bg-black rounded-lg p-1 border border-zinc-800 mb-3">
+                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>
                               <DollarSign size={12}/> Markup
                             </button>
-                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>
+                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>
                               <Percent size={12}/> Margin
                             </button>
                         </div>
                         <div>
-                          <p className="text-[9px] text-[var(--text-sub)] mb-1">{profitMethod === "MARKUP" ? "Markup %" : "Target Margin %"}</p>
+                          <p className="text-[9px] text-zinc-500 mb-1">{profitMethod === "MARKUP" ? "Markup %" : "Target Margin %"}</p>
                           <input 
                             type="number" 
+                            inputMode="decimal"
                             value={targetValue} 
                             onChange={e => setTargetValue(parseFloat(e.target.value) || 0)} 
-                            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                            placeholder="0"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
                           />
-                          <p className="text-[9px] text-[var(--text-sub)] mt-1">
-                            {profitMethod === "MARKUP" ? "Price = Cost × (1 + Markup%)" : "Price = Cost / (1 - Margin%)"}
-                          </p>
                         </div>
                     </div>
 
                     {/* Global Defaults */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Global Defaults</label>
-                        <div className="space-y-3">
-                            <div>
-                                <p className="text-[9px] text-[var(--text-sub)] mb-1">Hourly Rate ($)</p>
-                                <input 
-                                  type="number" 
-                                  value={hourlyRate} 
-                                  onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
-                                />
-                            </div>
-                        </div>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Hourly Rate</label>
+                        <input 
+                          type="number" 
+                          inputMode="decimal"
+                          value={hourlyRate} 
+                          onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} 
+                          placeholder="0"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
+                        />
                     </div>
 
                     {/* Tax Settings */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Tax Settings</label>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Tax Settings</label>
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg">
-                              <span className="text-xs font-bold">Include Tax on Invoice</span>
+                            <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-lg">
+                              <span className="text-xs font-bold text-white">Include Tax</span>
                               <button 
                                 onClick={() => setIncludeTax(!includeTax)}
-                                className={`w-10 h-5 rounded-full transition-colors ${includeTax ? "bg-[#FF6700]" : "bg-gray-700"}`}
+                                className={`w-10 h-5 rounded-full transition-colors ${includeTax ? "bg-[#FF6700]" : "bg-zinc-700"}`}
                               >
                                 <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${includeTax ? "translate-x-5" : ""}`}></div>
                               </button>
                             </div>
                             {includeTax && (
                               <div>
-                                <p className="text-[9px] text-[var(--text-sub)] mb-1">Tax Rate (%)</p>
+                                <p className="text-[9px] text-zinc-500 mb-1">Tax Rate (%)</p>
                                 <input 
                                   type="number" 
+                                  inputMode="decimal"
                                   value={taxRate} 
                                   onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                                  placeholder="0"
+                                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
                                 />
                               </div>
                             )}
@@ -684,11 +810,11 @@ export default function ProfitLock() {
 
                     {/* Payment Terms */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Payment Terms</label>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Payment Terms</label>
                         <select 
                           value={paymentTerms}
                           onChange={(e) => setPaymentTerms(e.target.value)}
-                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-sm text-white font-bold outline-none focus:border-[#FF6700]"
                         >
                           <option value="DUE_ON_RECEIPT">Due on Receipt</option>
                           <option value="NET_15">Net 15 Days</option>
@@ -699,15 +825,17 @@ export default function ProfitLock() {
 
                     {/* Quote Valid Days */}
                     <div>
-                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Quote Valid For</label>
+                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Quote Valid For</label>
                         <div className="flex items-center gap-2">
                           <input 
                             type="number" 
+                            inputMode="numeric"
                             value={quoteValidDays} 
                             onChange={e => setQuoteValidDays(parseInt(e.target.value) || 30)} 
-                            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                            placeholder="30"
+                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
                           />
-                          <span className="text-sm text-[var(--text-sub)]">days</span>
+                          <span className="text-sm text-zinc-400">days</span>
                         </div>
                     </div>
 
@@ -717,19 +845,19 @@ export default function ProfitLock() {
                 {/* HISTORY TAB */}
                 {menuTab === "HISTORY" && (
                   <div className="space-y-4 animate-in fade-in">
-                    <p className="text-[10px] font-black text-[var(--text-sub)] uppercase">Recent Estimates ({estimateHistory.length})</p>
+                    <p className="text-[10px] font-black text-zinc-500 uppercase">Recent Estimates ({estimateHistory.length})</p>
                     <div className="space-y-3">
                         {estimateHistory.slice(0,10).map(est => (
-                            <div key={est.id} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700] transition group cursor-pointer flex justify-between items-center">
+                            <div key={est.id} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-[#FF6700] transition group cursor-pointer flex justify-between items-center">
                                 <div>
-                                    <p className="text-xs font-bold text-[var(--text-main)]">{est.jobs?.title || "Unknown Job"}</p>
-                                    <p className="text-[10px] text-[var(--text-sub)]">{est.estimate_number} • {new Date(est.created_at).toLocaleDateString()}</p>
+                                    <p className="text-xs font-bold text-white">{est.jobs?.title || "Unknown Job"}</p>
+                                    <p className="text-[10px] text-zinc-500">{est.estimate_number} • {new Date(est.created_at).toLocaleDateString()}</p>
                                 </div>
                                 <p className="text-xs font-oswald font-bold text-[#FF6700]">${est.total_price?.toFixed(0)}</p>
                             </div>
                         ))}
                         {estimateHistory.length === 0 && (
-                          <p className="text-sm text-[var(--text-sub)] text-center py-8">No estimates yet</p>
+                          <p className="text-sm text-zinc-500 text-center py-8">No estimates yet</p>
                         )}
                     </div>
                   </div>
