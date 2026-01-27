@@ -228,10 +228,10 @@ export default function ProfitLock() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Build estimate data object - only include customer_id if column exists
     const estimateData = {
         user_id: user.id,
         job_id: activeJob.id,
-        customer_id: activeJob.customer_id || null,
         estimate_number: `EST-${Date.now().toString().slice(-6)}`,
         subtotal: price,
         tax: tax,
@@ -243,6 +243,7 @@ export default function ProfitLock() {
     const { data: estimate, error } = await supabase.from("estimates").insert(estimateData).select().single();
 
     if (error) { 
+        console.error("Save error:", error);
         showToast("Error: " + error.message, "error"); 
         setLoading(false);
         return;
@@ -442,7 +443,8 @@ export default function ProfitLock() {
                               value={simpleMaterials} 
                               onChange={e => setSimpleMaterials(e.target.value)} 
                               placeholder="0"
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 pl-8 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 pl-8 text-center font-mono font-bold text-base outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                              style={{ fontSize: '16px' }}
                             />
                         </div>
                     </div>
@@ -455,7 +457,8 @@ export default function ProfitLock() {
                               value={simpleHours} 
                               onChange={e => setSimpleHours(e.target.value)} 
                               placeholder="0"
-                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 text-center font-mono font-bold text-xl outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl p-4 text-center font-mono font-bold text-base outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                              style={{ fontSize: '16px' }}
                             />
                         </div>
                     </div>
@@ -470,6 +473,7 @@ export default function ProfitLock() {
                                   value={item.description} 
                                   onChange={(e) => updateLineItem(item.id, "description", e.target.value)} 
                                   className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm font-bold outline-none focus:border-[#FF6700] text-[var(--input-text)]" 
+                                  style={{ fontSize: '16px' }}
                                 />
                             </div>
                             <div className="col-span-2">
@@ -480,6 +484,7 @@ export default function ProfitLock() {
                                   value={item.quantity} 
                                   onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)} 
                                   className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                                  style={{ fontSize: '16px' }}
                                 />
                             </div>
                             <div className="col-span-3">
@@ -490,6 +495,7 @@ export default function ProfitLock() {
                                   value={item.unit_cost} 
                                   onChange={(e) => updateLineItem(item.id, "unit_cost", e.target.value)} 
                                   className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                                  style={{ fontSize: '16px' }}
                                 />
                             </div>
                             <div className="col-span-2 text-center">
@@ -517,6 +523,7 @@ export default function ProfitLock() {
                             value={discountAmount} 
                             onChange={(e) => setDiscountAmount(e.target.value)} 
                             className="w-full bg-black/20 border border-red-500/30 rounded-lg p-3 text-sm text-center outline-none focus:border-red-500 text-red-500 placeholder:text-red-500 placeholder:opacity-30" 
+                            style={{ fontSize: '16px' }}
                           />
                         </div>
                         <div className="col-span-2 text-center">
@@ -589,6 +596,7 @@ export default function ProfitLock() {
                   value={jobSearch}
                   onChange={(e) => setJobSearch(e.target.value)}
                   className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg pl-10 pr-3 py-2 text-sm text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+                  style={{ fontSize: '16px' }}
                 />
               </div>
             </div>
@@ -641,6 +649,7 @@ export default function ProfitLock() {
                 value={newJobTitle}
                 onChange={(e) => setNewJobTitle(e.target.value)}
                 className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-4 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+                style={{ fontSize: '16px' }}
               />
               <button 
                 onClick={handleCreateJob}
@@ -658,20 +667,20 @@ export default function ProfitLock() {
       {showMenu && (
         <div className="fixed inset-0 z-50 flex justify-end">
             <div className="absolute inset-0 bg-black/90 backdrop-blur-sm animate-in fade-in" onClick={() => setShowMenu(false)} />
-            <div className="w-96 max-w-[90vw] bg-[#0a0a0a] border-l border-zinc-800 h-full shadow-2xl relative animate-in slide-in-from-right p-6 flex flex-col overflow-y-auto">
+            <div className="w-96 max-w-[90vw] bg-[var(--bg-card)] border-l border-[var(--border-color)] h-full shadow-2xl relative animate-in slide-in-from-right p-6 flex flex-col overflow-y-auto">
                 
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-oswald font-bold text-[#FF6700] uppercase">CONTROL PANEL</h2>
-                    <button onClick={() => setShowMenu(false)}><X className="text-zinc-400 hover:text-white" /></button>
+                    <button onClick={() => setShowMenu(false)}><X className="text-[var(--text-sub)] hover:text-[var(--text-main)]" /></button>
                 </div>
 
                 {/* TABS */}
-                <div className="grid grid-cols-3 gap-1 bg-black p-1 rounded-lg mb-6">
+                <div className="grid grid-cols-3 gap-1 bg-[var(--bg-surface)] p-1 rounded-lg mb-6">
                   {["PROFIT", "SETTINGS", "HISTORY"].map(tab => (
                     <button 
                       key={tab}
                       onClick={() => setMenuTab(tab)}
-                      className={`py-2 px-1 rounded text-[10px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-zinc-500 hover:text-white"}`}
+                      className={`py-2 px-1 rounded text-[10px] font-bold transition ${menuTab === tab ? "bg-[#FF6700] text-black shadow-[0_0_12px_rgba(255,103,0,0.3)]" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}
                     >
                       {tab}
                     </button>
@@ -682,12 +691,12 @@ export default function ProfitLock() {
                 {menuTab === "PROFIT" && (
                   <div className="space-y-6 animate-in fade-in">
                     {/* THE VAULT */}
-                    <div className={`p-4 rounded-xl border relative overflow-hidden transition-all duration-300 ${isBelowTarget ? "bg-red-900/10 border-red-500/50" : "bg-zinc-900 border-zinc-800"}`}>
+                    <div className={`p-4 rounded-xl border relative overflow-hidden transition-all duration-300 ${isBelowTarget ? "bg-red-900/10 border-red-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
                         <div className="flex justify-between items-center mb-2 relative z-10">
-                            <p className="text-xs font-black text-zinc-400 uppercase flex items-center gap-2">
+                            <p className="text-xs font-black text-[var(--text-sub)] uppercase flex items-center gap-2">
                               Internal Profit {profitLocked && <Lock size={10} className="text-green-500"/>}
                             </p>
-                            <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="text-zinc-400 hover:text-white">
+                            <button onClick={() => setShowProfitDetails(!showProfitDetails)} className="text-[var(--text-sub)] hover:text-[var(--text-main)]">
                                 {showProfitDetails ? <EyeOff size={16}/> : <Eye size={16}/>}
                             </button>
                         </div>
@@ -696,13 +705,13 @@ export default function ProfitLock() {
                             <div className="animate-in fade-in">
                                 <p className={`text-3xl font-oswald font-bold relative z-10 ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
                                 <div className="flex justify-between items-center mt-2">
-                                    <p className="text-xs text-zinc-400 font-bold relative z-10">Margin: {margin.toFixed(1)}%</p>
-                                    <p className="text-[10px] text-zinc-500 font-mono">Cost: ${cost.toFixed(0)}</p>
+                                    <p className="text-xs text-[var(--text-sub)] font-bold relative z-10">Margin: {margin.toFixed(1)}%</p>
+                                    <p className="text-[10px] text-[var(--text-sub)] font-mono">Cost: ${cost.toFixed(0)}</p>
                                 </div>
                                 {isBelowTarget && (
                                   <p className="text-xs text-red-500 mt-2">⚠️ Below target margin ({targetValue}%)</p>
                                 )}
-                                <div className="mt-3 pt-3 border-t border-zinc-800 text-[10px] text-zinc-500 font-mono">
+                                <div className="mt-3 pt-3 border-t border-[var(--border-color)] text-[10px] text-[var(--text-sub)] font-mono">
                                     <p>Price: ${price.toFixed(2)}</p>
                                     <p>- Cost: ${cost.toFixed(2)}</p>
                                     <p>= Net:  ${profit.toFixed(2)}</p>
@@ -710,12 +719,12 @@ export default function ProfitLock() {
                             </div>
                         ) : (
                             <div className="py-2">
-                                <p className="text-3xl font-oswald font-bold text-zinc-700 tracking-widest select-none">****</p>
+                                <p className="text-3xl font-oswald font-bold text-[var(--text-sub)] opacity-30 tracking-widest select-none">****</p>
                             </div>
                         )}
                         
                         {showProfitDetails && (
-                            <div className="absolute bottom-0 left-0 h-1 bg-zinc-800 w-full">
+                            <div className="absolute bottom-0 left-0 h-1 bg-[var(--bg-surface)] w-full">
                                 <div className={`h-full ${profit > 0 ? "bg-green-500" : "bg-red-500"}`} style={{ width: `${Math.min(margin, 100)}%` }}></div>
                             </div>
                         )}
@@ -723,17 +732,17 @@ export default function ProfitLock() {
 
                     {/* Mode Toggle */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Calculator Mode</label>
-                        <div className="flex bg-black rounded-lg p-1 border border-zinc-800">
-                            <button onClick={() => setMode("SIMPLE")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>Simple</button>
-                            <button onClick={() => setMode("ADVANCED")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>Advanced</button>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Calculator Mode</label>
+                        <div className="flex bg-[var(--bg-surface)] rounded-lg p-1 border border-[var(--border-color)]">
+                            <button onClick={() => setMode("SIMPLE")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "SIMPLE" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>Simple</button>
+                            <button onClick={() => setMode("ADVANCED")} className={`flex-1 py-2 text-xs font-bold rounded transition ${mode === "ADVANCED" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>Advanced</button>
                         </div>
                     </div>
 
                     {/* ProfitLock Feature */}
-                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full flex items-center justify-between p-3 rounded-lg border transition ${profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-zinc-900 border-zinc-800"}`}>
-                        <span className={`text-xs font-bold ${profitLocked ? "text-green-500" : "text-zinc-500"}`}>ProfitLock™ {profitLocked ? "Active" : "Off"}</span>
-                        {profitLocked ? <Lock size={14} className="text-green-500"/> : <Unlock size={14} className="text-zinc-600"/>}
+                    <button onClick={() => setProfitLocked(!profitLocked)} className={`w-full flex items-center justify-between p-3 rounded-lg border transition ${profitLocked ? "bg-green-900/20 border-green-500/50" : "bg-[var(--bg-surface)] border-[var(--border-color)]"}`}>
+                        <span className={`text-xs font-bold ${profitLocked ? "text-green-500" : "text-[var(--text-sub)]"}`}>ProfitLock™ {profitLocked ? "Active" : "Off"}</span>
+                        {profitLocked ? <Lock size={14} className="text-green-500"/> : <Unlock size={14} className="text-[var(--text-sub)]"/>}
                     </button>
                   </div>
                 )}
@@ -744,64 +753,67 @@ export default function ProfitLock() {
                     
                     {/* Profit Method Toggle */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Profit Method</label>
-                        <div className="flex bg-black rounded-lg p-1 border border-zinc-800 mb-3">
-                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Profit Method</label>
+                        <div className="flex bg-[var(--bg-surface)] rounded-lg p-1 border border-[var(--border-color)] mb-3">
+                            <button onClick={() => setProfitMethod("MARKUP")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARKUP" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>
                               <DollarSign size={12}/> Markup
                             </button>
-                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "text-zinc-500 hover:text-white"}`}>
+                            <button onClick={() => setProfitMethod("MARGIN")} className={`flex-1 py-2 text-xs font-bold rounded transition flex items-center justify-center gap-1 ${profitMethod === "MARGIN" ? "bg-[#FF6700] text-black" : "text-[var(--text-sub)] hover:text-[var(--text-main)]"}`}>
                               <Percent size={12}/> Margin
                             </button>
                         </div>
                         <div>
-                          <p className="text-[9px] text-zinc-500 mb-1">{profitMethod === "MARKUP" ? "Markup %" : "Target Margin %"}</p>
+                          <p className="text-[9px] text-[var(--text-sub)] mb-1">{profitMethod === "MARKUP" ? "Markup %" : "Target Margin %"}</p>
                           <input 
                             type="number" 
                             inputMode="decimal"
                             value={targetValue} 
                             onChange={e => setTargetValue(parseFloat(e.target.value) || 0)} 
                             placeholder="0"
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
+                            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                            style={{ fontSize: '16px' }}
                           />
                         </div>
                     </div>
 
                     {/* Global Defaults */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Hourly Rate</label>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Hourly Rate</label>
                         <input 
                           type="number" 
                           inputMode="decimal"
                           value={hourlyRate} 
                           onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} 
                           placeholder="0"
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                          style={{ fontSize: '16px' }}
                         />
                     </div>
 
                     {/* Tax Settings */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Tax Settings</label>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Tax Settings</label>
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between p-3 bg-zinc-900 border border-zinc-800 rounded-lg">
-                              <span className="text-xs font-bold text-white">Include Tax</span>
+                            <div className="flex items-center justify-between p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg">
+                              <span className="text-xs font-bold text-[var(--text-main)]">Include Tax</span>
                               <button 
                                 onClick={() => setIncludeTax(!includeTax)}
-                                className={`w-10 h-5 rounded-full transition-colors ${includeTax ? "bg-[#FF6700]" : "bg-zinc-700"}`}
+                                className={`w-10 h-5 rounded-full transition-colors ${includeTax ? "bg-[#FF6700]" : "bg-gray-700"}`}
                               >
                                 <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${includeTax ? "translate-x-5" : ""}`}></div>
                               </button>
                             </div>
                             {includeTax && (
                               <div>
-                                <p className="text-[9px] text-zinc-500 mb-1">Tax Rate (%)</p>
+                                <p className="text-[9px] text-[var(--text-sub)] mb-1">Tax Rate (%)</p>
                                 <input 
                                   type="number" 
                                   inputMode="decimal"
                                   value={taxRate} 
                                   onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} 
                                   placeholder="0"
-                                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
+                                  className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                                  style={{ fontSize: '16px' }}
                                 />
                               </div>
                             )}
@@ -810,11 +822,12 @@ export default function ProfitLock() {
 
                     {/* Payment Terms */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Payment Terms</label>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Payment Terms</label>
                         <select 
                           value={paymentTerms}
                           onChange={(e) => setPaymentTerms(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-sm text-white font-bold outline-none focus:border-[#FF6700]"
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg p-3 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]"
+                          style={{ fontSize: '16px' }}
                         >
                           <option value="DUE_ON_RECEIPT">Due on Receipt</option>
                           <option value="NET_15">Net 15 Days</option>
@@ -825,7 +838,7 @@ export default function ProfitLock() {
 
                     {/* Quote Valid Days */}
                     <div>
-                        <label className="text-[10px] font-black text-zinc-500 uppercase mb-2 block">Quote Valid For</label>
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase mb-2 block">Quote Valid For</label>
                         <div className="flex items-center gap-2">
                           <input 
                             type="number" 
@@ -833,9 +846,10 @@ export default function ProfitLock() {
                             value={quoteValidDays} 
                             onChange={e => setQuoteValidDays(parseInt(e.target.value) || 30)} 
                             placeholder="30"
-                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded p-3 text-base text-white font-bold outline-none focus:border-[#FF6700] placeholder:text-zinc-700 placeholder:opacity-30" 
+                            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded p-3 text-base text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700] placeholder:text-[var(--text-sub)] placeholder:opacity-30" 
+                            style={{ fontSize: '16px' }}
                           />
-                          <span className="text-sm text-zinc-400">days</span>
+                          <span className="text-sm text-[var(--text-sub)]">days</span>
                         </div>
                     </div>
 
@@ -845,19 +859,19 @@ export default function ProfitLock() {
                 {/* HISTORY TAB */}
                 {menuTab === "HISTORY" && (
                   <div className="space-y-4 animate-in fade-in">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase">Recent Estimates ({estimateHistory.length})</p>
+                    <p className="text-[10px] font-black text-[var(--text-sub)] uppercase">Recent Estimates ({estimateHistory.length})</p>
                     <div className="space-y-3">
                         {estimateHistory.slice(0,10).map(est => (
-                            <div key={est.id} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-[#FF6700] transition group cursor-pointer flex justify-between items-center">
+                            <div key={est.id} className="p-3 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[#FF6700] transition group cursor-pointer flex justify-between items-center">
                                 <div>
-                                    <p className="text-xs font-bold text-white">{est.jobs?.title || "Unknown Job"}</p>
-                                    <p className="text-[10px] text-zinc-500">{est.estimate_number} • {new Date(est.created_at).toLocaleDateString()}</p>
+                                    <p className="text-xs font-bold text-[var(--text-main)]">{est.jobs?.title || "Unknown Job"}</p>
+                                    <p className="text-[10px] text-[var(--text-sub)]">{est.estimate_number} • {new Date(est.created_at).toLocaleDateString()}</p>
                                 </div>
                                 <p className="text-xs font-oswald font-bold text-[#FF6700]">${est.total_price?.toFixed(0)}</p>
                             </div>
                         ))}
                         {estimateHistory.length === 0 && (
-                          <p className="text-sm text-zinc-500 text-center py-8">No estimates yet</p>
+                          <p className="text-sm text-[var(--text-sub)] text-center py-8">No estimates yet</p>
                         )}
                     </div>
                   </div>
