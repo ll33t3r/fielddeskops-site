@@ -6,7 +6,8 @@ import { useActiveJob } from '../../../hooks/useActiveJob';
 import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
-  LinkIcon, Trash2, Edit2, SplitSquareVertical, Grid3x3
+  LinkIcon, Trash2, Edit2, SplitSquareVertical, Grid3x3,
+  Pencil, Ruler, Share2, Download, CheckSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -37,7 +38,13 @@ export default function SiteSnap() {
   const [estimates, setEstimates] = useState([]);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [beforeAfterPair, setBeforeAfterPair] = useState({ before: null, after: null });
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawingMode, setDrawingMode] = useState('pen'); // pen, ruler, text
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [selectedForShare, setSelectedForShare] = useState([]);
 
+  const canvasRef = useRef(null);
+  const fabricCanvasRef = useRef(null);
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -59,6 +66,28 @@ export default function SiteSnap() {
       setLoading(false);
     }
   }, [activeJob?.id]);
+
+  useEffect(() => {
+    if (isDrawing && canvasRef.current && !fabricCanvasRef.current) {
+      import('fabric').then(({ fabric }) => {
+        const canvas = new fabric.Canvas(canvasRef.current, {
+          isDrawingMode: true,
+          width: window.innerWidth,
+          height: window.innerHeight * 0.6
+        });
+        canvas.freeDrawingBrush.color = '#FF6700';
+        canvas.freeDrawingBrush.width = 3;
+        fabricCanvasRef.current = canvas;
+      });
+    }
+
+    return () => {
+      if (fabricCanvasRef.current) {
+        fabricCanvasRef.current.dispose();
+        fabricCanvasRef.current = null;
+      }
+    };
+  }, [isDrawing]);
 
   const loadPhotos = async () => {
     try {
@@ -283,6 +312,53 @@ export default function SiteSnap() {
     }
   };
 
+  const togglePhotoSelection = (photoId) => {
+    setSelectedForShare(prev => 
+      prev.includes(photoId) ? prev.filter(id => id !== photoId) : [...prev, photoId]
+    );
+  };
+
+  const sharePhotos = async (method) => {
+    const photosToShare = selectedForShare.length > 0 
+      ? uploadedPhotos.filter(p => selectedForShare.includes(p.id))
+      : uploadedPhotos;
+
+    if (method === 'all' && navigator.share) {
+      try {
+        const files = await Promise.all(
+          photosToShare.map(async (photo) => {
+            const response = await fetch(photo.image_url);
+            const blob = await response.blob();
+            return new File([blob], `${activeJob.title}-${photo.id}.jpg`, { type: 'image/jpeg' });
+          })
+        );
+        
+        await navigator.share({
+          title: `${activeJob.title} Photos`,
+          text: `${photosToShare.length} photos from ${activeJob.title}`,
+          files
+        });
+        
+        showToast('Photos shared!', 'success');
+        setShowShareMenu(false);
+        setSelectedForShare([]);
+      } catch (error) {
+        console.error('Error sharing:', error);
+        showToast('Share failed', 'error');
+      }
+    }
+  };
+
+  const saveDrawing = () => {
+    if (fabricCanvasRef.current) {
+      const dataURL = fabricCanvasRef.current.toDataURL();
+      // Save to annotations
+      const drawingAnnotation = { type: 'drawing', data: dataURL, timestamp: new Date().toISOString() };
+      saveAnnotation(JSON.stringify(drawingAnnotation));
+      setIsDrawing(false);
+    }
+  };
+
   const beforePhotos = uploadedPhotos.filter(p => p.photo_type === 'BEFORE');
   const afterPhotos = uploadedPhotos.filter(p => p.photo_type === 'AFTER');
   const standardPhotos = uploadedPhotos.filter(p => p.photo_type === 'STANDARD');
@@ -313,7 +389,15 @@ export default function SiteSnap() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] pb-32">
-      <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
+      {/* FIELDDESKOPS BRANDING TOP */}
+      <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-2">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-center">
+          <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
+          <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
+        </p>
+      </div>
+
+      <div className="sticky top-12 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
@@ -329,9 +413,9 @@ export default function SiteSnap() {
               vibrate();
               setShowUploadPanel(!showUploadPanel);
             }}
-            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors"
+            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_15px_rgba(255,103,0,0.2)]"
           >
-            <Upload size={24} />
+            <Camera size={24} />
           </button>
         </div>
         
@@ -427,7 +511,7 @@ export default function SiteSnap() {
             <button
               onClick={savePhoto}
               disabled={uploading || !fileToUpload}
-              className="w-full bg-[#FF6700] text-black font-bold uppercase py-4 rounded-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[#FF6700] text-black font-bold uppercase py-4 rounded-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(255,103,0,0.3)]"
             >
               {uploading ? 'Saving...' : 'Save Photo'}
             </button>
@@ -440,7 +524,7 @@ export default function SiteSnap() {
             <p className="text-[var(--text-sub)] font-bold mb-4">No photos yet for this job</p>
             <button
               onClick={() => setShowUploadPanel(true)}
-              className="inline-block bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg active:scale-95 transition-all"
+              className="inline-block bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg active:scale-95 transition-all shadow-[0_0_20px_rgba(255,103,0,0.3)]"
             >
               + Upload First Photo
             </button>
@@ -460,7 +544,7 @@ export default function SiteSnap() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  {beforePhotos.slice(0, 2).map((photo, idx) => (
+                  {beforePhotos.slice(0, 2).map((photo) => (
                     <div
                       key={photo.id}
                       onClick={() => {
@@ -482,7 +566,7 @@ export default function SiteSnap() {
                       </div>
                     </div>
                   ))}
-                  {afterPhotos.slice(0, 2).map((photo, idx) => (
+                  {afterPhotos.slice(0, 2).map((photo) => (
                     <div
                       key={photo.id}
                       onClick={() => {
@@ -508,16 +592,27 @@ export default function SiteSnap() {
               </div>
             )}
 
-            {standardPhotos.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-bold uppercase text-[#FF6700] mb-3 flex items-center gap-2">
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold uppercase text-[#FF6700] flex items-center gap-2">
                   <Grid3x3 size={18} />
                   All Photos
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {uploadedPhotos.map((photo, idx) => (
+                <button
+                  onClick={() => setShowShareMenu(true)}
+                  className="flex items-center gap-2 bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.6)] transition-all active:scale-95"
+                >
+                  <Share2 size={16} />
+                  SHARE
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {uploadedPhotos.map((photo, idx) => (
+                  <div
+                    key={photo.id}
+                    className="relative"
+                  >
                     <div
-                      key={photo.id}
                       onClick={() => {
                         vibrate();
                         setFullscreenPhoto(photo);
@@ -555,13 +650,38 @@ export default function SiteSnap() {
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
+                    {showShareMenu && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePhotoSelection(photo.id);
+                        }}
+                        className="absolute top-2 right-2 z-10"
+                      >
+                        <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                          selectedForShare.includes(photo.id)
+                            ? 'bg-[#FF6700] border-[#FF6700]'
+                            : 'bg-black/50 border-white/50'
+                        }`}>
+                          {selectedForShare.includes(photo.id) && <CheckSquare size={16} className="text-black" />}
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </>
         )}
       </main>
+
+      {/* BOTTOM BRANDING */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[var(--bg-main)] border-t border-[var(--border-color)] py-3 z-30">
+        <p className="text-[9px] font-bold uppercase tracking-widest text-center">
+          <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
+          <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
+        </p>
+      </div>
 
       {fullscreenPhoto && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col">
@@ -571,6 +691,7 @@ export default function SiteSnap() {
                 onClick={() => {
                   setFullscreenPhoto(null);
                   setShowBeforeAfter(false);
+                  setIsDrawing(false);
                 }}
                 className="text-white hover:text-[#FF6700] transition-colors"
               >
@@ -596,6 +717,14 @@ export default function SiteSnap() {
                 </button>
               )}
               <button
+                onClick={() => setIsDrawing(!isDrawing)}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDrawing ? 'bg-[#FF6700] text-black' : 'text-white hover:text-[#FF6700]'
+                }`}
+              >
+                <Pencil size={24} />
+              </button>
+              <button
                 onClick={() => deletePhoto(fullscreenPhoto.id)}
                 className="text-red-400 hover:text-red-300 transition-colors p-2"
               >
@@ -604,7 +733,26 @@ export default function SiteSnap() {
             </div>
           </div>
 
-          <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+          <div className="flex-1 flex items-center justify-center overflow-auto p-4 relative">
+            {isDrawing && (
+              <div className="absolute inset-0 z-10">
+                <canvas ref={canvasRef} className="absolute top-0 left-0" />
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                  <button
+                    onClick={saveDrawing}
+                    className="bg-[#FF6700] text-black px-6 py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)]"
+                  >
+                    Save Drawing
+                  </button>
+                  <button
+                    onClick={() => setIsDrawing(false)}
+                    className="bg-white/10 text-white px-6 py-3 rounded-lg font-bold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {showBeforeAfter && beforeAfterPair.before && beforeAfterPair.after ? (
               <div className="w-full max-w-2xl">
                 <ReactCompareSlider
@@ -625,8 +773,8 @@ export default function SiteSnap() {
                   style={{ maxHeight: '70vh' }}
                 />
                 <div className="flex justify-between mt-3 px-4">
-                  <span className="text-xs font-bold uppercase text-red-400">â† BEFORE</span>
-                  <span className="text-xs font-bold uppercase text-green-400">AFTER â†’</span>
+                  <span className="text-xs font-bold uppercase text-red-400">← BEFORE</span>
+                  <span className="text-xs font-bold uppercase text-green-400">AFTER →</span>
                 </div>
               </div>
             ) : fullscreenPhoto.image_url ? (
@@ -656,7 +804,7 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-2">Annotations:</p>
                 <div className="space-y-1 max-h-24 overflow-y-auto">
                   {annotations.map((ann, idx) => (
-                    <p key={idx} className="text-white/70 text-xs">â€¢ {ann.text}</p>
+                    <p key={idx} className="text-white/70 text-xs">• {ann.text}</p>
                   ))}
                 </div>
               </div>
@@ -726,6 +874,42 @@ export default function SiteSnap() {
                 className="flex-1 bg-white/10 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next <ChevronRight size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showShareMenu && (
+        <div className="fixed inset-0 z-[51] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowShareMenu(false); setSelectedForShare([]); }} />
+          <div className="relative bg-[var(--bg-card)] rounded-2xl p-6 max-w-sm w-full border border-[var(--border-color)]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-[#FF6700] uppercase">Share Photos</h2>
+              <button onClick={() => { setShowShareMenu(false); setSelectedForShare([]); }} className="text-[var(--text-sub)]">
+                <X size={24} />
+              </button>
+            </div>
+
+            <p className="text-[var(--text-sub)] text-sm mb-4">
+              {selectedForShare.length > 0 
+                ? `${selectedForShare.length} photo${selectedForShare.length > 1 ? 's' : ''} selected` 
+                : 'Tap photos to select, or share all'}
+            </p>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => sharePhotos('all')}
+                className="w-full bg-[#FF6700] text-black font-bold uppercase py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,103,0,0.4)]"
+              >
+                <Share2 size={18} />
+                {selectedForShare.length > 0 ? `Share Selected (${selectedForShare.length})` : 'Share All Photos'}
+              </button>
+              <button
+                onClick={() => { setShowShareMenu(false); setSelectedForShare([]); }}
+                className="w-full bg-[var(--bg-main)] text-[var(--text-main)] font-bold py-3 rounded-lg active:scale-95 border border-[var(--border-color)]"
+              >
+                Cancel
               </button>
             </div>
           </div>
