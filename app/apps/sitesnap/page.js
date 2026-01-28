@@ -6,8 +6,8 @@ import { useActiveJob } from '../../../hooks/useActiveJob';
 import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
-  LinkIcon, Trash2, Edit2, SplitSquareVertical, Grid3x3,
-  Pencil, Ruler, Share2, Download, CheckSquare, DollarSign, Plus, ChevronDown
+  Trash2, Edit2, SplitSquareVertical, Grid3x3,
+  Share2, DollarSign, Plus, ChevronDown, Lock
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -38,19 +38,14 @@ export default function SiteSnap() {
   const [estimates, setEstimates] = useState([]);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [selectedBeforeAfter, setSelectedBeforeAfter] = useState({ before: null, after: null });
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingMode, setDrawingMode] = useState('pen');
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [selectedForShare, setSelectedForShare] = useState([]);
   const [allJobs, setAllJobs] = useState([]);
   const [showJobSelector, setShowJobSelector] = useState(false);
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  const [linkedEstimate, setLinkedEstimate] = useState(null);
 
-  const canvasRef = useRef(null);
-  const drawingCanvasRef = useRef(null);
-  const isDrawingRef = useRef(false);
-  const lastPosRef = useRef({ x: 0, y: 0 });
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -78,54 +73,13 @@ export default function SiteSnap() {
   }, [activeJob?.id]);
 
   useEffect(() => {
-    if (isDrawing && drawingCanvasRef.current && fullscreenPhoto) {
-      const canvas = drawingCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      
-      // Set canvas size
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      
-      // Drawing settings
-      ctx.strokeStyle = '#FF6700';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+    if (fullscreenPhoto?.estimate_id && estimates.length > 0) {
+      const estimate = estimates.find(e => e.id === fullscreenPhoto.estimate_id);
+      setLinkedEstimate(estimate);
+    } else {
+      setLinkedEstimate(null);
     }
-  }, [isDrawing, fullscreenPhoto]);
-
-  const startDrawing = (e) => {
-    if (!isDrawing || !drawingCanvasRef.current) return;
-    isDrawingRef.current = true;
-    const rect = drawingCanvasRef.current.getBoundingClientRect();
-    lastPosRef.current = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
-  };
-
-  const draw = (e) => {
-    if (!isDrawingRef.current || !drawingCanvasRef.current) return;
-    const canvas = drawingCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    
-    const currentPos = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
-    };
-    
-    ctx.beginPath();
-    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
-    ctx.lineTo(currentPos.x, currentPos.y);
-    ctx.stroke();
-    
-    lastPosRef.current = currentPos;
-  };
-
-  const stopDrawing = () => {
-    isDrawingRef.current = false;
-  };
+  }, [fullscreenPhoto, estimates]);
 
   const loadAllJobs = async () => {
     try {
@@ -324,12 +278,15 @@ export default function SiteSnap() {
         .update({ estimate_id: estimateId })
         .eq('id', fullscreenPhoto.id);
 
+      const estimate = estimates.find(e => e.id === estimateId);
+      
       setUploadedPhotos(uploadedPhotos.map(p =>
         p.id === fullscreenPhoto.id ? { ...p, estimate_id: estimateId } : p
       ));
       setFullscreenPhoto({ ...fullscreenPhoto, estimate_id: estimateId });
+      setLinkedEstimate(estimate);
       setShowEstimateLink(false);
-      showToast('Linked to estimate', 'success');
+      showToast('Linked to estimate!', 'success');
     } catch (error) {
       console.error('Error linking estimate:', error);
       showToast('Error linking estimate', 'error');
@@ -409,20 +366,15 @@ export default function SiteSnap() {
         setShowShareMenu(false);
         setSelectedForShare([]);
       } catch (error) {
-        console.error('Error sharing:', error);
-        showToast('Share cancelled', 'error');
+        if (error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          showToast('Share cancelled', 'error');
+        }
+        setShowShareMenu(false);
+        setSelectedForShare([]);
       }
     } else {
       showToast('Share not supported on this device', 'error');
-    }
-  };
-
-  const saveDrawing = async () => {
-    if (drawingCanvasRef.current) {
-      const dataURL = drawingCanvasRef.current.toDataURL();
-      await saveAnnotation(`Drawing saved: ${new Date().toLocaleTimeString()}`);
-      setIsDrawing(false);
-      showToast('Drawing saved!', 'success');
     }
   };
 
@@ -446,7 +398,7 @@ export default function SiteSnap() {
         <AlertTriangle size={48} className="text-[#FF6700] mb-4" />
         <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">No Active Job</h2>
         <p className="text-[var(--text-sub)] text-center mb-6">Select a job from Command Center to view photos</p>
-        <Link href="/" className="bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg">
+        <Link href="/" className="bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)]">
           Go to Command Center
         </Link>
       </div>
@@ -454,22 +406,17 @@ export default function SiteSnap() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] pb-20">
-      {/* FIELDDESKOPS BRANDING TOP */}
-      <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-center text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">
-          FIELDDESKOPS
-        </p>
-      </div>
-
-      <div className="sticky top-10 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
+    <div className="min-h-screen bg-[var(--bg-main)] pb-20 relative">
+      {/* HEADER - STICKY */}
+      <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
               <ArrowLeft size={28} />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700]">SiteSnap</h1>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-sub)] opacity-60 mb-0.5">FIELDDESKOPS</p>
+              <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] drop-shadow-[0_0_12px_rgba(255,103,0,0.5)]">SiteSnap</h1>
               <p className="text-xs font-bold tracking-widest text-[var(--text-sub)]">PHOTO DOCUMENTATION</p>
             </div>
           </div>
@@ -478,7 +425,7 @@ export default function SiteSnap() {
               vibrate();
               setShowUploadPanel(!showUploadPanel);
             }}
-            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_15px_rgba(255,103,0,0.2)]"
+            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_20px_rgba(255,103,0,0.4)]"
           >
             <Camera size={24} />
           </button>
@@ -508,7 +455,7 @@ export default function SiteSnap() {
           {showJobSelector && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setShowJobSelector(false)} />
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl z-40 max-h-80 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl shadow-2xl z-40 max-h-80 overflow-y-auto backdrop-blur-xl">
                 <div className="p-3 border-b border-[var(--border-color)]">
                   <div className="flex gap-2">
                     <input
@@ -516,13 +463,13 @@ export default function SiteSnap() {
                       value={newJobName}
                       onChange={e => setNewJobName(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && createNewJob()}
-                      className="flex-1 bg-[var(--bg-main)] border border-[var(--border-color)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+                      className="flex-1 bg-[var(--bg-card)] border border-[var(--border-color)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
                       style={{ fontSize: '16px' }}
                     />
                     <button
                       onClick={createNewJob}
                       disabled={isCreatingJob || !newJobName.trim()}
-                      className="bg-[#FF6700] text-black px-3 rounded font-bold disabled:opacity-50"
+                      className="bg-[#FF6700] text-black px-3 rounded font-bold disabled:opacity-50 shadow-[0_0_15px_rgba(255,103,0,0.3)]"
                     >
                       {isCreatingJob ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
                     </button>
@@ -551,7 +498,7 @@ export default function SiteSnap() {
 
       <main className="max-w-6xl mx-auto px-6">
         {showUploadPanel && (
-          <div className="industrial-card rounded-2xl p-6 mb-8 mt-6 border-2 border-[#FF6700]">
+          <div className="industrial-card rounded-2xl p-6 mb-8 mt-6 border-2 border-[#FF6700] shadow-[0_0_30px_rgba(255,103,0,0.2)]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#FF6700] uppercase">Add Photo</h2>
               <button onClick={() => setShowUploadPanel(false)} className="text-[var(--text-sub)]">
@@ -566,7 +513,7 @@ export default function SiteSnap() {
                   onClick={() => setPhotoTag(tag)}
                   className={`py-3 rounded-lg font-bold text-xs uppercase transition-all border ${
                     photoTag === tag
-                      ? 'bg-[#FF6700] text-black border-[#FF6700]'
+                      ? 'bg-[#FF6700] text-black border-[#FF6700] shadow-[0_0_15px_rgba(255,103,0,0.3)]'
                       : 'industrial-card border-[var(--border-color)] text-[var(--text-main)] hover:border-[#FF6700]'
                   }`}
                 >
@@ -627,7 +574,7 @@ export default function SiteSnap() {
             <button
               onClick={savePhoto}
               disabled={uploading || !fileToUpload}
-              className="w-full bg-[#FF6700] text-black font-bold uppercase py-4 rounded-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(255,103,0,0.3)]"
+              className="w-full bg-[#FF6700] text-black font-bold uppercase py-4 rounded-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_25px_rgba(255,103,0,0.4)]"
             >
               {uploading ? 'Saving...' : 'Save Photo'}
             </button>
@@ -640,7 +587,7 @@ export default function SiteSnap() {
             <p className="text-[var(--text-sub)] font-bold mb-4">No photos yet for this job</p>
             <button
               onClick={() => setShowUploadPanel(true)}
-              className="inline-block bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg active:scale-95 transition-all shadow-[0_0_20px_rgba(255,103,0,0.3)]"
+              className="inline-block bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg active:scale-95 transition-all shadow-[0_0_25px_rgba(255,103,0,0.4)]"
             >
               + Upload First Photo
             </button>
@@ -669,6 +616,12 @@ export default function SiteSnap() {
                         setFullscreenPhoto(photo);
                         setCurrentPhotoIndex(photoIdx);
                         setAnnotations(photo.annotations || []);
+                        const before = photo;
+                        const after = afterPhotos[0];
+                        if (before && after) {
+                          setSelectedBeforeAfter({ before, after });
+                          setShowBeforeAfter(true);
+                        }
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
                     >
@@ -690,6 +643,12 @@ export default function SiteSnap() {
                         setFullscreenPhoto(photo);
                         setCurrentPhotoIndex(photoIdx);
                         setAnnotations(photo.annotations || []);
+                        const before = beforePhotos[0];
+                        const after = photo;
+                        if (before && after) {
+                          setSelectedBeforeAfter({ before, after });
+                          setShowBeforeAfter(true);
+                        }
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
                     >
@@ -716,18 +675,31 @@ export default function SiteSnap() {
                   onClick={() => {
                     if (showShareMenu && selectedForShare.length === 0) {
                       sharePhotos();
+                    } else if (showShareMenu && selectedForShare.length > 0) {
+                      sharePhotos();
                     } else {
-                      setShowShareMenu(!showShareMenu);
+                      setShowShareMenu(true);
                     }
                   }}
-                  className="flex items-center gap-2 bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.6)] transition-all active:scale-95"
+                  className="flex items-center gap-2 bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-[0_0_25px_rgba(255,103,0,0.5)] hover:shadow-[0_0_35px_rgba(255,103,0,0.7)] transition-all active:scale-95"
                 >
                   <Share2 size={16} />
                   {showShareMenu ? (selectedForShare.length > 0 ? `SHARE (${selectedForShare.length})` : 'SHARE ALL') : 'SHARE'}
                 </button>
               </div>
               {showShareMenu && (
-                <p className="text-xs text-[var(--text-sub)] mb-2">Tap photos to select, then tap SHARE button again</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-[var(--text-sub)]">Tap photos to select, then tap SHARE button</p>
+                  <button
+                    onClick={() => {
+                      setShowShareMenu(false);
+                      setSelectedForShare([]);
+                    }}
+                    className="text-xs text-[var(--text-sub)] underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {uploadedPhotos.map((photo, idx) => (
@@ -766,8 +738,8 @@ export default function SiteSnap() {
                         </span>
                       </div>
                       {photo.estimate_id && (
-                        <div className="absolute bottom-1 right-1 bg-[#FF6700] p-1 rounded text-black">
-                          <LinkIcon size={14} />
+                        <div className="absolute bottom-1 right-1 bg-[#FF6700] p-1 rounded text-black shadow-[0_0_10px_rgba(255,103,0,0.5)]">
+                          <Lock size={14} />
                         </div>
                       )}
                       {photo.annotations && photo.annotations.length > 0 && (
@@ -782,7 +754,7 @@ export default function SiteSnap() {
                               ? 'bg-[#FF6700] border-[#FF6700]'
                               : 'bg-white/20 border-white/50'
                           }`}>
-                            {selectedForShare.includes(photo.id) && <CheckSquare size={16} className="text-black" />}
+                            {selectedForShare.includes(photo.id) && <X size={16} className="text-black" />}
                           </div>
                         </div>
                       )}
@@ -795,13 +767,15 @@ export default function SiteSnap() {
         )}
       </main>
 
-      {/* BOTTOM FLOATER BRANDING */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-full px-4 py-2 shadow-lg backdrop-blur-xl">
-        <p className="text-[8px] font-bold uppercase tracking-widest">
-          <span className="text-[var(--text-sub)] opacity-40">POWEREDBY</span>
-          <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
-        </p>
-      </div>
+      {/* FLOATING BRANDING - BEHIND MODALS */}
+      {!fullscreenPhoto && !showEstimateLink && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+          <p className="text-[8px] font-bold uppercase tracking-widest">
+            <span className="text-[var(--text-sub)] opacity-40">POWEREDBY</span>
+            <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
+          </p>
+        </div>
+      )}
 
       {fullscreenPhoto && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col">
@@ -811,7 +785,6 @@ export default function SiteSnap() {
                 onClick={() => {
                   setFullscreenPhoto(null);
                   setShowBeforeAfter(false);
-                  setIsDrawing(false);
                 }}
                 className="text-white hover:text-[#FF6700] transition-colors"
               >
@@ -828,7 +801,6 @@ export default function SiteSnap() {
                   onClick={() => {
                     vibrate();
                     if (!showBeforeAfter) {
-                      // Show picker if multiple pairs exist
                       const before = fullscreenPhoto.photo_type === 'BEFORE' ? fullscreenPhoto : beforePhotos[0];
                       const after = fullscreenPhoto.photo_type === 'AFTER' ? fullscreenPhoto : afterPhotos[0];
                       setSelectedBeforeAfter({ before, after });
@@ -836,20 +808,12 @@ export default function SiteSnap() {
                     setShowBeforeAfter(!showBeforeAfter);
                   }}
                   className={`p-2 rounded-lg transition-colors ${
-                    showBeforeAfter ? 'bg-[#FF6700] text-black' : 'text-white hover:text-[#FF6700]'
+                    showBeforeAfter ? 'bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.5)]' : 'text-white hover:text-[#FF6700]'
                   }`}
                 >
                   <SplitSquareVertical size={24} />
                 </button>
               )}
-              <button
-                onClick={() => setIsDrawing(!isDrawing)}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDrawing ? 'bg-[#FF6700] text-black' : 'text-white hover:text-[#FF6700]'
-                }`}
-              >
-                <Pencil size={24} />
-              </button>
               <button
                 onClick={() => deletePhoto(fullscreenPhoto.id)}
                 className="text-red-400 hover:text-red-300 transition-colors p-2"
@@ -860,55 +824,7 @@ export default function SiteSnap() {
           </div>
 
           <div className="flex-1 flex items-center justify-center overflow-auto p-4 relative">
-            {isDrawing ? (
-              <div className="relative w-full h-full flex items-center justify-center">
-                {fullscreenPhoto.image_url && <img src={fullscreenPhoto.image_url} className="max-w-full max-h-full object-contain" alt="Full view" />}
-                <canvas
-                  ref={drawingCanvasRef}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    startDrawing({ clientX: touch.clientX, clientY: touch.clientY });
-                  }}
-                  onTouchMove={(e) => {
-                    e.preventDefault();
-                    const touch = e.touches[0];
-                    draw({ clientX: touch.clientX, clientY: touch.clientY });
-                  }}
-                  onTouchEnd={stopDrawing}
-                  className="absolute inset-0 cursor-crosshair"
-                  style={{ touchAction: 'none' }}
-                />
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-                  <button
-                    onClick={saveDrawing}
-                    className="bg-[#FF6700] text-black px-6 py-3 rounded-lg font-bold shadow-[0_0_20px_rgba(255,103,0,0.4)]"
-                  >
-                    Save Drawing
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (drawingCanvasRef.current) {
-                        const ctx = drawingCanvasRef.current.getContext('2d');
-                        ctx.clearRect(0, 0, drawingCanvasRef.current.width, drawingCanvasRef.current.height);
-                      }
-                    }}
-                    className="bg-white/10 text-white px-6 py-3 rounded-lg font-bold"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    onClick={() => setIsDrawing(false)}
-                    className="bg-white/10 text-white px-6 py-3 rounded-lg font-bold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : showBeforeAfter && selectedBeforeAfter.before && selectedBeforeAfter.after ? (
+            {showBeforeAfter && selectedBeforeAfter.before && selectedBeforeAfter.after ? (
               <div className="w-full max-w-2xl">
                 <ReactCompareSlider
                   itemOne={
@@ -931,30 +847,6 @@ export default function SiteSnap() {
                   <span className="text-xs font-bold uppercase text-red-400">← BEFORE</span>
                   <span className="text-xs font-bold uppercase text-green-400">AFTER →</span>
                 </div>
-                {(beforePhotos.length > 1 || afterPhotos.length > 1) && (
-                  <div className="mt-4 flex gap-2 justify-center">
-                    <button
-                      onClick={() => {
-                        const currentIdx = beforePhotos.findIndex(p => p.id === selectedBeforeAfter.before.id);
-                        const nextIdx = (currentIdx + 1) % beforePhotos.length;
-                        setSelectedBeforeAfter({ ...selectedBeforeAfter, before: beforePhotos[nextIdx] });
-                      }}
-                      className="bg-white/10 text-white px-4 py-2 rounded text-xs font-bold"
-                    >
-                      Next Before
-                    </button>
-                    <button
-                      onClick={() => {
-                        const currentIdx = afterPhotos.findIndex(p => p.id === selectedBeforeAfter.after.id);
-                        const nextIdx = (currentIdx + 1) % afterPhotos.length;
-                        setSelectedBeforeAfter({ ...selectedBeforeAfter, after: afterPhotos[nextIdx] });
-                      }}
-                      className="bg-white/10 text-white px-4 py-2 rounded text-xs font-bold"
-                    >
-                      Next After
-                    </button>
-                  </div>
-                )}
               </div>
             ) : fullscreenPhoto.image_url ? (
               <img src={fullscreenPhoto.image_url} className="max-w-full max-h-full object-contain" alt="Full view" />
@@ -975,6 +867,15 @@ export default function SiteSnap() {
                 {fullscreenPhoto.notes && (
                   <p className="text-white/80 text-sm"><span className="font-bold">Notes:</span> {fullscreenPhoto.notes}</p>
                 )}
+              </div>
+            )}
+
+            {linkedEstimate && (
+              <div className="pb-3 border-b border-white/10">
+                <p className="text-[#FF6700] font-bold text-sm mb-1 flex items-center gap-2">
+                  <Lock size={16} /> Linked Estimate
+                </p>
+                <p className="text-white/80 text-sm">${linkedEstimate.total_price?.toFixed(2)} • {new Date(linkedEstimate.created_at).toLocaleDateString()}</p>
               </div>
             )}
 
@@ -1003,9 +904,55 @@ export default function SiteSnap() {
                 <button
                   onClick={() => saveAnnotation(annotationText)}
                   disabled={!annotationText.trim()}
-                  className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95 disabled:opacity-50"
+                  className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(255,103,0,0.4)]"
                 >
                   Save
+                </button>
+              </div>
+            )}
+
+            {showBeforeAfter ? (
+              <>
+                {(beforePhotos.length > 1 || afterPhotos.length > 1) && (
+                  <div className="flex gap-2 pb-3 border-b border-white/10">
+                    <button
+                      onClick={() => {
+                        const currentIdx = beforePhotos.findIndex(p => p.id === selectedBeforeAfter.before.id);
+                        const nextIdx = (currentIdx + 1) % beforePhotos.length;
+                        setSelectedBeforeAfter({ ...selectedBeforeAfter, before: beforePhotos[nextIdx] });
+                      }}
+                      className="flex-1 bg-red-500/20 text-red-400 font-bold py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 border border-red-500/30"
+                    >
+                      <ChevronLeft size={20} /> Next Before
+                    </button>
+                    <button
+                      onClick={() => {
+                        const currentIdx = afterPhotos.findIndex(p => p.id === selectedBeforeAfter.after.id);
+                        const nextIdx = (currentIdx + 1) % afterPhotos.length;
+                        setSelectedBeforeAfter({ ...selectedBeforeAfter, after: afterPhotos[nextIdx] });
+                      }}
+                      className="flex-1 bg-green-500/20 text-green-400 font-bold py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 border border-green-500/30"
+                    >
+                      Next After <ChevronRight size={20} />
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex gap-2 pb-3 border-b border-white/10">
+                <button
+                  onClick={handlePrevPhoto}
+                  disabled={currentPhotoIndex === 0}
+                  className="flex-1 bg-white/10 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={20} /> Prev
+                </button>
+                <button
+                  onClick={handleNextPhoto}
+                  disabled={currentPhotoIndex === uploadedPhotos.length - 1}
+                  className="flex-1 bg-white/10 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next <ChevronRight size={20} />
                 </button>
               </div>
             )}
@@ -1015,13 +962,13 @@ export default function SiteSnap() {
                 <>
                   <button
                     onClick={() => setIsAnnotating(true)}
-                    className="flex-1 bg-[#FF6700] text-black font-bold uppercase py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="flex-1 bg-[#FF6700] text-black font-bold uppercase py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(255,103,0,0.4)]"
                   >
                     <Edit2 size={18} /> Add Note
                   </button>
                   <button
                     onClick={() => setShowEstimateLink(true)}
-                    className="flex-1 bg-white/10 text-white font-bold uppercase py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-white/20"
+                    className="flex-1 bg-[#FF6700] text-black font-bold uppercase py-3 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(255,103,0,0.4)]"
                   >
                     <DollarSign size={18} /> Estimate
                   </button>
@@ -1037,23 +984,6 @@ export default function SiteSnap() {
                   Cancel
                 </button>
               )}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handlePrevPhoto}
-                disabled={currentPhotoIndex === 0}
-                className="flex-1 bg-white/10 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={20} /> Prev
-              </button>
-              <button
-                onClick={handleNextPhoto}
-                disabled={currentPhotoIndex === uploadedPhotos.length - 1}
-                className="flex-1 bg-white/10 text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next <ChevronRight size={20} />
-              </button>
             </div>
           </div>
         </div>
@@ -1075,7 +1005,7 @@ export default function SiteSnap() {
                 <p className="text-[var(--text-sub)] mb-4">No estimates yet for this job</p>
                 <Link
                   href="/apps/profitlock"
-                  className="inline-block bg-[#FF6700] text-black font-bold uppercase px-4 py-2 rounded-lg text-sm"
+                  className="inline-block bg-[#FF6700] text-black font-bold uppercase px-4 py-2 rounded-lg text-sm shadow-[0_0_20px_rgba(255,103,0,0.4)]"
                 >
                   Create Estimate
                 </Link>
@@ -1088,7 +1018,7 @@ export default function SiteSnap() {
                     onClick={() => linkToEstimate(est.id)}
                     className={`w-full text-left p-3 rounded-lg hover:border-[#FF6700] border transition-colors ${
                       fullscreenPhoto.estimate_id === est.id
-                        ? 'border-[#FF6700] bg-[#FF6700]/10'
+                        ? 'border-[#FF6700] bg-[#FF6700]/10 shadow-[0_0_15px_rgba(255,103,0,0.2)]'
                         : 'bg-[var(--bg-main)] border-[var(--border-color)]'
                     }`}
                   >
@@ -1110,7 +1040,7 @@ export default function SiteSnap() {
       )}
 
       {toast && (
-        <div className={`fixed bottom-24 right-6 px-4 py-3 rounded-lg font-bold text-sm animate-in slide-in-from-bottom-5 shadow-xl ${
+        <div className={`fixed bottom-24 right-6 px-4 py-3 rounded-lg font-bold text-sm animate-in slide-in-from-bottom-5 shadow-xl z-50 ${
           toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
         }`}>
           {toast.msg}
