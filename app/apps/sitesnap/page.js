@@ -2,18 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '../../utils/supabase/client';
-import { useJobSelector } from '../../hooks/useJobSelector';
-import JobSelector from '../../components/JobSelector';
+import { useActiveJob } from '../../hooks/useActiveJob';
 import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
-  LinkIcon, Trash2, Edit2
+  LinkIcon, Trash2, Edit2, SplitSquareVertical, Grid3x3
 } from 'lucide-react';
 import Link from 'next/link';
+import {
+  ReactCompareSlider,
+  ReactCompareSliderImage
+} from 'react-compare-slider';
 
 export default function SiteSnap() {
   const supabase = createClient();
-  const { activeJob } = useJobSelector();
+  const { activeJob } = useActiveJob();
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +35,8 @@ export default function SiteSnap() {
   const [annotationText, setAnnotationText] = useState('');
   const [showEstimateLink, setShowEstimateLink] = useState(false);
   const [estimates, setEstimates] = useState([]);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+  const [beforeAfterPair, setBeforeAfterPair] = useState({ before: null, after: null });
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -49,6 +54,9 @@ export default function SiteSnap() {
     if (activeJob?.id) {
       loadPhotos();
       loadEstimates();
+    } else {
+      setUploadedPhotos([]);
+      setLoading(false);
     }
   }, [activeJob?.id]);
 
@@ -218,6 +226,7 @@ export default function SiteSnap() {
       setCurrentPhotoIndex(newIndex);
       setFullscreenPhoto(uploadedPhotos[newIndex]);
       setAnnotations(uploadedPhotos[newIndex].annotations || []);
+      checkBeforeAfterPair(uploadedPhotos[newIndex]);
     }
   };
 
@@ -227,6 +236,27 @@ export default function SiteSnap() {
       setCurrentPhotoIndex(newIndex);
       setFullscreenPhoto(uploadedPhotos[newIndex]);
       setAnnotations(uploadedPhotos[newIndex].annotations || []);
+      checkBeforeAfterPair(uploadedPhotos[newIndex]);
+    }
+  };
+
+  const checkBeforeAfterPair = (currentPhoto) => {
+    if (currentPhoto.photo_type === 'BEFORE') {
+      const matchingAfter = uploadedPhotos.find(p => p.photo_type === 'AFTER' && p.id !== currentPhoto.id);
+      if (matchingAfter) {
+        setBeforeAfterPair({ before: currentPhoto, after: matchingAfter });
+      } else {
+        setBeforeAfterPair({ before: null, after: null });
+      }
+    } else if (currentPhoto.photo_type === 'AFTER') {
+      const matchingBefore = uploadedPhotos.find(p => p.photo_type === 'BEFORE' && p.id !== currentPhoto.id);
+      if (matchingBefore) {
+        setBeforeAfterPair({ before: matchingBefore, after: currentPhoto });
+      } else {
+        setBeforeAfterPair({ before: null, after: null });
+      }
+    } else {
+      setBeforeAfterPair({ before: null, after: null });
     }
   };
 
@@ -241,6 +271,9 @@ export default function SiteSnap() {
 
       setAnnotations(updatedAnnotations);
       setFullscreenPhoto({ ...fullscreenPhoto, annotations: updatedAnnotations });
+      setUploadedPhotos(uploadedPhotos.map(p =>
+        p.id === fullscreenPhoto.id ? { ...p, annotations: updatedAnnotations } : p
+      ));
       setAnnotationText('');
       setIsAnnotating(false);
       showToast('Annotation saved', 'success');
@@ -249,6 +282,10 @@ export default function SiteSnap() {
       showToast('Error saving annotation', 'error');
     }
   };
+
+  const beforePhotos = uploadedPhotos.filter(p => p.photo_type === 'BEFORE');
+  const afterPhotos = uploadedPhotos.filter(p => p.photo_type === 'AFTER');
+  const standardPhotos = uploadedPhotos.filter(p => p.photo_type === 'STANDARD');
 
   if (loading) {
     return (
@@ -261,10 +298,23 @@ export default function SiteSnap() {
     );
   }
 
+  if (!activeJob) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-main)] px-6">
+        <AlertTriangle size={48} className="text-[#FF6700] mb-4" />
+        <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">No Active Job</h2>
+        <p className="text-[var(--text-sub)] text-center mb-6">Select a job from Command Center to view photos</p>
+        <Link href="/" className="bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg">
+          Go to Command Center
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg-main)] pb-32">
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
               <ArrowLeft size={28} />
@@ -284,12 +334,24 @@ export default function SiteSnap() {
             <Upload size={24} />
           </button>
         </div>
-        <JobSelector />
+        
+        <div className="industrial-card p-3 rounded-lg flex items-center justify-between">
+          <div>
+            <p className="text-[var(--text-main)] font-bold uppercase text-sm">{activeJob.title}</p>
+            <p className="text-[var(--text-sub)] text-xs">{uploadedPhotos.length} photo{uploadedPhotos.length !== 1 ? 's' : ''}</p>
+          </div>
+          {(beforePhotos.length > 0 && afterPhotos.length > 0) && (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-green-500">
+              <SplitSquareVertical size={14} />
+              <span>B/A READY</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-6">
         {showUploadPanel && (
-          <div className="industrial-card rounded-2xl p-6 mb-8 border-2 border-[#FF6700]">
+          <div className="industrial-card rounded-2xl p-6 mb-8 mt-6 border-2 border-[#FF6700]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#FF6700] uppercase">Add Photo</h2>
               <button onClick={() => setShowUploadPanel(false)} className="text-[var(--text-sub)]">
@@ -373,7 +435,7 @@ export default function SiteSnap() {
         )}
 
         {uploadedPhotos.length === 0 ? (
-          <div className="py-12 text-center">
+          <div className="py-12 text-center mt-8">
             <ImageIcon size={48} className="mx-auto mb-4 text-[var(--text-sub)] opacity-50" />
             <p className="text-[var(--text-sub)] font-bold mb-4">No photos yet for this job</p>
             <button
@@ -384,52 +446,132 @@ export default function SiteSnap() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-8">
-            {uploadedPhotos.map((photo, idx) => (
-              <div
-                key={photo.id}
-                onClick={() => {
-                  vibrate();
-                  setFullscreenPhoto(photo);
-                  setCurrentPhotoIndex(idx);
-                  setAnnotations(photo.annotations || []);
-                }}
-                className="relative h-32 sm:h-40 rounded-lg overflow-hidden cursor-pointer group industrial-card"
-              >
-                {photo.image_url ? (
-                  <img src={photo.image_url} className="w-full h-full object-cover" alt="Photo" />
-                ) : (
-                  <div className="w-full h-full bg-[var(--bg-surface)] flex items-center justify-center">
-                    <AlertTriangle size={24} className="text-[var(--text-sub)]" />
+          <>
+            {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+              <div className="mb-6 mt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold uppercase text-[#FF6700] flex items-center gap-2">
+                    <SplitSquareVertical size={18} />
+                    Before / After
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-[var(--text-sub)]">
+                    <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold">{beforePhotos.length} BEFORE</span>
+                    <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded font-bold">{afterPhotos.length} AFTER</span>
                   </div>
-                )}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                <div className="absolute top-1 left-1">
-                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                    photo.photo_type === 'BEFORE' ? 'bg-red-500 text-white' :
-                    photo.photo_type === 'AFTER' ? 'bg-green-500 text-white' :
-                    'bg-blue-500 text-white'
-                  }`}>
-                    {photo.photo_type}
-                  </span>
                 </div>
-                {photo.estimate_id && (
-                  <div className="absolute bottom-1 right-1 bg-[#FF6700] p-1 rounded text-black">
-                    <LinkIcon size={14} />
-                  </div>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  {beforePhotos.slice(0, 2).map((photo, idx) => (
+                    <div
+                      key={photo.id}
+                      onClick={() => {
+                        vibrate();
+                        const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
+                        setFullscreenPhoto(photo);
+                        setCurrentPhotoIndex(photoIdx);
+                        setAnnotations(photo.annotations || []);
+                        checkBeforeAfterPair(photo);
+                      }}
+                      className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
+                    >
+                      {photo.image_url && <img src={photo.image_url} className="w-full h-full object-cover" alt="Before" />}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <div className="absolute top-1 left-1">
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-red-500 text-white">
+                          BEFORE
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {afterPhotos.slice(0, 2).map((photo, idx) => (
+                    <div
+                      key={photo.id}
+                      onClick={() => {
+                        vibrate();
+                        const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
+                        setFullscreenPhoto(photo);
+                        setCurrentPhotoIndex(photoIdx);
+                        setAnnotations(photo.annotations || []);
+                        checkBeforeAfterPair(photo);
+                      }}
+                      className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
+                    >
+                      {photo.image_url && <img src={photo.image_url} className="w-full h-full object-cover" alt="After" />}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <div className="absolute top-1 left-1">
+                        <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-green-500 text-white">
+                          AFTER
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {standardPhotos.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-bold uppercase text-[#FF6700] mb-3 flex items-center gap-2">
+                  <Grid3x3 size={18} />
+                  All Photos
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {uploadedPhotos.map((photo, idx) => (
+                    <div
+                      key={photo.id}
+                      onClick={() => {
+                        vibrate();
+                        setFullscreenPhoto(photo);
+                        setCurrentPhotoIndex(idx);
+                        setAnnotations(photo.annotations || []);
+                        checkBeforeAfterPair(photo);
+                      }}
+                      className="relative h-32 sm:h-40 rounded-lg overflow-hidden cursor-pointer group industrial-card"
+                    >
+                      {photo.image_url ? (
+                        <img src={photo.image_url} className="w-full h-full object-cover" alt="Photo" />
+                      ) : (
+                        <div className="w-full h-full bg-[var(--bg-surface)] flex items-center justify-center">
+                          <AlertTriangle size={24} className="text-[var(--text-sub)]" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <div className="absolute top-1 left-1">
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                          photo.photo_type === 'BEFORE' ? 'bg-red-500 text-white' :
+                          photo.photo_type === 'AFTER' ? 'bg-green-500 text-white' :
+                          'bg-blue-500 text-white'
+                        }`}>
+                          {photo.photo_type}
+                        </span>
+                      </div>
+                      {photo.estimate_id && (
+                        <div className="absolute bottom-1 right-1 bg-[#FF6700] p-1 rounded text-black">
+                          <LinkIcon size={14} />
+                        </div>
+                      )}
+                      {photo.annotations && photo.annotations.length > 0 && (
+                        <div className="absolute bottom-1 left-1 bg-black/80 px-1.5 py-0.5 rounded text-white text-[9px] font-bold">
+                          {photo.annotations.length} NOTE{photo.annotations.length > 1 ? 'S' : ''}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
 
       {fullscreenPhoto && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col">
           <div className="flex items-center justify-between p-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setFullscreenPhoto(null)}
+                onClick={() => {
+                  setFullscreenPhoto(null);
+                  setShowBeforeAfter(false);
+                }}
                 className="text-white hover:text-[#FF6700] transition-colors"
               >
                 <X size={28} />
@@ -439,16 +581,55 @@ export default function SiteSnap() {
                 <p className="text-white font-bold text-sm">{fullscreenPhoto.photo_type}</p>
               </div>
             </div>
-            <button
-              onClick={() => deletePhoto(fullscreenPhoto.id)}
-              className="text-red-400 hover:text-red-300 transition-colors"
-            >
-              <Trash2 size={24} />
-            </button>
+            <div className="flex items-center gap-2">
+              {beforeAfterPair.before && beforeAfterPair.after && (
+                <button
+                  onClick={() => {
+                    vibrate();
+                    setShowBeforeAfter(!showBeforeAfter);
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${
+                    showBeforeAfter ? 'bg-[#FF6700] text-black' : 'text-white hover:text-[#FF6700]'
+                  }`}
+                >
+                  <SplitSquareVertical size={24} />
+                </button>
+              )}
+              <button
+                onClick={() => deletePhoto(fullscreenPhoto.id)}
+                className="text-red-400 hover:text-red-300 transition-colors p-2"
+              >
+                <Trash2 size={24} />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 flex items-center justify-center overflow-auto p-4">
-            {fullscreenPhoto.image_url ? (
+            {showBeforeAfter && beforeAfterPair.before && beforeAfterPair.after ? (
+              <div className="w-full max-w-2xl">
+                <ReactCompareSlider
+                  itemOne={
+                    <ReactCompareSliderImage
+                      src={beforeAfterPair.before.image_url}
+                      alt="Before"
+                      style={{ objectFit: 'contain', maxHeight: '70vh' }}
+                    />
+                  }
+                  itemTwo={
+                    <ReactCompareSliderImage
+                      src={beforeAfterPair.after.image_url}
+                      alt="After"
+                      style={{ objectFit: 'contain', maxHeight: '70vh' }}
+                    />
+                  }
+                  style={{ maxHeight: '70vh' }}
+                />
+                <div className="flex justify-between mt-3 px-4">
+                  <span className="text-xs font-bold uppercase text-red-400">← BEFORE</span>
+                  <span className="text-xs font-bold uppercase text-green-400">AFTER →</span>
+                </div>
+              </div>
+            ) : fullscreenPhoto.image_url ? (
               <img src={fullscreenPhoto.image_url} className="max-w-full max-h-full object-contain" alt="Full view" />
             ) : (
               <div className="flex flex-col items-center gap-3">
@@ -458,7 +639,7 @@ export default function SiteSnap() {
             )}
           </div>
 
-          <div className="bg-black/80 border-t border-white/10 p-4 space-y-3">
+          <div className="bg-black/80 border-t border-white/10 p-4 space-y-3 max-h-[40vh] overflow-y-auto">
             {(fullscreenPhoto.caption || fullscreenPhoto.notes) && (
               <div className="space-y-2 pb-3 border-b border-white/10">
                 {fullscreenPhoto.caption && (
@@ -488,13 +669,14 @@ export default function SiteSnap() {
                   placeholder="Add note or label..."
                   value={annotationText}
                   onChange={e => setAnnotationText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && saveAnnotation(annotationText)}
+                  onKeyDown={e => e.key === 'Enter' && annotationText.trim() && saveAnnotation(annotationText)}
                   className="flex-1 bg-white/10 text-white rounded px-3 py-2 placeholder:text-white/40 outline-none focus:bg-white/20 text-sm"
                   style={{ fontSize: '16px' }}
                 />
                 <button
                   onClick={() => saveAnnotation(annotationText)}
-                  className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95"
+                  disabled={!annotationText.trim()}
+                  className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95 disabled:opacity-50"
                 >
                   Save
                 </button>
@@ -519,7 +701,10 @@ export default function SiteSnap() {
                 </>
               ) : (
                 <button
-                  onClick={() => setIsAnnotating(false)}
+                  onClick={() => {
+                    setIsAnnotating(false);
+                    setAnnotationText('');
+                  }}
                   className="flex-1 bg-white/10 text-white font-bold uppercase py-3 rounded-lg active:scale-95"
                 >
                   Cancel
@@ -559,14 +744,26 @@ export default function SiteSnap() {
             </div>
 
             {estimates.length === 0 ? (
-              <p className="text-[var(--text-sub)] text-center py-6">No estimates yet for this job</p>
+              <div className="text-center py-6">
+                <p className="text-[var(--text-sub)] mb-4">No estimates yet for this job</p>
+                <Link
+                  href="/apps/profitlock"
+                  className="inline-block bg-[#FF6700] text-black font-bold uppercase px-4 py-2 rounded-lg text-sm"
+                >
+                  Create Estimate
+                </Link>
+              </div>
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {estimates.map(est => (
                   <button
                     key={est.id}
                     onClick={() => linkToEstimate(est.id)}
-                    className="w-full text-left p-3 rounded-lg bg-[var(--bg-main)] hover:border-[#FF6700] border border-[var(--border-color)] transition-colors"
+                    className={`w-full text-left p-3 rounded-lg hover:border-[#FF6700] border transition-colors ${
+                      fullscreenPhoto.estimate_id === est.id
+                        ? 'border-[#FF6700] bg-[#FF6700]/10'
+                        : 'bg-[var(--bg-main)] border-[var(--border-color)]'
+                    }`}
                   >
                     <p className="font-bold text-[var(--text-main)] text-sm">${est.total_price?.toFixed(2)}</p>
                     <p className="text-xs text-[var(--text-sub)]">{new Date(est.created_at).toLocaleDateString()}</p>
@@ -586,7 +783,7 @@ export default function SiteSnap() {
       )}
 
       {toast && (
-        <div className={`fixed bottom-24 right-6 px-4 py-3 rounded-lg font-bold text-sm animate-in slide-in-from-bottom-5 ${
+        <div className={`fixed bottom-24 right-6 px-4 py-3 rounded-lg font-bold text-sm animate-in slide-in-from-bottom-5 shadow-xl ${
           toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
         }`}>
           {toast.msg}
