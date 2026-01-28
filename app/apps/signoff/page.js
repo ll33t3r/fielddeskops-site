@@ -62,6 +62,21 @@ export default function SignOff() {
     }
   };
 
+  // REAL-TIME VARIABLE REPLACEMENT IN CONTRACT BODY
+  const getDisplayedContractBody = () => {
+    let result = contractBody;
+    if (clientName) {
+      result = result.replaceAll("[CUSTOMER]", clientName);
+    }
+    if (contractorName) {
+      result = result.replaceAll("[CONTRACTOR]", contractorName);
+    }
+    Object.keys(smartVariables).forEach((variable) => {
+      result = result.replaceAll(variable, smartVariables[variable]);
+    });
+    return result;
+  };
+
   const loadJobBrainData = async (jobId) => {
     if (!jobId) {
       setSmartVariables({});
@@ -75,7 +90,6 @@ export default function SignOff() {
       if (job) {
         setJobBrainData(job);
         
-        // AUTO-POPULATE NAMES FROM JOB DATA
         if (job.customer_name) setClientName(job.customer_name);
         if (job.contractor_name) setContractorName(job.contractor_name);
         
@@ -84,8 +98,6 @@ export default function SignOff() {
 
         const vars = {
           "[JOB_NAME]": job.title || "",
-          "[CUSTOMER]": job.customer_name || "",
-          "[CONTRACTOR]": job.contractor_name || "",
           "[DATE]": new Date().toLocaleDateString(),
           "[JOB_STATUS]": job.status || "Active",
           "[JOB_ADDRESS]": job.address || ""
@@ -108,8 +120,10 @@ export default function SignOff() {
 
   const applySmartVariables = (text) => {
     let result = text;
+    if (clientName) result = result.replaceAll("[CUSTOMER]", clientName);
+    if (contractorName) result = result.replaceAll("[CONTRACTOR]", contractorName);
     Object.keys(smartVariables).forEach((variable) => {
-      result = result.split(variable).join(smartVariables[variable]);
+      result = result.replaceAll(variable, smartVariables[variable]);
     });
     return result;
   };
@@ -119,22 +133,19 @@ export default function SignOff() {
   };
 
   const removeVariableFromTemplate = (variable) => {
-    setNewTemplateBody(prev => prev.split(variable).join(""));
+    setNewTemplateBody(prev => prev.replaceAll(variable, ""));
   };
 
-  // RESTORE CONTRACT FROM HISTORY
   const restoreContract = (contract) => {
     setContractBody(contract.contract_body);
     setClientName(contract.client_name || "");
     setContractorName(contract.contractor_name || "");
     
-    // Find and set the job if it exists
     if (contract.job_id) {
       const job = recentJobs.find(j => j.id === contract.job_id);
       if (job) setSelectedJob(job);
     }
     
-    // Close menu and scroll to top
     setShowMenu(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showToast("Contract loaded", "success");
@@ -193,7 +204,7 @@ export default function SignOff() {
       return;
     }
     if (!clientName.trim()) {
-      showToast("Add client name", "error");
+      showToast("Add customer name", "error");
       return;
     }
     if (!hasSigned) {
@@ -297,7 +308,6 @@ export default function SignOff() {
     loadAllData();
   }, []);
 
-  // AUTO-POPULATE when job changes
   useEffect(() => {
     if (selectedJob?.id) {
       loadJobBrainData(selectedJob.id);
@@ -357,11 +367,11 @@ export default function SignOff() {
       )}
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
-        {/* PINNED TEMPLATES ROW */}
+        {/* PINNED TEMPLATES ROW - SMALLER */}
         {pinnedTemplates.length > 0 && (
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Quick Templates</label>
-            <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+            <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
               {pinnedTemplates.map((template) => (
                 <button
                   key={template.id}
@@ -370,11 +380,11 @@ export default function SignOff() {
                     vibrate(10);
                     showToast("Template applied", "success");
                   }}
-                  className="flex-shrink-0 px-4 py-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] transition-colors"
+                  className="flex-shrink-0 px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <Pin size={14} className="text-[#FF6700]" />
-                    <span className="text-sm font-semibold whitespace-nowrap">{template.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Pin size={12} className="text-[#FF6700]" />
+                    <span className="text-xs font-semibold whitespace-nowrap">{template.label}</span>
                   </div>
                 </button>
               ))}
@@ -382,21 +392,21 @@ export default function SignOff() {
           </div>
         )}
 
-        {/* CLIENT NAME */}
+        {/* CUSTOMER NAME */}
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Client Name</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Customer</label>
           <input
             type="text"
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
-            placeholder="Enter client name"
+            placeholder="Enter customer name"
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
           />
         </div>
 
         {/* CONTRACTOR NAME */}
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Your Business Name</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contractor</label>
           <input
             type="text"
             value={contractorName}
@@ -406,7 +416,7 @@ export default function SignOff() {
           />
         </div>
 
-        {/* CONTRACT BODY */}
+        {/* CONTRACT BODY WITH LIVE PREVIEW */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contract Text</label>
           <textarea
@@ -416,6 +426,12 @@ export default function SignOff() {
             rows={12}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
           />
+          {(clientName || contractorName || Object.keys(smartVariables).length > 0) && contractBody.includes("[") && (
+            <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
+              <p className="text-xs font-bold text-blue-400 mb-2">Live Preview:</p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap">{getDisplayedContractBody()}</p>
+            </div>
+          )}
         </div>
 
         {/* SIGNATURE PAD */}
@@ -472,6 +488,18 @@ export default function SignOff() {
         </button>
       </main>
 
+      {/* POWERED BY FIELDDESKOPS FOOTER */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--bg-main)] to-transparent py-4 pointer-events-none z-30">
+        <div className="text-center">
+          <p className="text-[10px] font-bold tracking-wider text-gray-500">
+            POWERED BY <span style={{
+              color: "#FF6700",
+              textShadow: "0 0 8px rgba(255,103,0,0.4)"
+            }}>FIELDDESKOPS</span>
+          </p>
+        </div>
+      </div>
+
       {/* MENU MODAL */}
       {showMenu && (
         <div className="fixed inset-0 bg-black/90 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
@@ -487,7 +515,6 @@ export default function SignOff() {
                 </button>
               </div>
               
-              {/* TABS */}
               <div className="flex gap-2">
                 {["BRAIN", "TEMPLATES", "HISTORY"].map((tab) => (
                   <button
@@ -506,7 +533,6 @@ export default function SignOff() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {/* BRAIN TAB */}
               {menuTab === "BRAIN" && (
                 <div className="space-y-4">
                   {jobBrainData ? (
@@ -538,6 +564,14 @@ export default function SignOff() {
                       <div className="space-y-2">
                         <p className="text-sm font-bold text-gray-400">Smart Variables Available:</p>
                         <div className="grid grid-cols-2 gap-2">
+                          <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
+                            <p className="text-xs font-mono text-[#FF6700]">[CUSTOMER]</p>
+                            <p className="text-xs text-gray-400 truncate">{clientName || "Not set"}</p>
+                          </div>
+                          <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
+                            <p className="text-xs font-mono text-[#FF6700]">[CONTRACTOR]</p>
+                            <p className="text-xs text-gray-400 truncate">{contractorName || "Not set"}</p>
+                          </div>
                           {Object.keys(smartVariables).map((varName) => (
                             <div
                               key={varName}
@@ -578,7 +612,6 @@ export default function SignOff() {
                 </div>
               )}
 
-              {/* TEMPLATES TAB */}
               {menuTab === "TEMPLATES" && (
                 <div className="space-y-4">
                   <button
@@ -635,7 +668,6 @@ export default function SignOff() {
                 </div>
               )}
 
-              {/* HISTORY TAB */}
               {menuTab === "HISTORY" && (
                 <div className="space-y-3">
                   {contracts.length === 0 ? (
@@ -718,30 +750,56 @@ export default function SignOff() {
                 </select>
               </div>
 
-              {jobBrainData && (
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Smart Variables (Click to Add/Remove)</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.keys(smartVariables).map((varName) => {
-                      const isInBody = newTemplateBody.includes(varName);
-                      return (
-                        <button
-                          key={varName}
-                          onClick={() => isInBody ? removeVariableFromTemplate(varName) : insertVariable(varName)}
-                          className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${
-                            isInBody
-                              ? "bg-[#FF6700] text-black border-2 border-[#FF6700]"
-                              : "bg-[#FF6700]/10 text-[#FF6700] border border-[#FF6700]/30"
-                          }`}
-                        >
-                          {isInBody && <Check size={12} className="inline mr-1" />}
-                          {varName}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Smart Variables (Click to Add/Remove)</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const isInBody = newTemplateBody.includes("[CUSTOMER]");
+                      isInBody ? removeVariableFromTemplate("[CUSTOMER]") : insertVariable("[CUSTOMER]");
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${
+                      newTemplateBody.includes("[CUSTOMER]")
+                        ? "bg-[#FF6700] text-black border-2 border-[#FF6700]"
+                        : "bg-[#FF6700]/10 text-[#FF6700] border border-[#FF6700]/30"
+                    }`}
+                  >
+                    {newTemplateBody.includes("[CUSTOMER]") && <Check size={12} className="inline mr-1" />}
+                    [CUSTOMER]
+                  </button>
+                  <button
+                    onClick={() => {
+                      const isInBody = newTemplateBody.includes("[CONTRACTOR]");
+                      isInBody ? removeVariableFromTemplate("[CONTRACTOR]") : insertVariable("[CONTRACTOR]");
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${
+                      newTemplateBody.includes("[CONTRACTOR]")
+                        ? "bg-[#FF6700] text-black border-2 border-[#FF6700]"
+                        : "bg-[#FF6700]/10 text-[#FF6700] border border-[#FF6700]/30"
+                    }`}
+                  >
+                    {newTemplateBody.includes("[CONTRACTOR]") && <Check size={12} className="inline mr-1" />}
+                    [CONTRACTOR]
+                  </button>
+                  {Object.keys(smartVariables).map((varName) => {
+                    const isInBody = newTemplateBody.includes(varName);
+                    return (
+                      <button
+                        key={varName}
+                        onClick={() => isInBody ? removeVariableFromTemplate(varName) : insertVariable(varName)}
+                        className={`px-3 py-2 rounded-lg text-xs font-mono transition-all ${
+                          isInBody
+                            ? "bg-[#FF6700] text-black border-2 border-[#FF6700]"
+                            : "bg-[#FF6700]/10 text-[#FF6700] border border-[#FF6700]/30"
+                        }`}
+                      >
+                        {isInBody && <Check size={12} className="inline mr-1" />}
+                        {varName}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Template Text</label>
