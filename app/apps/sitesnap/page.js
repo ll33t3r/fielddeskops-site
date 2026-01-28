@@ -430,7 +430,7 @@ export default function SiteSnap() {
               vibrate();
               setShowUploadPanel(!showUploadPanel);
             }}
-            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_25px_rgba(255,103,0,0.5)]"
+            className="bg-[#FF6700] text-black p-3 rounded-xl transition-all hover:scale-105 shadow-[0_0_30px_rgba(255,103,0,0.6)] active:scale-95"
           >
             <Camera size={24} />
           </button>
@@ -935,8 +935,8 @@ export default function SiteSnap() {
                   style={{ maxHeight: '70vh' }}
                 />
                 <div className="flex justify-between mt-3 px-4">
-                  <span className="text-xs font-bold uppercase text-red-400">← BEFORE</span>
-                  <span className="text-xs font-bold uppercase text-green-400">AFTER →</span>
+                  <span className="text-xs font-bold uppercase text-red-400">â† BEFORE</span>
+                  <span className="text-xs font-bold uppercase text-green-400">AFTER â†’</span>
                 </div>
               </div>
             ) : fullscreenPhoto.image_url ? (
@@ -966,7 +966,7 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-1 flex items-center gap-2">
                   <Lock size={16} /> Linked Estimate
                 </p>
-                <p className="text-white/80 text-sm">${linkedEstimate.total_price?.toFixed(2)} • {new Date(linkedEstimate.created_at).toLocaleDateString()}</p>
+                <p className="text-white/80 text-sm">${linkedEstimate.total_price?.toFixed(2)} â€¢ {new Date(linkedEstimate.created_at).toLocaleDateString()}</p>
               </div>
             )}
 
@@ -975,7 +975,7 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-2">Annotations:</p>
                 <div className="space-y-1 max-h-24 overflow-y-auto">
                   {annotations.map((ann, idx) => (
-                    <p key={idx} className="text-white/70 text-xs">• {ann.text}</p>
+                    <p key={idx} className="text-white/70 text-xs">â€¢ {ann.text}</p>
                   ))}
                 </div>
               </div>
