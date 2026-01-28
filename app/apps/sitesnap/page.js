@@ -7,7 +7,7 @@ import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
   Trash2, Edit2, SplitSquareVertical, Grid3x3,
-  Share2, DollarSign, Plus, ChevronDown, Lock
+  Share2, DollarSign, Plus, ChevronDown, Lock, CheckSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -38,13 +38,14 @@ export default function SiteSnap() {
   const [estimates, setEstimates] = useState([]);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
   const [selectedBeforeAfter, setSelectedBeforeAfter] = useState({ before: null, after: null });
-  const [showShareMenu, setShowShareMenu] = useState(false);
-  const [selectedForShare, setSelectedForShare] = useState([]);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [allJobs, setAllJobs] = useState([]);
   const [showJobSelector, setShowJobSelector] = useState(false);
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [linkedEstimate, setLinkedEstimate] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -257,16 +258,22 @@ export default function SiteSnap() {
     }
   };
 
-  const deletePhoto = async (photoId) => {
-    if (!confirm('Delete this photo?')) return;
+  const deleteSelectedPhotos = async () => {
     try {
-      await supabase.from('photos').delete().eq('id', photoId);
-      setUploadedPhotos(uploadedPhotos.filter(p => p.id !== photoId));
-      setFullscreenPhoto(null);
-      showToast('Photo deleted', 'success');
+      await Promise.all(
+        selectedPhotos.map(photoId => 
+          supabase.from('photos').delete().eq('id', photoId)
+        )
+      );
+      
+      setUploadedPhotos(uploadedPhotos.filter(p => !selectedPhotos.includes(p.id)));
+      setSelectedPhotos([]);
+      setSelectMode(false);
+      setShowDeleteConfirm(false);
+      showToast(`${selectedPhotos.length} photo${selectedPhotos.length > 1 ? 's' : ''} deleted`, 'success');
     } catch (error) {
-      console.error('Error deleting photo:', error);
-      showToast('Error deleting photo', 'error');
+      console.error('Error deleting photos:', error);
+      showToast('Error deleting photos', 'error');
     }
   };
 
@@ -336,14 +343,14 @@ export default function SiteSnap() {
 
   const togglePhotoSelection = (photoId) => {
     vibrate();
-    setSelectedForShare(prev => 
+    setSelectedPhotos(prev => 
       prev.includes(photoId) ? prev.filter(id => id !== photoId) : [...prev, photoId]
     );
   };
 
   const sharePhotos = async () => {
-    const photosToShare = selectedForShare.length > 0 
-      ? uploadedPhotos.filter(p => selectedForShare.includes(p.id))
+    const photosToShare = selectedPhotos.length > 0 
+      ? uploadedPhotos.filter(p => selectedPhotos.includes(p.id))
       : uploadedPhotos;
 
     if (navigator.share) {
@@ -363,15 +370,13 @@ export default function SiteSnap() {
         });
         
         showToast('Photos shared!', 'success');
-        setShowShareMenu(false);
-        setSelectedForShare([]);
+        setSelectMode(false);
+        setSelectedPhotos([]);
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('Error sharing:', error);
           showToast('Share cancelled', 'error');
         }
-        setShowShareMenu(false);
-        setSelectedForShare([]);
       }
     } else {
       showToast('Share not supported on this device', 'error');
@@ -406,7 +411,7 @@ export default function SiteSnap() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] pb-20 relative">
+    <div className="min-h-screen bg-[var(--bg-main)] pb-32 relative">
       {/* HEADER - STICKY */}
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between mb-3">
@@ -415,7 +420,7 @@ export default function SiteSnap() {
               <ArrowLeft size={28} />
             </Link>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-sub)] opacity-60 mb-0.5">FIELDDESKOPS</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#FF6700] mb-0.5">FIELDDESKOPS</p>
               <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] drop-shadow-[0_0_12px_rgba(255,103,0,0.5)]">SiteSnap</h1>
               <p className="text-xs font-bold tracking-widest text-[var(--text-sub)]">PHOTO DOCUMENTATION</p>
             </div>
@@ -425,7 +430,7 @@ export default function SiteSnap() {
               vibrate();
               setShowUploadPanel(!showUploadPanel);
             }}
-            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_20px_rgba(255,103,0,0.4)]"
+            className="industrial-card p-3 rounded-xl text-[#FF6700] hover:border-[#FF6700] transition-colors shadow-[0_0_25px_rgba(255,103,0,0.5)]"
           >
             <Camera size={24} />
           </button>
@@ -611,16 +616,20 @@ export default function SiteSnap() {
                     <div
                       key={photo.id}
                       onClick={() => {
-                        vibrate();
-                        const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
-                        setFullscreenPhoto(photo);
-                        setCurrentPhotoIndex(photoIdx);
-                        setAnnotations(photo.annotations || []);
-                        const before = photo;
-                        const after = afterPhotos[0];
-                        if (before && after) {
-                          setSelectedBeforeAfter({ before, after });
-                          setShowBeforeAfter(true);
+                        if (selectMode) {
+                          togglePhotoSelection(photo.id);
+                        } else {
+                          vibrate();
+                          const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
+                          setFullscreenPhoto(photo);
+                          setCurrentPhotoIndex(photoIdx);
+                          setAnnotations(photo.annotations || []);
+                          const before = photo;
+                          const after = afterPhotos[0];
+                          if (before && after) {
+                            setSelectedBeforeAfter({ before, after });
+                            setShowBeforeAfter(true);
+                          }
                         }
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
@@ -632,22 +641,37 @@ export default function SiteSnap() {
                           BEFORE
                         </span>
                       </div>
+                      {selectMode && (
+                        <div className="absolute top-1 right-1">
+                          <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                            selectedPhotos.includes(photo.id)
+                              ? 'bg-[#FF6700] border-[#FF6700]'
+                              : 'bg-white/20 border-white/50'
+                          }`}>
+                            {selectedPhotos.includes(photo.id) && <CheckSquare size={16} className="text-black" />}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {afterPhotos.slice(0, 2).map((photo) => (
                     <div
                       key={photo.id}
                       onClick={() => {
-                        vibrate();
-                        const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
-                        setFullscreenPhoto(photo);
-                        setCurrentPhotoIndex(photoIdx);
-                        setAnnotations(photo.annotations || []);
-                        const before = beforePhotos[0];
-                        const after = photo;
-                        if (before && after) {
-                          setSelectedBeforeAfter({ before, after });
-                          setShowBeforeAfter(true);
+                        if (selectMode) {
+                          togglePhotoSelection(photo.id);
+                        } else {
+                          vibrate();
+                          const photoIdx = uploadedPhotos.findIndex(p => p.id === photo.id);
+                          setFullscreenPhoto(photo);
+                          setCurrentPhotoIndex(photoIdx);
+                          setAnnotations(photo.annotations || []);
+                          const before = beforePhotos[0];
+                          const after = photo;
+                          if (before && after) {
+                            setSelectedBeforeAfter({ before, after });
+                            setShowBeforeAfter(true);
+                          }
                         }
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
@@ -659,6 +683,17 @@ export default function SiteSnap() {
                           AFTER
                         </span>
                       </div>
+                      {selectMode && (
+                        <div className="absolute top-1 right-1">
+                          <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                            selectedPhotos.includes(photo.id)
+                              ? 'bg-[#FF6700] border-[#FF6700]'
+                              : 'bg-white/20 border-white/50'
+                          }`}>
+                            {selectedPhotos.includes(photo.id) && <CheckSquare size={16} className="text-black" />}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -673,33 +708,25 @@ export default function SiteSnap() {
                 </h3>
                 <button
                   onClick={() => {
-                    if (showShareMenu && selectedForShare.length === 0) {
-                      sharePhotos();
-                    } else if (showShareMenu && selectedForShare.length > 0) {
-                      sharePhotos();
-                    } else {
-                      setShowShareMenu(true);
+                    vibrate();
+                    setSelectMode(!selectMode);
+                    if (selectMode) {
+                      setSelectedPhotos([]);
                     }
                   }}
-                  className="flex items-center gap-2 bg-[#FF6700] text-black px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-[0_0_25px_rgba(255,103,0,0.5)] hover:shadow-[0_0_35px_rgba(255,103,0,0.7)] transition-all active:scale-95"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase transition-all active:scale-95 ${
+                    selectMode
+                      ? 'bg-[var(--text-sub)] text-white'
+                      : 'bg-[#FF6700] text-black shadow-[0_0_25px_rgba(255,103,0,0.5)]'
+                  }`}
                 >
-                  <Share2 size={16} />
-                  {showShareMenu ? (selectedForShare.length > 0 ? `SHARE (${selectedForShare.length})` : 'SHARE ALL') : 'SHARE'}
+                  {selectMode ? 'DONE' : 'SELECT'}
                 </button>
               </div>
-              {showShareMenu && (
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-[var(--text-sub)]">Tap photos to select, then tap SHARE button</p>
-                  <button
-                    onClick={() => {
-                      setShowShareMenu(false);
-                      setSelectedForShare([]);
-                    }}
-                    className="text-xs text-[var(--text-sub)] underline"
-                  >
-                    Cancel
-                  </button>
-                </div>
+              {selectMode && (
+                <p className="text-xs text-[var(--text-sub)] mb-2">
+                  {selectedPhotos.length > 0 ? `${selectedPhotos.length} photo${selectedPhotos.length > 1 ? 's' : ''} selected` : 'Tap photos to select'}
+                </p>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {uploadedPhotos.map((photo, idx) => (
@@ -709,7 +736,7 @@ export default function SiteSnap() {
                   >
                     <div
                       onClick={() => {
-                        if (showShareMenu) {
+                        if (selectMode) {
                           togglePhotoSelection(photo.id);
                         } else {
                           vibrate();
@@ -747,14 +774,14 @@ export default function SiteSnap() {
                           {photo.annotations.length} NOTE{photo.annotations.length > 1 ? 'S' : ''}
                         </div>
                       )}
-                      {showShareMenu && (
+                      {selectMode && (
                         <div className="absolute top-1 right-1">
                           <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
-                            selectedForShare.includes(photo.id)
+                            selectedPhotos.includes(photo.id)
                               ? 'bg-[#FF6700] border-[#FF6700]'
                               : 'bg-white/20 border-white/50'
                           }`}>
-                            {selectedForShare.includes(photo.id) && <X size={16} className="text-black" />}
+                            {selectedPhotos.includes(photo.id) && <CheckSquare size={16} className="text-black" />}
                           </div>
                         </div>
                       )}
@@ -767,13 +794,73 @@ export default function SiteSnap() {
         )}
       </main>
 
-      {/* FLOATING BRANDING - BEHIND MODALS */}
-      {!fullscreenPhoto && !showEstimateLink && (
+      {/* SELECT MODE ACTION BAR */}
+      {selectMode && selectedPhotos.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <button
+            onClick={sharePhotos}
+            className="bg-[#FF6700] text-black px-6 py-3 rounded-lg font-bold uppercase shadow-[0_0_30px_rgba(255,103,0,0.6)] active:scale-95 transition-all flex items-center gap-2"
+          >
+            <Share2 size={20} />
+            Share ({selectedPhotos.length})
+          </button>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="bg-red-500 text-white px-6 py-3 rounded-lg font-bold uppercase shadow-[0_0_30px_rgba(239,68,68,0.5)] active:scale-95 transition-all flex items-center gap-2"
+          >
+            <Trash2 size={20} />
+            Delete ({selectedPhotos.length})
+          </button>
+          <button
+            onClick={() => {
+              setSelectMode(false);
+              setSelectedPhotos([]);
+            }}
+            className="bg-[var(--bg-card)] text-[var(--text-main)] px-6 py-3 rounded-lg font-bold uppercase border border-[var(--border-color)] active:scale-95 transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* FLOATING BRANDING - BEHIND EVERYTHING */}
+      {!fullscreenPhoto && !showEstimateLink && !selectMode && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
           <p className="text-[8px] font-bold uppercase tracking-widest">
             <span className="text-[var(--text-sub)] opacity-40">POWEREDBY</span>
             <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
           </p>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[52] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="relative bg-[var(--bg-card)] rounded-2xl p-6 max-w-sm w-full border-2 border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]">
+            <div className="flex items-center justify-center mb-4">
+              <div className="bg-red-500/10 p-4 rounded-full">
+                <Trash2 size={32} className="text-red-500" />
+              </div>
+            </div>
+            <h2 className="text-xl font-bold text-[var(--text-main)] text-center mb-2">Delete {selectedPhotos.length} Photo{selectedPhotos.length > 1 ? 's' : ''}?</h2>
+            <p className="text-[var(--text-sub)] text-center mb-6 text-sm">This action cannot be undone. Photos will be permanently deleted.</p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 bg-[var(--bg-main)] text-[var(--text-main)] font-bold py-4 rounded-lg active:scale-95 border-2 border-[var(--border-color)] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteSelectedPhotos}
+                className="flex-1 bg-red-500 text-white font-bold py-4 rounded-lg active:scale-95 transition-all shadow-[0_0_25px_rgba(239,68,68,0.4)]"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -815,7 +902,11 @@ export default function SiteSnap() {
                 </button>
               )}
               <button
-                onClick={() => deletePhoto(fullscreenPhoto.id)}
+                onClick={() => {
+                  setFullscreenPhoto(null);
+                  setShowDeleteConfirm(true);
+                  setSelectedPhotos([fullscreenPhoto.id]);
+                }}
                 className="text-red-400 hover:text-red-300 transition-colors p-2"
               >
                 <Trash2 size={24} />
