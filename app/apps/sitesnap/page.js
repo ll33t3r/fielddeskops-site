@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '../../../utils/supabase/client';
-import { useJobSelector } from '../../../hooks/useJobSelector';
+import { useJobSelector } from '../../hooks/useJobSelector';
 
 import JobSelector from '../../components/JobSelector';
 import {
