@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '../../../utils/supabase/client';
 import { useJobSelector } from '../../../hooks/useJobSelector';
-import { useTheme } from '../../../hooks/useTheme';
-import JobSelector from '../../../components/JobSelector';
+
+import JobSelector from '../../components/JobSelector';
 import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
@@ -15,7 +15,7 @@ import Link from 'next/link';
 export default function SiteSnap() {
   const supabase = createClient();
   const { activeJob } = useJobSelector();
-  const { theme } = useTheme();
+  
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
