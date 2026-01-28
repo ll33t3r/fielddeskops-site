@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '../../utils/supabase/client';
-import { useActiveJob } from '../../hooks/useActiveJob';
+import { useActiveJob } from '../../../hooks/useActiveJob';
 import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
@@ -625,8 +625,8 @@ export default function SiteSnap() {
                   style={{ maxHeight: '70vh' }}
                 />
                 <div className="flex justify-between mt-3 px-4">
-                  <span className="text-xs font-bold uppercase text-red-400">← BEFORE</span>
-                  <span className="text-xs font-bold uppercase text-green-400">AFTER →</span>
+                  <span className="text-xs font-bold uppercase text-red-400">â† BEFORE</span>
+                  <span className="text-xs font-bold uppercase text-green-400">AFTER â†’</span>
                 </div>
               </div>
             ) : fullscreenPhoto.image_url ? (
@@ -656,7 +656,7 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-2">Annotations:</p>
                 <div className="space-y-1 max-h-24 overflow-y-auto">
                   {annotations.map((ann, idx) => (
-                    <p key={idx} className="text-white/70 text-xs">• {ann.text}</p>
+                    <p key={idx} className="text-white/70 text-xs">â€¢ {ann.text}</p>
                   ))}
                 </div>
               </div>
