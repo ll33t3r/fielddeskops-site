@@ -75,6 +75,10 @@ export default function SignOff() {
       if (job) {
         setJobBrainData(job);
         
+        // AUTO-POPULATE NAMES FROM JOB DATA
+        if (job.customer_name) setClientName(job.customer_name);
+        if (job.contractor_name) setContractorName(job.contractor_name);
+        
         const { data: estimate } = await supabase.from("estimates").select("*").eq("job_id", jobId).maybeSingle();
         if (estimate) setLinkedEstimate(estimate);
 
@@ -116,6 +120,24 @@ export default function SignOff() {
 
   const removeVariableFromTemplate = (variable) => {
     setNewTemplateBody(prev => prev.split(variable).join(""));
+  };
+
+  // RESTORE CONTRACT FROM HISTORY
+  const restoreContract = (contract) => {
+    setContractBody(contract.contract_body);
+    setClientName(contract.client_name || "");
+    setContractorName(contract.contractor_name || "");
+    
+    // Find and set the job if it exists
+    if (contract.job_id) {
+      const job = recentJobs.find(j => j.id === contract.job_id);
+      if (job) setSelectedJob(job);
+    }
+    
+    // Close menu and scroll to top
+    setShowMenu(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast("Contract loaded", "success");
   };
 
   const loadAllData = async () => {
@@ -275,6 +297,7 @@ export default function SignOff() {
     loadAllData();
   }, []);
 
+  // AUTO-POPULATE when job changes
   useEffect(() => {
     if (selectedJob?.id) {
       loadJobBrainData(selectedJob.id);
@@ -624,19 +647,18 @@ export default function SignOff() {
                     contracts.map((contract) => (
                       <div
                         key={contract.id}
-                        className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)]"
+                        className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] hover:border-[#FF6700] transition-colors cursor-pointer"
+                        onClick={() => restoreContract(contract)}
                       >
                         <div className="flex items-start justify-between">
-                          <div>
+                          <div className="flex-1">
                             <h3 className="font-bold text-white">{contract.job_name}</h3>
                             <p className="text-sm text-gray-400">{contract.client_name}</p>
                             <p className="text-xs text-gray-500 mt-1">
                               {new Date(contract.created_at).toLocaleDateString()}
                             </p>
                           </div>
-                          <button className="p-2 hover:bg-[var(--bg-main)] rounded-lg">
-                            <Download size={20} className="text-[#FF6700]" />
-                          </button>
+                          <Eye size={20} className="text-[#FF6700] flex-shrink-0 ml-2" />
                         </div>
                       </div>
                     ))
