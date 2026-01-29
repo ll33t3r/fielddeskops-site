@@ -1,4 +1,4 @@
-﻿import { createServerClient } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
 export async function middleware(request) {
@@ -8,7 +8,7 @@ export async function middleware(request) {
     },
   })
 
-  // 1. Setup Supabase Client (Just to keep session alive)
+  // Setup Supabase Client for session management
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -32,13 +32,28 @@ export async function middleware(request) {
     }
   )
 
-  // 2. Refresh the Session (Vital for keeping you logged in)
-  await supabase.auth.getUser()
+  // Get session from Supabase
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-  // 3. NO BLOCKING. 
-  // We removed the "if (!user) redirect" code. 
-  // The door is wide open.
-  
+  // Define protected routes
+  const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command']
+  const { pathname } = request.nextUrl
+
+  // Check if the current path is a protected route
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    pathname.startsWith(route)
+  )
+
+  // If accessing a protected route without a session, redirect to login
+  if (isProtectedRoute && !session) {
+    const redirectUrl = new URL('/auth/login', request.url)
+    redirectUrl.searchParams.set('redirectTo', pathname)
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  // If session exists, allow access
   return response
 }
 
