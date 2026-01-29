@@ -21,7 +21,7 @@ export default function SignOff() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
-  const [menuTab, setMenuTab] = useState("BRAIN");
+  const [menuTab, setMenuTab] = useState("DATA");
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateBody, setNewTemplateBody] = useState("");
@@ -40,13 +40,16 @@ export default function SignOff() {
   const [showSiteSnapModal, setShowSiteSnapModal] = useState(false);
   const [siteSnapPhotos, setSiteSnapPhotos] = useState([]);
   const [selectedSiteSnap, setSelectedSiteSnap] = useState(new Set());
+  const [showNewJobModal, setShowNewJobModal] = useState(false);
+  const [newJobTitle, setNewJobTitle] = useState("");
+  const [newJobCustomer, setNewJobCustomer] = useState("");
   
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
   
   const [linkedEstimate, setLinkedEstimate] = useState(null);
-  const [jobBrainData, setJobBrainData] = useState(null);
+  const [jobLinkedData, setJobLinkedData] = useState(null);
   const [smartVariables, setSmartVariables] = useState({});
   
   const [selectedJob, setSelectedJob] = useState(null);
@@ -54,6 +57,17 @@ export default function SignOff() {
   const [contractorName, setContractorName] = useState("");
   const [contractBody, setContractBody] = useState("");
   const [hasSigned, setHasSigned] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const baseVarKeys = [
+    "[JOB_NAME]",
+    "[DATE]",
+    "[JOB_STATUS]",
+    "[JOB_ADDRESS]",
+    "[ESTIMATE_TOTAL]",
+    "[ESTIMATE_SERVICE]",
+    "[LABOR_COST]",
+    "[MATERIALS_COST]",
+  ];
 
   const vibrate = (p = 10) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p);
@@ -127,7 +141,7 @@ export default function SignOff() {
   const loadJobBrainData = async (jobId) => {
     if (!jobId) {
       setSmartVariables({});
-      setJobBrainData(null);
+      setJobLinkedData(null);
       setLinkedEstimate(null);
       return;
     }
@@ -135,7 +149,7 @@ export default function SignOff() {
     try {
       const { data: job } = await supabase.from("jobs").select("*").eq("id", jobId).single();
       if (job) {
-        setJobBrainData(job);
+        setJobLinkedData(job);
         
         if (job.customer_name) setClientName(job.customer_name);
         if (job.contractor_name) setContractorName(job.contractor_name);
@@ -143,7 +157,7 @@ export default function SignOff() {
         const { data: estimate } = await supabase.from("estimates").select("*").eq("job_id", jobId).maybeSingle();
         if (estimate) setLinkedEstimate(estimate);
 
-        const vars = {
+        const baseVars = {
           "[JOB_NAME]": job.title || "",
           "[DATE]": new Date().toLocaleDateString(),
           "[JOB_STATUS]": job.status || "Active",
@@ -151,14 +165,28 @@ export default function SignOff() {
         };
 
         if (estimate) {
-          vars["[ESTIMATE_TOTAL]"] = `$${estimate.total_price?.toFixed(2) || "0.00"}`;
-          vars["[ESTIMATE_SERVICE]"] = estimate.service_name || "";
-          vars["[LABOR_COST]"] = `$${estimate.labor_cost?.toFixed(2) || "0.00"}`;
-          vars["[MATERIALS_COST]"] = `$${estimate.materials_cost?.toFixed(2) || "0.00"}`;
+          baseVars["[ESTIMATE_TOTAL]"] = `$${estimate.total_price?.toFixed(2) || "0.00"}`;
+          baseVars["[ESTIMATE_SERVICE]"] = estimate.service_name || "";
+          baseVars["[LABOR_COST]"] = `$${estimate.labor_cost?.toFixed(2) || "0.00"}`;
+          baseVars["[MATERIALS_COST]"] = `$${estimate.materials_cost?.toFixed(2) || "0.00"}`;
         }
 
-        setSmartVariables(vars);
-        showToast("🧠 Brain loaded", "success");
+        // Merge persisted custom variables for this job
+        let customVars = {};
+        try {
+          const stored = localStorage.getItem(`signoff_vars_${jobId}`);
+          if (stored) {
+            customVars = JSON.parse(stored) || {};
+          }
+        } catch (err) {
+          console.error("Load custom vars error:", err);
+        }
+
+        setSmartVariables({
+          ...baseVars,
+          ...customVars,
+        });
+        showToast("Job data loaded", "success");
       }
     } catch (error) {
       console.error("Brain load error:", error);
@@ -383,8 +411,17 @@ export default function SignOff() {
     }
 
     try {
+      console.log("saveTemplate start", {
+        newTemplateName,
+        newTemplateBodyLength: newTemplateBody.length,
+        newTemplateCategory,
+      });
+
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      if (!user) {
+        showToast("You must be logged in to save templates", "error");
+        throw new Error("Not authenticated");
+      }
 
       const { error } = await supabase.from("contract_templates").insert({
         user_id: user.id,
@@ -394,7 +431,11 @@ export default function SignOff() {
         is_pinned: false
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Template insert error:", error);
+        showToast(`Template save failed: ${error.message}`, "error");
+        throw error;
+      }
 
       showToast("Template created!", "success");
       setShowTemplateBuilder(false);
@@ -405,7 +446,9 @@ export default function SignOff() {
 
     } catch (error) {
       console.error("Template save error:", error);
-      showToast("Template save failed", "error");
+      if (!error?.message?.includes("Template save failed")) {
+        showToast(error.message || "Template save failed", "error");
+      }
     }
   };
 
@@ -455,24 +498,42 @@ export default function SignOff() {
   }, []);
 
   useEffect(() => {
-    // When job changes, clear old data first
+    // When job changes, clear old data first and persist custom vars per job
+    const prevJobId = (SignOff.prevJobId = SignOff.prevJobId || null);
+
+    // Persist custom variables for previous job
+    if (prevJobId && Object.keys(smartVariables).length > 0) {
+      const customVars = Object.fromEntries(
+        Object.entries(smartVariables).filter(
+          ([key]) => !baseVarKeys.includes(key)
+        )
+      );
+      try {
+        localStorage.setItem(
+          `signoff_vars_${prevJobId}`,
+          JSON.stringify(customVars)
+        );
+      } catch (err) {
+        console.error("Persist custom vars error:", err);
+      }
+    }
+
     if (selectedJob?.id) {
-      // Clear old linked estimate and smart variables
-      setLinkedEstimate(null);
-      setSmartVariables({});
       // Reset contract body if it contains old job data
       if (contractBody && contractBody.includes("[JOB_NAME]")) {
         setContractBody("");
       }
-      // Load new job data
+      // Load new job data (includes merging persisted custom vars)
       loadJobBrainData(selectedJob.id);
+      SignOff.prevJobId = selectedJob.id;
     } else {
       // Clear everything if no job selected
       setLinkedEstimate(null);
       setSmartVariables({});
-      setJobBrainData(null);
+      setJobLinkedData(null);
+      SignOff.prevJobId = null;
     }
-  }, [selectedJob]);
+  }, [selectedJob, smartVariables, contractBody]);
 
   if (loading) {
     return (
@@ -530,27 +591,13 @@ export default function SignOff() {
             ))}
           </select>
           <button
-            onClick={() => {
-              // Navigate to command center to create new job
-              window.location.href = "/";
-            }}
+            onClick={() => setShowNewJobModal(true)}
             className="px-3 py-2 bg-[#FF6700] text-black rounded-lg font-bold text-sm hover:shadow-[0_0_10px_rgba(255,103,0,0.4)] transition-all flex items-center gap-1"
           >
             <Plus size={16} />
             New Job
           </button>
         </div>
-        {selectedJob && (
-          <div className="mt-2 text-xs text-[var(--text-sub)] flex items-center gap-2">
-            {selectedJob.customer_name && (
-              <>
-                <span>{selectedJob.customer_name}</span>
-                <span>•</span>
-              </>
-            )}
-            <span className="text-[#FF6700]">Job Linked</span>
-          </div>
-        )}
       </div>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
@@ -706,9 +753,24 @@ export default function SignOff() {
           </div>
         </div>
 
-        {/* CONTRACT BODY WITH LIVE PREVIEW */}
+        {/* CONTRACT BODY WITH COLLAPSIBLE PREVIEW */}
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contract Text</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Contract Text
+            </label>
+            <button
+              type="button"
+              onClick={() => setPreviewExpanded((prev) => !prev)}
+              className="flex items-center gap-1 text-[10px] text-blue-300 uppercase tracking-wide hover:text-blue-200"
+            >
+              <span>Document Preview</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform ${previewExpanded ? "rotate-180" : ""}`}
+              />
+            </button>
+          </div>
           <textarea
             value={contractBody}
             onChange={(e) => setContractBody(e.target.value)}
@@ -717,22 +779,36 @@ export default function SignOff() {
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
           />
           {(clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
-            <button
-              type="button"
-              onClick={() => {
-                setDocReadOnly(Boolean(signedAt));
-                setShowDocPreview(true);
-              }}
-              className="w-full text-left p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 hover:bg-blue-500/10 transition-colors cursor-pointer"
-            >
-              <p className="text-xs font-bold text-blue-400 mb-2">Document Preview</p>
-              <p className="text-sm text-gray-300 whitespace-pre-wrap line-clamp-3">
-                {getDisplayedContractBody() || "Preview your contract as a formatted document."}
-              </p>
-              <p className="mt-2 text-[10px] text-blue-300 uppercase tracking-wide">
-                Click to open full document view
-              </p>
-            </button>
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5">
+              <button
+                type="button"
+                onClick={() => {
+                  setDocReadOnly(Boolean(signedAt));
+                  setShowDocPreview(true);
+                }}
+                className="w-full text-left px-4 pt-3 pb-2 cursor-pointer"
+              >
+                <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wide flex items-center justify-between">
+                  <span>Open Full Document</span>
+                  <ChevronRight size={14} />
+                </p>
+              </button>
+              {previewExpanded ? (
+                <div className="px-4 pb-3">
+                  <p className="text-xs text-blue-400 mb-1">Preview:</p>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                    {getDisplayedContractBody()}
+                  </p>
+                </div>
+              ) : (
+                <div className="px-4 pb-3">
+                  <p className="text-xs text-blue-400 mb-1">Summary:</p>
+                  <p className="text-sm text-gray-300 truncate">
+                    {getDisplayedContractBody() || "Preview your contract as a formatted document."}
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </main>
@@ -762,7 +838,7 @@ export default function SignOff() {
             style={{ overflow: 'hidden' }}
           >
             <div 
-              className="bg-[var(--bg-card)] w-full sm:max-w-3xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700] pointer-events-auto"
+              className="bg-[var(--bg-card)] w-full sm:max-w-3xl sm:rounded-2xl rounded-t-3xl h-[600px] overflow-hidden flex flex-col border-2 border-[#FF6700] pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
             >
             <div className="p-6 border-b border-[#FF6700]/30">
@@ -777,7 +853,7 @@ export default function SignOff() {
               </div>
               
               <div className="flex gap-2">
-                {["BRAIN", "TEMPLATES", "HISTORY"].map((tab) => (
+                {["DATA", "TEMPLATES", "HISTORY"].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setMenuTab(tab)}
@@ -794,16 +870,16 @@ export default function SignOff() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {menuTab === "BRAIN" && (
+              {menuTab === "DATA" && (
                 <div className="space-y-4">
-                  {jobBrainData ? (
+                  {jobLinkedData ? (
                     <>
                       <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30">
                         <div className="flex items-center gap-3 mb-3">
                           <Brain size={24} className="text-purple-400" />
                           <div>
-                            <p className="font-bold text-sm text-white">Job Linked</p>
-                            <p className="text-xs text-gray-400">{jobBrainData.title}</p>
+                            <p className="font-bold text-sm text-white">Job Data</p>
+                            <p className="text-xs text-gray-400">{jobLinkedData.title}</p>
                           </div>
                         </div>
                       </div>
@@ -1342,6 +1418,113 @@ export default function SignOff() {
         </div>
       )}
       
+      {/* NEW JOB MODAL */}
+      {showNewJobModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-md bg-[var(--bg-card)] border border-[#FF6700]/40 rounded-2xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#FF6700] uppercase tracking-wide">
+                Create Job
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewJobModal(false);
+                  setNewJobTitle("");
+                  setNewJobCustomer("");
+                }}
+                className="text-[var(--text-sub)] hover:text-[var(--text-main)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <label className="text-xs text-[var(--text-sub)] uppercase font-bold">
+                  Job Title
+                </label>
+                <input
+                  type="text"
+                  value={newJobTitle}
+                  onChange={(e) => setNewJobTitle(e.target.value)}
+                  placeholder="e.g. Roof Replacement - Smith Residence"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] outline-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-[var(--text-sub)] uppercase font-bold">
+                  Customer Name
+                </label>
+                <input
+                  type="text"
+                  value={newJobCustomer}
+                  onChange={(e) => setNewJobCustomer(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewJobModal(false);
+                    setNewJobTitle("");
+                    setNewJobCustomer("");
+                  }}
+                  className="px-3 py-2 rounded-lg text-xs bg-gray-800 text-white hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const title = newJobTitle.trim();
+                    if (!title) {
+                      showToast("Job title is required", "error");
+                      return;
+                    }
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) {
+                        showToast("You must be logged in", "error");
+                        return;
+                      }
+                      const { data, error } = await supabase
+                        .from("jobs")
+                        .insert({
+                          user_id: user.id,
+                          title,
+                          customer_name: newJobCustomer.trim() || null,
+                          status: "ACTIVE",
+                        })
+                        .select()
+                        .single();
+                      if (error) {
+                        console.error("Create job error:", error);
+                        showToast(`Failed to create job: ${error.message}`, "error");
+                        return;
+                      }
+                      setRecentJobs((prev) => [data, ...prev]);
+                      setSelectedJob(data);
+                      showToast("Job created", "success");
+                      setShowNewJobModal(false);
+                      setNewJobTitle("");
+                      setNewJobCustomer("");
+                    } catch (err) {
+                      console.error("Create job unexpected error:", err);
+                      showToast("Failed to create job", "error");
+                    }
+                  }}
+                  className="px-3 py-2 rounded-lg text-xs bg-[#FF6700] text-black font-bold hover:shadow-[0_0_10px_rgba(255,103,0,0.4)]"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ADD CUSTOM VARIABLE MODAL */}
       {showAddVarModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
