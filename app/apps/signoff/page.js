@@ -28,6 +28,7 @@ export default function SignOff() {
   const [newTemplateCategory, setNewTemplateCategory] = useState("CUSTOM");
   const [showDocPreview, setShowDocPreview] = useState(false);
   const [signedAt, setSignedAt] = useState(null);
+  const [savedSignature, setSavedSignature] = useState(null);
   const [attachedPhotos, setAttachedPhotos] = useState([]);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [activePhoto, setActivePhoto] = useState(null);
@@ -216,6 +217,7 @@ export default function SignOff() {
     setClientName(contract.client_name || "");
     setContractorName(contract.contractor_name || "");
     setSignedAt(contract.signed_at || null);
+    setSavedSignature(contract.signature_data || null);
     setAttachedPhotos([]);
     setDocReadOnly(true);
     
@@ -372,6 +374,7 @@ export default function SignOff() {
       // Verify signature was saved
       if (data && data.signature_data) {
         localStorage.setItem("fdo_last_contractor", contractorName);
+        setSavedSignature(data.signature_data);
         showToast("✓ Contract saved! Signature confirmed.", "success");
       } else {
         throw new Error("Signature data not saved properly");
@@ -533,7 +536,7 @@ export default function SignOff() {
       setJobLinkedData(null);
       SignOff.prevJobId = null;
     }
-  }, [selectedJob, smartVariables, contractBody]);
+  }, [selectedJob]);
 
   if (loading) {
     return (
@@ -640,9 +643,11 @@ export default function SignOff() {
                 <button
                   key={template.id}
                   onClick={() => {
-                    setContractBody(template.body);
+                    const bodyText = template.body;
+                    setTimeout(() => {
+                      setContractBody(bodyText);
+                    }, 0);
                     vibrate(10);
-                    showToast("Template applied", "success");
                   }}
                   className="flex-shrink-0 px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] transition-colors"
                 >
@@ -655,6 +660,55 @@ export default function SignOff() {
             </div>
           </div>
         )}
+
+        
+
+        {/* CONTRACT BODY WITH COLLAPSIBLE PREVIEW */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Contract Text
+            </label>
+            <button
+              type="button"
+              onClick={() => setPreviewExpanded((prev) => !prev)}
+              className="flex items-center gap-1 text-[10px] text-blue-300 uppercase tracking-wide hover:text-blue-200"
+            >
+              <span>Document Preview</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform ${previewExpanded ? "rotate-180" : ""}`}
+              />
+            </button>
+          </div>
+          <textarea
+            value={contractBody}
+            onChange={(e) => setContractBody(e.target.value)}
+            placeholder="Enter contract terms or use a pinned template..."
+            rows={12}
+            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
+          />
+          {previewExpanded && (clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5">
+              <div className="px-4 py-3">
+                <p className="text-xs text-blue-400 mb-1">Preview:</p>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                  {getDisplayedContractBody()}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDocReadOnly(Boolean(signedAt));
+                  setShowDocPreview(true);
+                }}
+                className="w-full text-left px-4 pb-3 text-[10px] text-blue-300 uppercase tracking-wide flex items-center justify-between hover:text-blue-200"
+              >
+                <span>Open Full Document</span>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
 
         {/* ATTACH PHOTOS */}
         <div className="space-y-2">
@@ -681,39 +735,29 @@ export default function SignOff() {
                       return;
                     }
                     try {
-                      // Query photos table first
+                      console.log("Querying photos for job:", selectedJob.id);
+                      
+                      // Try main photos table first
                       const { data: photoRecords, error: tableError } = await supabase
-                        .from("sitesnap_photos")
+                        .from("photos")
                         .select("*")
                         .eq("job_id", selectedJob.id)
                         .order("created_at", { ascending: false });
                       
+                      console.log("Photo query result:", { photoRecords, tableError });
+                      
                       if (tableError) {
-                        console.error("SiteSnap table error:", tableError);
-                        showToast("Failed to load photos", "error");
+                        console.error("Table error:", tableError);
+                        showToast(`Database error: ${tableError.message}`, "error");
                         return;
                       }
                       
                       if (!photoRecords || photoRecords.length === 0) {
-                        showToast("No SiteSnap photos for this job", "error");
-                        setShowSiteSnapModal(false);
+                        showToast("No photos found for this job", "error");
                         return;
                       }
                       
-                      // Load actual photo URLs from storage if photo_url is bucket path
-                      const photosWithUrls = await Promise.all(
-                        photoRecords.map(async (record) => {
-                          if (record.photo_url && record.photo_url.startsWith('sitesnap/')) {
-                            const { data: publicURL } = supabase.storage
-                              .from('sitesnap-photos')
-                              .getPublicUrl(record.photo_url);
-                            return { ...record, photo_url: publicURL.publicUrl };
-                          }
-                          return record;
-                        })
-                      );
-                      
-                      setSiteSnapPhotos(photosWithUrls);
+                      setSiteSnapPhotos(photoRecords);
                       setSelectedSiteSnap(new Set());
                       setShowSiteSnapModal(true);
                     } catch (err) {
@@ -778,53 +822,6 @@ export default function SignOff() {
             )}
           </div>
         </div>
-
-        {/* CONTRACT BODY WITH COLLAPSIBLE PREVIEW */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Contract Text
-            </label>
-            <button
-              type="button"
-              onClick={() => setPreviewExpanded((prev) => !prev)}
-              className="flex items-center gap-1 text-[10px] text-blue-300 uppercase tracking-wide hover:text-blue-200"
-            >
-              <span>Document Preview</span>
-              <ChevronDown
-                size={14}
-                className={`transition-transform ${previewExpanded ? "rotate-180" : ""}`}
-              />
-            </button>
-          </div>
-          <textarea
-            value={contractBody}
-            onChange={(e) => setContractBody(e.target.value)}
-            placeholder="Enter contract terms or use a pinned template..."
-            rows={12}
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
-          />
-          {previewExpanded && (clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5">
-              <div className="px-4 py-3">
-                <p className="text-xs text-blue-400 mb-1">Preview:</p>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                  {getDisplayedContractBody()}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDocReadOnly(Boolean(signedAt));
-                  setShowDocPreview(true);
-                }}
-                className="w-full text-left px-4 pb-3 text-[10px] text-blue-300 uppercase tracking-wide flex items-center justify-between hover:text-blue-200"
-              >
-                <span>Open Full Document</span>
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
         </div>
       </main>
 
@@ -914,66 +911,86 @@ export default function SignOff() {
                             <p className="text-xs font-mono text-[#FF6700]">[CONTRACTOR]</p>
                             <p className="text-xs text-gray-400 truncate">{contractorName || "Not set"}</p>
                           </div>
-                          {Object.keys(smartVariables).map((varName) => (
-                            <div
-                              key={varName}
-                              className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30 flex flex-col gap-1"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
-                                {editingVar === varName ? null : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingVar(varName);
-                                      setEditingVarValue(smartVariables[varName] || "");
-                                    }}
-                                    className="text-gray-300 hover:text-white p-1 rounded"
-                                  >
-                                    <Pencil size={12} />
-                                  </button>
+                          {Object.keys(smartVariables).map((varName) => {
+                            const isCustom = !baseVarKeys.includes(varName);
+                            return (
+                              <div
+                                key={varName}
+                                className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30 flex flex-col gap-1"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
+                                  <div className="flex gap-1">
+                                    {isCustom && editingVar !== varName && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSmartVariables((prev) => {
+                                            const next = { ...prev };
+                                            delete next[varName];
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-red-400 hover:text-red-300 p-1 rounded"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )}
+                                    {editingVar === varName ? null : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingVar(varName);
+                                          setEditingVarValue(smartVariables[varName] || "");
+                                        }}
+                                        className="text-gray-300 hover:text-white p-1 rounded"
+                                      >
+                                        <Pencil size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {editingVar === varName ? (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                      type="text"
+                                      value={editingVarValue}
+                                      onChange={(e) => setEditingVarValue(e.target.value)}
+                                      className="flex-1 px-2 py-1 text-xs rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSmartVariables((prev) => ({
+                                          ...prev,
+                                          [varName]: editingVarValue,
+                                        }));
+                                        setEditingVar(null);
+                                        setEditingVarValue("");
+                                      }}
+                                      className="px-2 py-1 text-[10px] rounded bg-[#FF6700] text-black font-bold"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingVar(null);
+                                        setEditingVarValue("");
+                                      }}
+                                      className="px-2 py-1 text-[10px] rounded bg-gray-700 text-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {smartVariables[varName] || "Not set"}
+                                  </p>
                                 )}
                               </div>
-                              {editingVar === varName ? (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <input
-                                    type="text"
-                                    value={editingVarValue}
-                                    onChange={(e) => setEditingVarValue(e.target.value)}
-                                    className="flex-1 px-2 py-1 text-xs rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSmartVariables((prev) => ({
-                                        ...prev,
-                                        [varName]: editingVarValue,
-                                      }));
-                                      setEditingVar(null);
-                                      setEditingVarValue("");
-                                    }}
-                                    className="px-2 py-1 text-[10px] rounded bg-[#FF6700] text-black font-bold"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingVar(null);
-                                      setEditingVarValue("");
-                                    }}
-                                    className="px-2 py-1 text-[10px] rounded bg-gray-700 text-white"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              ) : (
-                                <p className="text-xs text-gray-400 truncate">
-                                  {smartVariables[varName] || "Not set"}
-                                </p>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                         <button
                           type="button"
@@ -1035,9 +1052,12 @@ export default function SignOff() {
                           )}
                           <button
                             onClick={() => {
-                              setContractBody(template.body);
+                              const bodyText = template.body;
+                              setTimeout(() => {
+                                setContractBody(bodyText);
+                              }, 0);
                               setShowMenu(false);
-                              showToast("Template applied", "success");
+                              vibrate(10);
                             }}
                             className="px-3 py-1 bg-[#FF6700] text-black rounded-lg text-xs font-bold"
                           >
@@ -1213,6 +1233,7 @@ export default function SignOff() {
               </div>
 
               <button
+                type="button"
                 onClick={saveTemplate}
                 className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all"
                 style={{
@@ -1371,9 +1392,19 @@ export default function SignOff() {
                   </>
                 ) : (
                   <>
-                    <div className="w-full h-32 border border-gray-300 rounded-md bg-white flex items-center justify-center text-gray-400 text-xs">
-                      Signed contract on file.
-                    </div>
+                    {signedAt && savedSignature ? (
+                      <div className="w-full h-32 border border-gray-300 rounded-md bg-white p-2">
+                        <img
+                          src={savedSignature}
+                          alt="Signature"
+                          className="h-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-32 border border-gray-300 rounded-md bg-white flex items-center justify-center text-gray-400 text-xs">
+                        Signed contract on file.
+                      </div>
+                    )}
                     {signedAt && (
                       <p className="mt-3 text-xs text-gray-600">
                         Signed: {new Date(signedAt).toLocaleString()}
@@ -1389,6 +1420,7 @@ export default function SignOff() {
                         setContractorName("");
                         setAttachedPhotos([]);
                         setSignedAt(null);
+                        setSavedSignature(null);
                         setHasSigned(false);
                         setDocReadOnly(false);
                       }}
@@ -1730,6 +1762,9 @@ export default function SignOff() {
         .hide-scrollbar {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+        input, textarea, select {
+          font-size: 16px !important;
         }
       `}</style>
     </div>
