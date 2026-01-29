@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { loadStripe } from '@stripe/stripe-js'
+import { createClient } from '../utils/supabase/client'
 import {
   DollarSign,
   Camera,
@@ -15,10 +16,22 @@ import {
 
 export default function WelcomePage() {
   const router = useRouter()
+  const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [stripePromise] = useState(() =>
     loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
   )
+
+  // Check if user is logged in - redirect to dashboard if they are
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        router.replace('/dashboard')
+      }
+    }
+    checkAuth()
+  }, [router, supabase])
 
   // Smooth scroll for anchor links
   useEffect(() => {
