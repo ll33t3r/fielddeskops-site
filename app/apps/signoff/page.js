@@ -15,6 +15,7 @@ import SignatureCanvas from "react-signature-canvas";
 export default function SignOff() {
   const supabase = createClient();
   const sigPad = useRef({});
+  const fileInputRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,6 +26,11 @@ export default function SignOff() {
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateBody, setNewTemplateBody] = useState("");
   const [newTemplateCategory, setNewTemplateCategory] = useState("CUSTOM");
+  const [showDocPreview, setShowDocPreview] = useState(false);
+  const [signedAt, setSignedAt] = useState(null);
+  const [attachedPhotos, setAttachedPhotos] = useState([]);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const [activePhoto, setActivePhoto] = useState(null);
   
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -60,6 +66,38 @@ export default function SignOff() {
     if (sigPad.current && !sigPad.current.isEmpty()) {
       setHasSigned(true);
     }
+  };
+
+  // Handle photo file selection (read as base64)
+  const handlePhotoFiles = (fileList) => {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+
+    files.forEach((file) => {
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (!result || typeof result !== "string") return;
+          setAttachedPhotos((prev) => [
+            ...prev,
+            {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              data: result,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+        };
+        reader.onerror = (err) => {
+          console.error("Photo read error:", err);
+          showToast("Failed to read photo", "error");
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Photo processing error:", error);
+        showToast("Photo processing failed", "error");
+      }
+    });
   };
 
   // REAL-TIME VARIABLE REPLACEMENT IN CONTRACT BODY
@@ -141,6 +179,8 @@ export default function SignOff() {
     setContractBody(contract.contract_body || "");
     setClientName(contract.client_name || "");
     setContractorName(contract.contractor_name || "");
+    setSignedAt(contract.signed_at || null);
+    setAttachedPhotos([]);
     
     // Restore job if available
     if (contract.job_id) {
@@ -149,6 +189,29 @@ export default function SignOff() {
         setSelectedJob(job);
         await loadJobBrainData(job.id);
       }
+    }
+    
+    // Load attached photos for this contract
+    try {
+      const { data: photoRows, error: photoError } = await supabase
+        .from("contract_photos")
+        .select("*")
+        .eq("contract_id", contract.id)
+        .order("display_order", { ascending: true });
+
+      if (photoError) {
+        console.error("Load contract photos error:", photoError);
+      } else if (photoRows) {
+        setAttachedPhotos(
+          photoRows.map((p) => ({
+            id: p.id,
+            data: p.photo_data,
+            timestamp: p.created_at || null,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Unexpected photo load error:", err);
     }
     
     // Close menu and scroll to top
@@ -246,6 +309,8 @@ export default function SignOff() {
       }
       
       const processedBody = applySmartVariables(contractBody);
+      const nowIso = new Date().toISOString();
+      setSignedAt(nowIso);
 
       const { error, data } = await supabase.from("contracts").insert({
         user_id: user.id,
@@ -254,7 +319,8 @@ export default function SignOff() {
         client_name: clientName.trim(),
         contractor_name: contractorName.trim(),
         contract_body: processedBody,
-        signature_data: signatureData
+        signature_data: signatureData,
+        signed_at: nowIso
       }).select().single();
 
       if (error) {
@@ -270,9 +336,25 @@ export default function SignOff() {
         throw new Error("Signature data not saved properly");
       }
       
+      // Save attached photos for this contract
+      if (attachedPhotos.length > 0 && data?.id) {
+        const rows = attachedPhotos.map((photo, index) => ({
+          contract_id: data.id,
+          photo_data: photo.data,
+          display_order: index,
+        }));
+        const { error: photoError } = await supabase
+          .from("contract_photos")
+          .insert(rows);
+        if (photoError) {
+          console.error("Photo save error:", photoError);
+        }
+      }
+      
       await loadAllData();
       clearSignature();
       setContractBody("");
+      setAttachedPhotos([]);
 
     } catch (error) {
       console.error("Save error:", error);
@@ -511,6 +593,73 @@ export default function SignOff() {
           />
         </div>
 
+        {/* ATTACH PHOTOS */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+            Attach Photos
+          </label>
+          <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black text-sm font-semibold hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-shadow"
+              >
+                <Camera size={16} />
+                Add Photos
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handlePhotoFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <p className="text-[10px] text-[var(--text-sub)]">
+                JPG/PNG photos. Attach jobsite proof.
+              </p>
+            </div>
+
+            {attachedPhotos.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {attachedPhotos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="relative group cursor-pointer"
+                    onClick={() => {
+                      setActivePhoto(photo);
+                      setShowPhotoViewer(true);
+                    }}
+                  >
+                    <img
+                      src={photo.data}
+                      alt="Attached"
+                      className="w-full h-24 rounded-lg object-cover border border-[var(--border-color)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAttachedPhotos((prev) =>
+                          prev.filter((p) => p.id !== photo.id)
+                        );
+                      }}
+                      className="absolute -top-1 -right-1 rounded-full bg-black/70 text-white p-0.5 opacity-80 hover:opacity-100"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* CONTRACT BODY WITH LIVE PREVIEW */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contract Text</label>
@@ -522,15 +671,22 @@ export default function SignOff() {
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
           />
           {(clientName || contractorName || Object.keys(smartVariables).length > 0) && contractBody.includes("[") && (
-            <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
+            <button
+              type="button"
+              onClick={() => setShowDocPreview(true)}
+              className="w-full text-left p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 hover:bg-blue-500/10 transition-colors cursor-pointer"
+            >
               <p className="text-xs font-bold text-blue-400 mb-2">Live Preview:</p>
               <p className="text-sm text-gray-300 whitespace-pre-wrap">{getDisplayedContractBody()}</p>
-            </div>
+              <p className="mt-2 text-[10px] text-blue-300 uppercase tracking-wide">
+                Click to open full document view
+              </p>
+            </button>
           )}
         </div>
 
         {/* SIGNATURE PAD */}
-        <div className="space-y-2">
+        <div className="space-y-2" id="signoff-signature-pad">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Client Signature</label>
             {hasSigned && (
@@ -962,6 +1118,145 @@ export default function SignOff() {
           "bg-[#FF6700] text-black"
         }`}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* FULL-SCREEN DOCUMENT PREVIEW MODAL */}
+      {showDocPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6">
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white text-black shadow-2xl rounded-xl p-8">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setShowDocPreview(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <X size={20} />
+            </button>
+
+            {/* SIGNED watermark */}
+            {signedAt && (
+              <div className="pointer-events-none select-none absolute inset-0 flex items-center justify-center">
+                <span
+                  className="text-6xl font-black text-[#FF6700]/20"
+                  style={{ transform: "rotate(-45deg)" }}
+                >
+                  SIGNED
+                </span>
+              </div>
+            )}
+
+            {/* Document content */}
+            <div className="relative">
+              {/* Header */}
+              <div className="mb-6 pb-3 border-b-4 border-[#FF6700] flex items-start justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-wide">FieldDeskOps Contract</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Generated on-site with FieldDeskOps SignOff
+                  </p>
+                </div>
+                <div className="text-right text-xs text-gray-600">
+                  <p>{new Date().toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {/* Title */}
+              <h1 className="text-xl font-semibold mb-4">
+                {selectedJob?.title || "Contract Agreement"}
+              </h1>
+
+              {/* Parties */}
+              <div className="mb-4 text-sm">
+                <p className="font-semibold">
+                  CUSTOMER: <span className="font-normal">{clientName || "________________"}</span>
+                </p>
+                <p className="font-semibold mt-1">
+                  CONTRACTOR:{" "}
+                  <span className="font-normal">{contractorName || "________________"}</span>
+                </p>
+              </div>
+
+              {/* Body */}
+              <div className="mt-4 text-sm leading-relaxed whitespace-pre-wrap">
+                {getDisplayedContractBody()}
+              </div>
+
+              {/* Attached photos preview */}
+              {attachedPhotos.length > 0 && (
+                <div className="mt-8">
+                  <p className="text-sm font-semibold mb-3">Attached Photos</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {attachedPhotos.map((photo) => (
+                      <div
+                        key={photo.id}
+                        className="w-full h-32 border border-gray-200 rounded-md overflow-hidden"
+                      >
+                        <img
+                          src={photo.data}
+                          alt="Contract photo"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Signature section */}
+              <div className="mt-10 pt-6 border-t border-gray-200">
+                <p className="text-sm font-semibold mb-3">Client Signature</p>
+                <div className="w-full h-32 border border-gray-300 rounded-md bg-white flex items-center justify-center text-gray-400 text-xs">
+                  Signature will appear here after signing below.
+                </div>
+                {signedAt && (
+                  <p className="mt-3 text-xs text-gray-600">
+                    Signed: {new Date(signedAt).toLocaleString()}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDocPreview(false);
+                    // Scroll to signature pad on main page
+                    setTimeout(() => {
+                      const el = document.querySelector("#signoff-signature-pad");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }
+                    }, 50);
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black font-semibold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition-shadow"
+                >
+                  <PenTool size={16} />
+                  Sign This Document
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* FULL-SIZE PHOTO VIEWER */}
+      {showPhotoViewer && activePhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-4">
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white hover:text-gray-300"
+            onClick={() => {
+              setShowPhotoViewer(false);
+              setActivePhoto(null);
+            }}
+          >
+            <X size={24} />
+          </button>
+          <div className="max-w-3xl max-h-[90vh]">
+            <img
+              src={activePhoto.data}
+              alt="Preview"
+              className="w-full h-full object-contain rounded-lg"
+            />
+          </div>
         </div>
       )}
 
