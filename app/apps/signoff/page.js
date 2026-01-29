@@ -186,7 +186,6 @@ export default function SignOff() {
           ...baseVars,
           ...customVars,
         });
-        showToast("Job data loaded", "success");
       }
     } catch (error) {
       console.error("Brain load error:", error);
@@ -405,6 +404,7 @@ export default function SignOff() {
   };
 
   const saveTemplate = async () => {
+    console.log("saveTemplate clicked!", { newTemplateName, newTemplateBody });
     if (!newTemplateName.trim() || !newTemplateBody.trim()) {
       showToast("Fill all fields", "error");
       return;
@@ -560,6 +560,12 @@ export default function SignOff() {
               }}>
                 SIGNOFF
               </h1>
+              <p className="text-[8px] font-bold uppercase tracking-widest" style={{
+                color: "#FF6700",
+                textShadow: "0 0 8px rgba(255,103,0,0.3)"
+              }}>
+                SMARTER CONTRACTS
+              </p>
             </div>
           </div>
           <button
@@ -576,27 +582,25 @@ export default function SignOff() {
         <div className="flex items-center gap-3">
           <FileText size={18} className="text-[#FF6700]" />
           <select
-            value={selectedJob?.id || ""}
+            value={selectedJob?.id || "NEW"}
             onChange={(e) => {
-              const job = recentJobs.find(j => j.id === e.target.value);
-              setSelectedJob(job || null);
+              if (e.target.value === "NEW") {
+                setShowNewJobModal(true);
+              } else {
+                const job = recentJobs.find(j => j.id === e.target.value);
+                setSelectedJob(job || null);
+              }
             }}
             className="flex-1 p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)]"
           >
-            <option value="">Select Job...</option>
+            <option value="NEW">+ Create New Job</option>
+            <option value="">───────────</option>
             {recentJobs.map((job) => (
               <option key={job.id} value={job.id}>
                 {job.title}
               </option>
             ))}
           </select>
-          <button
-            onClick={() => setShowNewJobModal(true)}
-            className="px-3 py-2 bg-[#FF6700] text-black rounded-lg font-bold text-sm hover:shadow-[0_0_10px_rgba(255,103,0,0.4)] transition-all flex items-center gap-1"
-          >
-            <Plus size={16} />
-            New Job
-          </button>
         </div>
       </div>
 
@@ -677,22 +681,44 @@ export default function SignOff() {
                       return;
                     }
                     try {
-                      const { data, error } = await supabase
+                      // Query photos table first
+                      const { data: photoRecords, error: tableError } = await supabase
                         .from("sitesnap_photos")
                         .select("*")
                         .eq("job_id", selectedJob.id)
                         .order("created_at", { ascending: false });
-                      if (error) {
-                        console.error("SiteSnap load error:", error);
-                        showToast("Failed to load SiteSnap photos", "error");
+                      
+                      if (tableError) {
+                        console.error("SiteSnap table error:", tableError);
+                        showToast("Failed to load photos", "error");
                         return;
                       }
-                      setSiteSnapPhotos(data || []);
+                      
+                      if (!photoRecords || photoRecords.length === 0) {
+                        showToast("No SiteSnap photos for this job", "error");
+                        setShowSiteSnapModal(false);
+                        return;
+                      }
+                      
+                      // Load actual photo URLs from storage if photo_url is bucket path
+                      const photosWithUrls = await Promise.all(
+                        photoRecords.map(async (record) => {
+                          if (record.photo_url && record.photo_url.startsWith('sitesnap/')) {
+                            const { data: publicURL } = supabase.storage
+                              .from('sitesnap-photos')
+                              .getPublicUrl(record.photo_url);
+                            return { ...record, photo_url: publicURL.publicUrl };
+                          }
+                          return record;
+                        })
+                      );
+                      
+                      setSiteSnapPhotos(photosWithUrls);
                       setSelectedSiteSnap(new Set());
                       setShowSiteSnapModal(true);
                     } catch (err) {
-                      console.error("SiteSnap unexpected error:", err);
-                      showToast("Failed to load SiteSnap photos", "error");
+                      console.error("SiteSnap error:", err);
+                      showToast("Failed to load photos", "error");
                     }
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-color)] text-sm font-semibold text-[var(--text-main)] hover:border-[#FF6700] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -778,36 +804,25 @@ export default function SignOff() {
             rows={12}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
           />
-          {(clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
+          {previewExpanded && (clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5">
+              <div className="px-4 py-3">
+                <p className="text-xs text-blue-400 mb-1">Preview:</p>
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                  {getDisplayedContractBody()}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setDocReadOnly(Boolean(signedAt));
                   setShowDocPreview(true);
                 }}
-                className="w-full text-left px-4 pt-3 pb-2 cursor-pointer"
+                className="w-full text-left px-4 pb-3 text-[10px] text-blue-300 uppercase tracking-wide flex items-center justify-between hover:text-blue-200"
               >
-                <p className="text-[10px] font-bold text-blue-300 uppercase tracking-wide flex items-center justify-between">
-                  <span>Open Full Document</span>
-                  <ChevronRight size={14} />
-                </p>
+                <span>Open Full Document</span>
+                <ChevronRight size={14} />
               </button>
-              {previewExpanded ? (
-                <div className="px-4 pb-3">
-                  <p className="text-xs text-blue-400 mb-1">Preview:</p>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                    {getDisplayedContractBody()}
-                  </p>
-                </div>
-              ) : (
-                <div className="px-4 pb-3">
-                  <p className="text-xs text-blue-400 mb-1">Summary:</p>
-                  <p className="text-sm text-gray-300 truncate">
-                    {getDisplayedContractBody() || "Preview your contract as a formatted document."}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -874,16 +889,6 @@ export default function SignOff() {
                 <div className="space-y-4">
                   {jobLinkedData ? (
                     <>
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30">
-                        <div className="flex items-center gap-3 mb-3">
-                          <Brain size={24} className="text-purple-400" />
-                          <div>
-                            <p className="font-bold text-sm text-white">Job Data</p>
-                            <p className="text-xs text-gray-400">{jobLinkedData.title}</p>
-                          </div>
-                        </div>
-                      </div>
-
                       {linkedEstimate && (
                         <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/10">
                           <div className="flex items-center justify-between">
@@ -978,25 +983,6 @@ export default function SignOff() {
                           <Plus size={12} />
                           Add Custom Variable
                         </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-sm font-bold text-gray-400">Change Job:</p>
-                        <select
-                          value={selectedJob?.id || ""}
-                          onChange={(e) => {
-                            const job = recentJobs.find(j => j.id === e.target.value);
-                            setSelectedJob(job || null);
-                          }}
-                          className="w-full p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] outline-none text-[var(--text-main)]"
-                        >
-                          <option value="">No Job Selected</option>
-                          {recentJobs.map((job) => (
-                            <option key={job.id} value={job.id}>
-                              {job.title}
-                            </option>
-                          ))}
-                        </select>
                       </div>
                     </>
                   ) : (
