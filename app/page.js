@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "../utils/supabase/client";
@@ -58,20 +58,32 @@ export default function Dashboard() {
   // Job assignment state
   const [assigningJob, setAssigningJob] = useState(null);
 
+  // Check authentication on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") || "dark";
-    setTheme(savedTheme);
-    document.documentElement.setAttribute("data-theme", savedTheme);
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace("/welcome");
+        return;
+      }
+      
+      // User is authenticated, proceed with normal initialization
+      const savedTheme = localStorage.getItem("theme") || "dark";
+      setTheme(savedTheme);
+      document.documentElement.setAttribute("data-theme", savedTheme);
 
-    const savedPrivacy = localStorage.getItem("privacyMode");
-    if (savedPrivacy !== null) {
-      setPrivacyMode(savedPrivacy === "true");
-    }
+      const savedPrivacy = localStorage.getItem("privacyMode");
+      if (savedPrivacy !== null) {
+        setPrivacyMode(savedPrivacy === "true");
+      }
 
-    const h = new Date().getHours();
-    setGreeting(h < 12 ? "Good Morning" : h < 18 ? "Good Afternoon" : "Good Evening");
+      const h = new Date().getHours();
+      setGreeting(h < 12 ? "Good Morning" : h < 18 ? "Good Afternoon" : "Good Evening");
+      
+      loadDashboardData();
+    };
     
-    loadDashboardData();
+    checkAuth();
   }, []);
 
   useEffect(() => {
@@ -243,7 +255,7 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.replace("/auth/login"); return; }
+    if (!user) { router.replace("/welcome"); return; }
 
     const { data: bids } = await supabase.from("estimates").select("total_price");
     const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.total_price) || 0), 0) : 0;

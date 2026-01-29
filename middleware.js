@@ -37,19 +37,31 @@ export async function middleware(request) {
     data: { session },
   } = await supabase.auth.getSession()
 
+  // Define public routes (no auth required)
+  const publicRoutes = ['/welcome', '/auth/login', '/auth/signup', '/auth/callback']
+  const publicApiRoutes = ['/api/stripe/checkout']
+  
   // Define protected routes
   const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command']
   const { pathname } = request.nextUrl
+
+  // Check if route is public
+  const isPublicRoute = publicRoutes.some((route) => pathname === route || pathname.startsWith(route))
+  const isPublicApiRoute = publicApiRoutes.some((route) => pathname.startsWith(route))
+
+  // Allow public routes and API routes
+  if (isPublicRoute || isPublicApiRoute) {
+    return response
+  }
 
   // Check if the current path is a protected route
   const isProtectedRoute = protectedRoutes.some((route) =>
     pathname.startsWith(route)
   )
 
-  // If accessing a protected route without a session, redirect to login
+  // If accessing a protected route without a session, redirect to welcome
   if (isProtectedRoute && !session) {
-    const redirectUrl = new URL('/auth/login', request.url)
-    redirectUrl.searchParams.set('redirectTo', pathname)
+    const redirectUrl = new URL('/welcome', request.url)
     return NextResponse.redirect(redirectUrl)
   }
 
