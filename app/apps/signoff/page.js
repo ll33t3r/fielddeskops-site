@@ -31,6 +31,15 @@ export default function SignOff() {
   const [attachedPhotos, setAttachedPhotos] = useState([]);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [activePhoto, setActivePhoto] = useState(null);
+  const [docReadOnly, setDocReadOnly] = useState(false);
+  const [editingVar, setEditingVar] = useState(null);
+  const [editingVarValue, setEditingVarValue] = useState("");
+  const [showAddVarModal, setShowAddVarModal] = useState(false);
+  const [newVarName, setNewVarName] = useState("");
+  const [newVarValue, setNewVarValue] = useState("");
+  const [showSiteSnapModal, setShowSiteSnapModal] = useState(false);
+  const [siteSnapPhotos, setSiteSnapPhotos] = useState([]);
+  const [selectedSiteSnap, setSelectedSiteSnap] = useState(new Set());
   
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -181,6 +190,7 @@ export default function SignOff() {
     setContractorName(contract.contractor_name || "");
     setSignedAt(contract.signed_at || null);
     setAttachedPhotos([]);
+    setDocReadOnly(true);
     
     // Restore job if available
     if (contract.job_id) {
@@ -222,6 +232,9 @@ export default function SignOff() {
     
     const dateStr = contract.created_at ? new Date(contract.created_at).toLocaleDateString() : "history";
     showToast(`Contract loaded from ${dateStr}`, "success");
+
+    // Open directly in document view (read-only)
+    setShowDocPreview(true);
   };
 
   const loadAllData = async () => {
@@ -311,6 +324,7 @@ export default function SignOff() {
       const processedBody = applySmartVariables(contractBody);
       const nowIso = new Date().toISOString();
       setSignedAt(nowIso);
+      setDocReadOnly(true);
 
       const { error, data } = await supabase.from("contracts").insert({
         user_id: user.id,
@@ -351,10 +365,8 @@ export default function SignOff() {
         }
       }
       
-      await loadAllData();
+      // Stay in document view; clear signature pad but keep content
       clearSignature();
-      setContractBody("");
-      setAttachedPhotos([]);
 
     } catch (error) {
       console.error("Save error:", error);
@@ -542,6 +554,30 @@ export default function SignOff() {
       </div>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
+        {/* CUSTOMER NAME */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Customer</label>
+          <input
+            type="text"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            placeholder="Enter customer name"
+            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
+          />
+        </div>
+
+        {/* CONTRACTOR NAME */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contractor</label>
+          <input
+            type="text"
+            value={contractorName}
+            onChange={(e) => setContractorName(e.target.value)}
+            placeholder="Your business name"
+            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
+          />
+        </div>
+
         {/* PINNED TEMPLATES ROW - SMALLER */}
         {pinnedTemplates.length > 0 && (
           <div className="space-y-2">
@@ -569,45 +605,55 @@ export default function SignOff() {
           </div>
         )}
 
-        {/* CUSTOMER NAME */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Customer</label>
-          <input
-            type="text"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            placeholder="Enter customer name"
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
-          />
-        </div>
-
-        {/* CONTRACTOR NAME */}
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Contractor</label>
-          <input
-            type="text"
-            value={contractorName}
-            onChange={(e) => setContractorName(e.target.value)}
-            placeholder="Your business name"
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
-          />
-        </div>
-
         {/* ATTACH PHOTOS */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
             Attach Photos
           </label>
           <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black text-sm font-semibold hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-shadow"
-              >
-                <Camera size={16} />
-                Add Photos
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black text-sm font-semibold hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-shadow"
+                >
+                  <Camera size={16} />
+                  Add Photos
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedJob}
+                  onClick={async () => {
+                    if (!selectedJob) {
+                      showToast("Select a job first", "error");
+                      return;
+                    }
+                    try {
+                      const { data, error } = await supabase
+                        .from("sitesnap_photos")
+                        .select("*")
+                        .eq("job_id", selectedJob.id)
+                        .order("created_at", { ascending: false });
+                      if (error) {
+                        console.error("SiteSnap load error:", error);
+                        showToast("Failed to load SiteSnap photos", "error");
+                        return;
+                      }
+                      setSiteSnapPhotos(data || []);
+                      setSelectedSiteSnap(new Set());
+                      setShowSiteSnapModal(true);
+                    } catch (err) {
+                      console.error("SiteSnap unexpected error:", err);
+                      showToast("Failed to load SiteSnap photos", "error");
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-color)] text-sm font-semibold text-[var(--text-main)] hover:border-[#FF6700] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ImageIcon size={16} />
+                  Import from SiteSnap
+                </button>
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -621,7 +667,7 @@ export default function SignOff() {
                 }}
               />
               <p className="text-[10px] text-[var(--text-sub)]">
-                JPG/PNG photos. Attach jobsite proof.
+                JPG/PNG photos. Attach jobsite proof or import from SiteSnap.
               </p>
             </div>
 
@@ -670,73 +716,25 @@ export default function SignOff() {
             rows={12}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
           />
-          {(clientName || contractorName || Object.keys(smartVariables).length > 0) && contractBody.includes("[") && (
+          {(clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
             <button
               type="button"
-              onClick={() => setShowDocPreview(true)}
+              onClick={() => {
+                setDocReadOnly(Boolean(signedAt));
+                setShowDocPreview(true);
+              }}
               className="w-full text-left p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 hover:bg-blue-500/10 transition-colors cursor-pointer"
             >
-              <p className="text-xs font-bold text-blue-400 mb-2">Live Preview:</p>
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">{getDisplayedContractBody()}</p>
+              <p className="text-xs font-bold text-blue-400 mb-2">Document Preview</p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap line-clamp-3">
+                {getDisplayedContractBody() || "Preview your contract as a formatted document."}
+              </p>
               <p className="mt-2 text-[10px] text-blue-300 uppercase tracking-wide">
                 Click to open full document view
               </p>
             </button>
           )}
         </div>
-
-        {/* SIGNATURE PAD */}
-        <div className="space-y-2" id="signoff-signature-pad">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Client Signature</label>
-            {hasSigned && (
-              <button
-                onClick={clearSignature}
-                className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-              >
-                <RotateCcw size={14} />
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="border-2 border-dashed border-[var(--border-color)] rounded-xl overflow-hidden bg-white">
-            <SignatureCanvas
-              ref={sigPad}
-              onEnd={handleSignatureEnd}
-              canvasProps={{
-                className: "w-full h-48",
-                style: { touchAction: "none" }
-              }}
-              penColor="#000000"
-              backgroundColor="#ffffff"
-            />
-          </div>
-        </div>
-
-        {/* SAVE BUTTON - GLOWY ORANGE */}
-        <button
-          onClick={saveContract}
-          disabled={saving || !contractBody.trim() || !hasSigned || !clientName.trim()}
-          className="w-full p-5 rounded-xl font-black text-lg uppercase disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all"
-          style={{
-            background: "#FF6700",
-            color: "#000",
-            boxShadow: "0 0 20px rgba(255,103,0,0.4), 0 0 40px rgba(255,103,0,0.2)",
-            border: "2px solid #FF6700"
-          }}
-        >
-          {saving ? (
-            <>
-              <Loader2 size={24} className="animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save size={24} />
-              Save Contract
-            </>
-          )}
-        </button>
       </main>
 
       {/* POWERED BY FIELDDESKOPS FOOTER */}
@@ -825,7 +823,7 @@ export default function SignOff() {
                       )}
 
                       <div className="space-y-2">
-                        <p className="text-sm font-bold text-gray-400">Smart Variables Available:</p>
+                        <p className="text-sm font-bold text-gray-400">Smart Variables</p>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
                             <p className="text-xs font-mono text-[#FF6700]">[CUSTOMER]</p>
@@ -838,13 +836,72 @@ export default function SignOff() {
                           {Object.keys(smartVariables).map((varName) => (
                             <div
                               key={varName}
-                              className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30"
+                              className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30 flex flex-col gap-1"
                             >
-                              <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
-                              <p className="text-xs text-gray-400 truncate">{smartVariables[varName]}</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
+                                {editingVar === varName ? null : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingVar(varName);
+                                      setEditingVarValue(smartVariables[varName] || "");
+                                    }}
+                                    className="text-gray-300 hover:text-white p-1 rounded"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              {editingVar === varName ? (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <input
+                                    type="text"
+                                    value={editingVarValue}
+                                    onChange={(e) => setEditingVarValue(e.target.value)}
+                                    className="flex-1 px-2 py-1 text-xs rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSmartVariables((prev) => ({
+                                        ...prev,
+                                        [varName]: editingVarValue,
+                                      }));
+                                      setEditingVar(null);
+                                      setEditingVarValue("");
+                                    }}
+                                    className="px-2 py-1 text-[10px] rounded bg-[#FF6700] text-black font-bold"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingVar(null);
+                                      setEditingVarValue("");
+                                    }}
+                                    className="px-2 py-1 text-[10px] rounded bg-gray-700 text-white"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-gray-400 truncate">
+                                  {smartVariables[varName] || "Not set"}
+                                </p>
+                              )}
                             </div>
                           ))}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddVarModal(true)}
+                          className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FF6700]/40 text-xs text-[#FF6700] hover:bg-[#FF6700]/10"
+                        >
+                          <Plus size={12} />
+                          Add Custom Variable
+                        </button>
                       </div>
 
                       <div className="space-y-2">
@@ -1203,40 +1260,277 @@ export default function SignOff() {
                 </div>
               )}
 
-              {/* Signature section */}
+              {/* Signature section - edit vs signed modes */}
               <div className="mt-10 pt-6 border-t border-gray-200">
                 <p className="text-sm font-semibold mb-3">Client Signature</p>
-                <div className="w-full h-32 border border-gray-300 rounded-md bg-white flex items-center justify-center text-gray-400 text-xs">
-                  Signature will appear here after signing below.
-                </div>
-                {signedAt && (
-                  <p className="mt-3 text-xs text-gray-600">
-                    Signed: {new Date(signedAt).toLocaleString()}
-                  </p>
+
+                {!signedAt && !docReadOnly ? (
+                  <>
+                    <div className="border border-gray-300 rounded-md overflow-hidden bg-white">
+                      <SignatureCanvas
+                        ref={sigPad}
+                        onEnd={handleSignatureEnd}
+                        canvasProps={{
+                          className: "w-full h-32",
+                          style: { touchAction: "none" },
+                        }}
+                        penColor="#000000"
+                        backgroundColor="#ffffff"
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={clearSignature}
+                        className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                      >
+                        <RotateCcw size={14} />
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveContract}
+                        disabled={saving || !contractBody.trim() || !clientName.trim() || !hasSigned}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition-shadow"
+                      >
+                        {saving ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save size={16} />
+                            Sign &amp; Save
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-full h-32 border border-gray-300 rounded-md bg-white flex items-center justify-center text-gray-400 text-xs">
+                      Signed contract on file.
+                    </div>
+                    {signedAt && (
+                      <p className="mt-3 text-xs text-gray-600">
+                        Signed: {new Date(signedAt).toLocaleString()}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Close and reset to fresh form
+                        setShowDocPreview(false);
+                        setContractBody("");
+                        setClientName("");
+                        setContractorName("");
+                        setAttachedPhotos([]);
+                        setSignedAt(null);
+                        setHasSigned(false);
+                        setDocReadOnly(false);
+                      }}
+                      className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-white font-semibold hover:bg-gray-700 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDocPreview(false);
-                    // Scroll to signature pad on main page
-                    setTimeout(() => {
-                      const el = document.querySelector("#signoff-signature-pad");
-                      if (el) {
-                        el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }
-                    }, 50);
-                  }}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black font-semibold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition-shadow"
-                >
-                  <PenTool size={16} />
-                  Sign This Document
-                </button>
               </div>
             </div>
           </div>
         </div>
       )}
       
+      {/* ADD CUSTOM VARIABLE MODAL */}
+      {showAddVarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-sm bg-[var(--bg-card)] border border-[#FF6700]/40 rounded-2xl p-5 shadow-2xl relative">
+            <button
+              type="button"
+              className="absolute top-3 right-3 text-[var(--text-sub)] hover:text-[var(--text-main)]"
+              onClick={() => {
+                setShowAddVarModal(false);
+                setNewVarName("");
+                setNewVarValue("");
+              }}
+            >
+              <X size={16} />
+            </button>
+            <h3 className="text-sm font-bold text-[#FF6700] mb-3 uppercase tracking-wide">
+              Add Custom Variable
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <label className="text-xs text-[var(--text-sub)] uppercase font-bold">
+                  Variable Name
+                </label>
+                <input
+                  type="text"
+                  value={newVarName}
+                  onChange={(e) => setNewVarName(e.target.value)}
+                  placeholder="e.g. DEPOSIT_AMOUNT"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] outline-none"
+                />
+                <p className="text-[10px] text-[var(--text-sub)]">
+                  Brackets will be added automatically, e.g. [DEPOSIT_AMOUNT]
+                </p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-[var(--text-sub)] uppercase font-bold">
+                  Value
+                </label>
+                <input
+                  type="text"
+                  value={newVarValue}
+                  onChange={(e) => setNewVarValue(e.target.value)}
+                  placeholder="$500 deposit"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] text-[var(--text-main)] outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddVarModal(false);
+                    setNewVarName("");
+                    setNewVarValue("");
+                  }}
+                  className="px-3 py-2 rounded-lg text-xs bg-gray-800 text-white hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const raw = newVarName.trim().toUpperCase().replace(/\s+/g, "_");
+                    if (!raw) {
+                      showToast("Variable name required", "error");
+                      return;
+                    }
+                    const key = raw.startsWith("[") && raw.endsWith("]")
+                      ? raw
+                      : `[${raw}]`;
+                    setSmartVariables((prev) => ({
+                      ...prev,
+                      [key]: newVarValue,
+                    }));
+                    setShowAddVarModal(false);
+                    setNewVarName("");
+                    setNewVarValue("");
+                  }}
+                  className="px-3 py-2 rounded-lg text-xs bg-[#FF6700] text-black font-bold hover:shadow-[0_0_10px_rgba(255,103,0,0.4)]"
+                >
+                  Save Variable
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SITESNAP IMPORT MODAL */}
+      {showSiteSnapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-3xl max-h-[90vh] bg-[var(--bg-card)] border border-[#FF6700]/40 rounded-2xl p-5 shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#FF6700] uppercase tracking-wide">
+                Import from SiteSnap
+              </h3>
+              <button
+                type="button"
+                className="text-[var(--text-sub)] hover:text-[var(--text-main)]"
+                onClick={() => setShowSiteSnapModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {(!siteSnapPhotos || siteSnapPhotos.length === 0) ? (
+              <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-sub)]">
+                No SiteSnap photos found for this job.
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
+                  {siteSnapPhotos.map((photo) => {
+                    const checked = selectedSiteSnap.has(photo.id);
+                    return (
+                      <button
+                        key={photo.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSiteSnap((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(photo.id)) next.delete(photo.id);
+                            else next.add(photo.id);
+                            return next;
+                          });
+                        }}
+                        className={`relative border rounded-lg overflow-hidden ${
+                          checked ? "border-[#FF6700]" : "border-[var(--border-color)]"
+                        }`}
+                      >
+                        <img
+                          src={photo.photo_url || photo.photo_data}
+                          alt="SiteSnap"
+                          className="w-full h-32 object-cover"
+                        />
+                        <div className="absolute top-1 left-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center border border-white/40">
+                          <input
+                            type="checkbox"
+                            readOnly
+                            checked={checked}
+                            className="accent-[#FF6700]"
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="pt-3 flex justify-between items-center text-xs">
+                  <p className="text-[var(--text-sub)]">
+                    Selected: {selectedSiteSnap.size}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSiteSnapModal(false)}
+                      className="px-3 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedSiteSnap.size === 0}
+                      onClick={() => {
+                        const toAdd = siteSnapPhotos.filter((p) =>
+                          selectedSiteSnap.has(p.id)
+                        );
+                        if (toAdd.length > 0) {
+                          setAttachedPhotos((prev) => [
+                            ...prev,
+                            ...toAdd.map((p) => ({
+                              id: `sitesnap-${p.id}`,
+                              data: p.photo_url || p.photo_data,
+                              timestamp: p.created_at || new Date().toISOString(),
+                              sitesnap_photo_id: p.id,
+                            })),
+                          ]);
+                        }
+                        setShowSiteSnapModal(false);
+                      }}
+                      className="px-3 py-2 rounded-lg bg-[#FF6700] text-black font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add Selected ({selectedSiteSnap.size})
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* FULL-SIZE PHOTO VIEWER */}
       {showPhotoViewer && activePhoto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-4">
