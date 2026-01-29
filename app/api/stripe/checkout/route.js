@@ -8,29 +8,60 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request) {
   try {
-    // Validate environment variables
-    if (!process.env.STRIPE_SECRET_KEY) {
+    // Validate environment variables with better error logging
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+    if (!stripeSecretKey) {
+      console.error('Missing STRIPE_SECRET_KEY')
       return NextResponse.json(
-        { error: 'STRIPE_SECRET_KEY is not configured' },
+        { error: 'Stripe Secret Key not configured. Check environment variables.' },
         { status: 500 }
       )
     }
 
-    if (!process.env.NEXT_PUBLIC_SITE_URL) {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (!siteUrl) {
+      console.error('Missing NEXT_PUBLIC_SITE_URL')
       return NextResponse.json(
-        { error: 'NEXT_PUBLIC_SITE_URL is not configured' },
+        { error: 'Site URL not configured. Check environment variables.' },
+        { status: 500 }
+      )
+    }
+
+    const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID
+    if (!priceId) {
+      console.error('Missing NEXT_PUBLIC_STRIPE_PRICE_ID')
+      return NextResponse.json(
+        { error: 'Stripe Price ID not configured. Check environment variables.' },
+        { status: 500 }
+      )
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl) {
+      console.error('Missing NEXT_PUBLIC_SUPABASE_URL')
+      return NextResponse.json(
+        { error: 'Supabase URL not configured. Check environment variables.' },
+        { status: 500 }
+      )
+    }
+
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabaseAnonKey) {
+      console.error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
+      return NextResponse.json(
+        { error: 'Supabase Anon Key not configured. Check environment variables.' },
         { status: 500 }
       )
     }
 
     // Initialize Stripe
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+    const stripe = new Stripe(stripeSecretKey)
 
     // Get current user from Supabase
     const cookieStore = cookies()
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      supabaseUrl,
+      supabaseAnonKey,
       {
         cookies: {
           get(name) {
@@ -54,16 +85,7 @@ export async function POST(request) {
       }
     )
 
-    // Parse request body
-    const body = await request.json()
-    const { priceId } = body
-
-    if (!priceId) {
-      return NextResponse.json(
-        { error: 'priceId is required' },
-        { status: 400 }
-      )
-    }
+    // Price ID is now from environment variable (already validated above)
 
     // Try to get authenticated user (optional - allows guest checkout)
     const {
@@ -108,8 +130,8 @@ export async function POST(request) {
       subscription_data: {
         trial_period_days: 7,
       },
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/welcome`,
+      success_url: `${siteUrl}/dashboard?success=true`,
+      cancel_url: `${siteUrl}/welcome`,
     }
 
     // If user is logged in, add their email and user ID

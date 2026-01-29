@@ -136,19 +136,29 @@ export default function SignOff() {
     setNewTemplateBody(prev => prev.replaceAll(variable, ""));
   };
 
-  const restoreContract = (contract) => {
-    setContractBody(contract.contract_body);
+  const restoreContract = async (contract) => {
+    // Populate ALL fields from contract
+    setContractBody(contract.contract_body || "");
     setClientName(contract.client_name || "");
     setContractorName(contract.contractor_name || "");
     
+    // Restore job if available
     if (contract.job_id) {
       const job = recentJobs.find(j => j.id === contract.job_id);
-      if (job) setSelectedJob(job);
+      if (job) {
+        setSelectedJob(job);
+        await loadJobBrainData(job.id);
+      }
     }
     
+    // Close menu and scroll to top
     setShowMenu(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast("Contract loaded", "success");
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
+    
+    const dateStr = contract.created_at ? new Date(contract.created_at).toLocaleDateString() : "history";
+    showToast(`Contract loaded from ${dateStr}`, "success");
   };
 
   const loadAllData = async () => {
@@ -219,10 +229,25 @@ export default function SignOff() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
-      const signatureData = sigPad.current.toDataURL("image/png");
+      // Verify signature canvas exists and capture data with error handling
+      if (!sigPad.current || !sigPad.current.toDataURL) {
+        throw new Error("Signature canvas not available");
+      }
+      
+      let signatureData;
+      try {
+        signatureData = sigPad.current.toDataURL("image/png");
+        if (!signatureData || signatureData.length < 100) {
+          throw new Error("Signature data capture failed");
+        }
+      } catch (sigError) {
+        console.error("Signature toDataURL error:", sigError);
+        throw new Error("Failed to capture signature. Please try signing again.");
+      }
+      
       const processedBody = applySmartVariables(contractBody);
 
-      const { error } = await supabase.from("contracts").insert({
+      const { error, data } = await supabase.from("contracts").insert({
         user_id: user.id,
         job_id: selectedJob?.id || null,
         job_name: selectedJob?.title || "Custom Contract",
@@ -230,15 +255,20 @@ export default function SignOff() {
         contractor_name: contractorName.trim(),
         contract_body: processedBody,
         signature_data: signatureData
-      });
+      }).select().single();
 
       if (error) {
         console.error("Supabase error:", error);
         throw error;
       }
 
-      localStorage.setItem("fdo_last_contractor", contractorName);
-      showToast("✓ Contract saved!", "success");
+      // Verify signature was saved
+      if (data && data.signature_data) {
+        localStorage.setItem("fdo_last_contractor", contractorName);
+        showToast("✓ Contract saved! Signature confirmed.", "success");
+      } else {
+        throw new Error("Signature data not saved properly");
+      }
       
       await loadAllData();
       clearSignature();
@@ -288,6 +318,14 @@ export default function SignOff() {
   const togglePin = async (template) => {
     if (template.id.startsWith("d")) return;
     
+    const pinnedTemplates = templates.filter(t => t.is_pinned);
+    
+    // Check 5-pin limit
+    if (pinnedTemplates.length >= 5 && !template.is_pinned) {
+      showToast("Max 5 pins allowed", "error");
+      return;
+    }
+    
     try {
       const { error } = await supabase
         .from("contract_templates")
@@ -299,18 +337,46 @@ export default function SignOff() {
       showToast(template.is_pinned ? "Unpinned" : "Pinned", "success");
     } catch (error) {
       console.error("Pin error:", error);
+      showToast("Pin failed", "error");
     }
   };
 
   const pinnedTemplates = templates.filter(t => t.is_pinned);
+  const pinnedCount = pinnedTemplates.length;
+
+  // Lock body scroll when menu is open
+  useEffect(() => {
+    if (showMenu || showTemplateBuilder) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showMenu, showTemplateBuilder]);
 
   useEffect(() => {
     loadAllData();
   }, []);
 
   useEffect(() => {
+    // When job changes, clear old data first
     if (selectedJob?.id) {
+      // Clear old linked estimate and smart variables
+      setLinkedEstimate(null);
+      setSmartVariables({});
+      // Reset contract body if it contains old job data
+      if (contractBody && contractBody.includes("[JOB_NAME]")) {
+        setContractBody("");
+      }
+      // Load new job data
       loadJobBrainData(selectedJob.id);
+    } else {
+      // Clear everything if no job selected
+      setLinkedEstimate(null);
+      setSmartVariables({});
+      setJobBrainData(null);
     }
   }, [selectedJob]);
 
@@ -343,34 +409,63 @@ export default function SignOff() {
           </div>
           <button
             onClick={() => setShowMenu(true)}
-            className="p-3 rounded-xl bg-black text-[#FF6700] border border-[#FF6700]"
+            className="p-3 rounded-xl bg-[var(--bg-card)] text-[#FF6700] border border-[#FF6700]"
           >
             <Menu size={24} />
           </button>
         </div>
       </div>
 
-      {/* JOB NAME DISPLAY */}
-      {selectedJob && (
-        <div className="px-6 py-3 bg-[var(--bg-card)] border-b border-[var(--border-color)]">
-          <div className="flex items-center gap-2 text-sm">
-            <FileText size={16} className="text-[#FF6700]" />
-            <span className="font-semibold">{selectedJob.title}</span>
+      {/* JOB SELECTOR - PRIMARY FUNCTIONALITY */}
+      <div className="px-6 py-3 bg-[var(--bg-card)] border-b border-[var(--border-color)]">
+        <div className="flex items-center gap-3">
+          <FileText size={18} className="text-[#FF6700]" />
+          <select
+            value={selectedJob?.id || ""}
+            onChange={(e) => {
+              const job = recentJobs.find(j => j.id === e.target.value);
+              setSelectedJob(job || null);
+            }}
+            className="flex-1 p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)]"
+          >
+            <option value="">Select Job...</option>
+            {recentJobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.title}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              // Navigate to command center to create new job
+              window.location.href = "/";
+            }}
+            className="px-3 py-2 bg-[#FF6700] text-black rounded-lg font-bold text-sm hover:shadow-[0_0_10px_rgba(255,103,0,0.4)] transition-all flex items-center gap-1"
+          >
+            <Plus size={16} />
+            New Job
+          </button>
+        </div>
+        {selectedJob && (
+          <div className="mt-2 text-xs text-[var(--text-sub)] flex items-center gap-2">
             {selectedJob.customer_name && (
               <>
-                <span className="text-gray-500">•</span>
-                <span className="text-gray-400">{selectedJob.customer_name}</span>
+                <span>{selectedJob.customer_name}</span>
+                <span>•</span>
               </>
             )}
+            <span className="text-[#FF6700]">Job Linked</span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
         {/* PINNED TEMPLATES ROW - SMALLER */}
         {pinnedTemplates.length > 0 && (
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Quick Templates</label>
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Quick Templates <span className="text-[#FF6700]">({pinnedCount}/5)</span>
+            </label>
             <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
               {pinnedTemplates.map((template) => (
                 <button
@@ -481,7 +576,7 @@ export default function SignOff() {
             </>
           ) : (
             <>
-              <Brain size={24} />
+              <Save size={24} />
               Save Contract
             </>
           )}
@@ -502,8 +597,20 @@ export default function SignOff() {
 
       {/* MENU MODAL */}
       {showMenu && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="bg-black w-full sm:max-w-3xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700]">
+        <>
+          <div 
+            className="fixed inset-0 bg-black/90 z-50"
+            onClick={() => setShowMenu(false)}
+            style={{ overflow: 'hidden' }}
+          />
+          <div 
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none"
+            style={{ overflow: 'hidden' }}
+          >
+            <div 
+              className="bg-[var(--bg-card)] w-full sm:max-w-3xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700] pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
             <div className="p-6 border-b border-[#FF6700]/30">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-[#FF6700]">Menu</h2>
@@ -522,8 +629,8 @@ export default function SignOff() {
                     onClick={() => setMenuTab(tab)}
                     className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
                       menuTab === tab
-                        ? "bg-[#FF6700] text-black"
-                        : "bg-[#FF6700]/10 text-[#FF6700]"
+                        ? "bg-[#FF6700] text-black shadow-[0_0_10px_rgba(255,103,0,0.4)]"
+                        : "bg-[#FF6700]/10 text-[#FF6700] hover:bg-[#FF6700]/20"
                     }`}
                   >
                     {tab}
@@ -541,7 +648,7 @@ export default function SignOff() {
                         <div className="flex items-center gap-3 mb-3">
                           <Brain size={24} className="text-purple-400" />
                           <div>
-                            <p className="font-bold text-sm text-white">Brain Active</p>
+                            <p className="font-bold text-sm text-white">Job Linked</p>
                             <p className="text-xs text-gray-400">{jobBrainData.title}</p>
                           </div>
                         </div>
@@ -590,10 +697,11 @@ export default function SignOff() {
                           value={selectedJob?.id || ""}
                           onChange={(e) => {
                             const job = recentJobs.find(j => j.id === e.target.value);
-                            setSelectedJob(job);
+                            setSelectedJob(job || null);
                           }}
-                          className="w-full p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none text-white"
+                          className="w-full p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)] outline-none text-[var(--text-main)]"
                         >
+                          <option value="">No Job Selected</option>
                           {recentJobs.map((job) => (
                             <option key={job.id} value={job.id}>
                               {job.title}
@@ -604,9 +712,9 @@ export default function SignOff() {
                     </>
                   ) : (
                     <div className="text-center py-12">
-                      <Brain size={48} className="mx-auto text-gray-600 mb-4" />
+                      <FileText size={48} className="mx-auto text-gray-600 mb-4" />
                       <p className="text-gray-400">No job selected</p>
-                      <p className="text-sm text-gray-500 mt-2">Select a job to activate Brain features</p>
+                      <p className="text-sm text-gray-500 mt-2">Select a job to link contract data</p>
                     </div>
                   )}
                 </div>
@@ -700,12 +808,29 @@ export default function SignOff() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* TEMPLATE BUILDER MODAL */}
       {showTemplateBuilder && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="bg-black w-full sm:max-w-2xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700]">
+        <>
+          <div 
+            className="fixed inset-0 bg-black/90 z-50"
+            onClick={() => {
+              setShowTemplateBuilder(false);
+              setNewTemplateName("");
+              setNewTemplateBody("");
+            }}
+            style={{ overflow: 'hidden' }}
+          />
+          <div 
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none"
+            style={{ overflow: 'hidden' }}
+          >
+            <div 
+              className="bg-[var(--bg-card)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700] pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
             <div className="p-6 border-b border-[#FF6700]/30">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-[#FF6700]">Create Template</h2>
@@ -821,12 +946,13 @@ export default function SignOff() {
                   boxShadow: "0 0 20px rgba(255,103,0,0.4)"
                 }}
               >
-                <Brain size={20} />
+                <Save size={20} />
                 Save Template
               </button>
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* TOAST */}
