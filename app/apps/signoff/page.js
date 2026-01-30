@@ -39,7 +39,7 @@ export default function SignOff() {
   const [newVarValue, setNewVarValue] = useState("");
   const [showSiteSnapModal, setShowSiteSnapModal] = useState(false);
   const [siteSnapPhotos, setSiteSnapPhotos] = useState([]);
-  const [selectedSiteSnap, setSelectedSiteSnap] = useState(new Set());
+  const [selectedSiteSnap, setSelectedSiteSnap] = useState(new Map());
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState("");
   const [newJobCustomer, setNewJobCustomer] = useState("");
@@ -461,7 +461,7 @@ export default function SignOff() {
       ...prev,
       ...toAdd.map((p) => ({
         id: `sitesnap-${p.id}`,
-        data: p.displayUrl || p.photo_url || p.photo_data,
+        data: selectedSiteSnap.get(p.id) || p.displayUrl || p.photo_url || p.photo_data,
         path:
           p.path ||
           p.storage_path ||
@@ -814,6 +814,7 @@ export default function SignOff() {
                         showToast("No photos found for this job", "error");
                         return;
                       }
+                      console.log("🕵️ DETECTIVE - RAW PHOTO DATA:", photoRecords[0]);
 
                       // Resolve storage paths to public URLs so thumbnails display (do NOT use raw path for img src)
                       const photosWithUrls = photoRecords.map((photo) => {
@@ -826,7 +827,7 @@ export default function SignOff() {
                       });
 
                       setSiteSnapPhotos(photosWithUrls);
-                      setSelectedSiteSnap(new Set());
+                      setSelectedSiteSnap(new Map());
                       setShowSiteSnapModal(true);
                     } catch (err) {
                       console.error("SiteSnap error:", err);

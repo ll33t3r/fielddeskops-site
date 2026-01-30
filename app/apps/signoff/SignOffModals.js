@@ -21,11 +21,6 @@ export default function SignOffModals({ modal }) {
     activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport,
   } = modal;
 
-  const getUrl = (path) => {
-    if (!path) return "";
-    return supabase.storage.from("sitesnap_photos").getPublicUrl(path).data.publicUrl;
-  };
-
   return (
     <>
       {showMenu && (
@@ -317,21 +312,17 @@ export default function SignOffModals({ modal }) {
               <>
                 <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
                   {siteSnapPhotos.map((photo) => {
+                    console.log("Photo Data:", photo);
                     const checked = selectedSiteSnap.has(photo.id);
-                    const storagePath =
-                      photo.path ||
-                      photo.storage_path ||
-                      (typeof photo.photo_url === "string" &&
-                      !photo.photo_url.startsWith("http") &&
-                      !photo.photo_url.startsWith("data:")
-                        ? photo.photo_url
-                        : null);
-                    const photoSrc = storagePath
-                      ? getUrl(storagePath)
-                      : (photo.displayUrl || photo.photo_url || photo.photo_data || "");
+                    const imageUrl = photo.storage_path
+                      ? supabase.storage
+                          .from("sitesnap_photos")
+                          .getPublicUrl(photo.storage_path)
+                          .data.publicUrl
+                      : "/placeholder.png";
                     return (
-                      <button key={photo.id} type="button" onClick={() => { setSelectedSiteSnap((prev) => { const next = new Set(prev); if (next.has(photo.id)) next.delete(photo.id); else next.add(photo.id); return next; }); }} className={`relative border rounded-lg overflow-hidden ${checked ? "border-[#FF6700]" : "border-[var(--border-color)]"}`}>
-                        <img src={photoSrc} alt="SiteSnap" className="w-full h-32 object-cover" />
+                      <button key={photo.id} type="button" onClick={() => { setSelectedSiteSnap((prev) => { const next = new Map(prev); if (next.has(photo.id)) next.delete(photo.id); else next.set(photo.id, imageUrl); return next; }); }} className={`relative border rounded-lg overflow-hidden ${checked ? "border-[#FF6700]" : "border-[var(--border-color)]"}`}>
+                        <img src={imageUrl} alt="SiteSnap" className="w-full h-32 object-cover" />
                         <div className="absolute top-1 left-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center border border-white/40"><input type="checkbox" readOnly checked={checked} className="accent-[#FF6700]" /></div>
                       </button>
                     );
