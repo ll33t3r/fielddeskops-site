@@ -15,6 +15,8 @@ export default function SignOff() {
   const supabase = createClient();
   const sigPad = useRef({});
   const fileInputRef = useRef(null);
+  const editorRef = useRef(null);
+  const cursorPositionRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,6 +110,52 @@ export default function SignOff() {
 
   const toast = {
     error: (msg) => showToast(msg, "error"),
+  };
+
+  // Save cursor position in contentEditable
+  const saveCursorPosition = (element) => {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return null;
+
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+
+    return preCaretRange.toString().length;
+  };
+
+  // Restore cursor position
+  const restoreCursorPosition = (element, position) => {
+    if (position === null) return;
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+
+    let charCount = 0;
+    let nodeStack = [element];
+    let node;
+    let foundStart = false;
+
+    while (!foundStart && (node = nodeStack.pop())) {
+      if (node.nodeType === 3) {
+        const nextCharCount = charCount + node.length;
+        if (position >= charCount && position <= nextCharCount) {
+          range.setStart(node, position - charCount);
+          range.collapse(true);
+          foundStart = true;
+        }
+        charCount = nextCharCount;
+      } else {
+        let i = node.childNodes.length;
+        while (i--) {
+          nodeStack.push(node.childNodes[i]);
+        }
+      }
+    }
+
+    selection.removeAllRanges();
+    selection.addRange(range);
   };
 
   const getPhotoDisplayUrl = (photo) => {
@@ -839,6 +887,12 @@ export default function SignOff() {
     loadAllData();
   }, []);
 
+  useEffect(() => {
+    if (editorRef.current && cursorPositionRef.current !== null) {
+      restoreCursorPosition(editorRef.current, cursorPositionRef.current);
+    }
+  }, [contractBody]);
+
   // Real-time contract signature listener
   useEffect(() => {
     if (!user?.id) return;
@@ -1113,6 +1167,7 @@ export default function SignOff() {
             </button>
           </div>
           <div
+            ref={editorRef}
             className="w-full min-h-[240px] p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)] whitespace-pre-wrap"
             contentEditable={!isDocumentLocked}
             suppressContentEditableWarning
@@ -1122,7 +1177,12 @@ export default function SignOff() {
               }
             }}
             onInput={(e) => {
-              const text = e.currentTarget.textContent || "";
+              cursorPositionRef.current = saveCursorPosition(e.currentTarget);
+              const text = e.currentTarget.innerText || "";
+              setContractBody(text);
+            }}
+            onBlur={(e) => {
+              const text = e.currentTarget.innerText || "";
               setContractBody(text);
             }}
           >
