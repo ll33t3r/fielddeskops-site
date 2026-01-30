@@ -68,7 +68,12 @@ export default function LoadOut() {
 
   // 1. INIT
   const initFleet = async () => {
-    const { data: user } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      showToast("Not authenticated", "error");
+      setLoading(false);
+      return;
+    }
     if (!user) return;
 
     let { data: userRigs } = await supabase
@@ -102,22 +107,25 @@ export default function LoadOut() {
   };
 
   const fetchRigData = async (rigId) => {
+    console.log("Fetching data for rig:", rigId);
     setLoading(true);
 
-    const { data: stock } = await supabase
+    const { data: stock, error: stockError } = await supabase
       .from("inventory")
       .select("*")
       .eq("rig_id", rigId)
       .order("created_at", { ascending: false });
 
+    console.log("Stock data:", stock, "Error:", stockError);
     if (stock) setItems(stock);
 
-    const { data: tools } = await supabase
+    const { data: tools, error: toolsError } = await supabase
       .from("tools")
       .select("*")
       .eq("rig_id", rigId)
       .order("created_at", { ascending: false });
 
+    console.log("Tools data:", tools, "Error:", toolsError);
     if (tools) setTools(tools);
 
     setLoading(false);
@@ -136,7 +144,7 @@ export default function LoadOut() {
     const name = prompt("Enter Name for new Rig");
     if (!name) return;
 
-    const { data: user } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     const { data: newRig } = await supabase
       .from("rigs")
       .insert({
@@ -228,20 +236,49 @@ export default function LoadOut() {
     const validRows = batchRows.filter((r) => r.name.trim() !== "");
     if (validRows.length === 0) return;
 
-    const { data: user } = await supabase.auth.getUser();
+    // Get user correctly
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    console.log("Auth result:", { user, authError });
+
+    if (!user || !user.id) {
+      alert("Not authenticated. Please log in again.");
+      return;
+    }
+
+    if (!currentRig || !currentRig.id) {
+      alert("No rig selected");
+      return;
+    }
 
     for (const row of validRows) {
-      await supabase.from("inventory").insert({
+      const payload = {
         user_id: user.id,
         rig_id: currentRig.id,
         name: row.name,
         quantity: 1,
         min_quantity: parseInt(row.qty) || 3,
         color: THEME_ORANGE,
-      });
+      };
+
+      console.log("Inserting payload:", payload);
+
+      const { data, error } = await supabase
+        .from("inventory")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Insert error:", error);
+        alert(`Error: ${error.message}`);
+        return;
+      }
+
+      console.log("Success:", data);
     }
 
-    fetchRigData(currentRig.id);
+    await fetchRigData(currentRig.id);
     showToast(`${validRows.length} Items Added`, "success");
     setBatchRows([{ name: "", qty: "3" }]);
     setShowAddModal(false);
@@ -298,7 +335,17 @@ export default function LoadOut() {
     vibrate();
     setUploading(true);
 
-    const { data: user } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      showToast("Not authenticated", "error");
+      setUploading(false);
+      return;
+    }
+    if (!currentRig?.id) {
+      showToast("Select a rig first", "error");
+      setUploading(false);
+      return;
+    }
 
     let finalPhotoUrl = null;
 
@@ -334,7 +381,11 @@ export default function LoadOut() {
       console.error("Tool save error:", error);
       showToast(`Error: ${error.message}`, "error");
     } else if (data) {
-      setTools([data, ...tools]);
+      console.log("Tool saved successfully:", data);
+
+      // Don't manually update state - fetch fresh from database
+      await fetchRigData(currentRig.id);
+
       setShowAddTool(false);
       setNewTool({ name: "", brand: "", serial: "" });
       setNewPhoto(null);
