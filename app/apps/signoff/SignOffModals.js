@@ -15,7 +15,7 @@ export default function SignOffModals({ modal }) {
     clearSignature, saveContract, saving, contractBody, hasSigned, setClientName, setContractorName,
     setAttachedPhotos, setSignedAt, setSavedSignature, setHasSigned, setDocReadOnly, selectedJob,
     showNewJobModal, setShowNewJobModal, newJobTitle, setNewJobTitle, newJobCustomer, setNewJobCustomer,
-    showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, setShowAddVarModal, newVarName,
+    showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, newVarName,
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
     selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
     activePhoto, setShowPhotoViewer, setActivePhoto,
