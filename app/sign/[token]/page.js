@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
+import { createClient } from "../../utils/supabase/client";
 import SignatureCanvas from "react-signature-canvas";
 import { Loader2, CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
 
