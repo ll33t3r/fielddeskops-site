@@ -7,7 +7,7 @@ import {
   ArrowLeft, Menu, Plus, ChevronDown, Clock, Copy, Eye, Pencil, Pin, PinOff,
   Camera, Image as ImageIcon, Maximize2, Check, DollarSign, Brain, ChevronRight,
 } from "lucide-react";
-import { baseVarKeys, templates as defaultSignOffTemplates, formTypes } from "../../../src/data/signOffTemplates";
+import { baseVarKeys, formTypes, TEMPLATES } from "../../../src/data/signOffTemplates";
 import Link from "next/link";
 import SignOffModals from "./SignOffModals";
 
@@ -19,12 +19,14 @@ export default function SignOff() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastState, setToastState] = useState(null);
+  const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuTab, setMenuTab] = useState("DATA");
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [newTemplateBody, setNewTemplateBody] = useState("");
   const [newTemplateCategory, setNewTemplateCategory] = useState("CUSTOM");
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
   const [showDocPreview, setShowDocPreview] = useState(false);
   const [signedAt, setSignedAt] = useState(null);
   const [savedSignature, setSavedSignature] = useState(null);
@@ -48,19 +50,52 @@ export default function SignOff() {
   const [templates, setTemplates] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
   
-  const [linkedEstimate, setLinkedEstimate] = useState(null);
-  const [jobLinkedData, setJobLinkedData] = useState(null);
-  const [smartVariables, setSmartVariables] = useState({});
-  
   const [selectedJob, setSelectedJob] = useState(null);
   const [clientName, setClientName] = useState("");
   const [contractorName, setContractorName] = useState("");
   const [contractBody, setContractBody] = useState("");
   const [hasSigned, setHasSigned] = useState(false);
-  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [isDocumentLocked, setIsDocumentLocked] = useState(false);
   const [formType, setFormType] = useState("Standard");
   const [customers, setCustomers] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  const [linkedEstimate, setLinkedEstimate] = useState(null);
+  const [jobLinkedData, setJobLinkedData] = useState(null);
+  const [smartVariables, setSmartVariables] = useState({});
+
+  // Save custom variables to localStorage whenever they change
+  useEffect(() => {
+    if (selectedJob?.id && Object.keys(smartVariables).length > 0) {
+      const customVars = Object.fromEntries(
+        Object.entries(smartVariables).filter(([key]) =>
+          ![
+            "[JOB_NAME]",
+            "[DATE]",
+            "[JOB_STATUS]",
+            "[JOB_ADDRESS]",
+            "[ESTIMATE_TOTAL]",
+            "[ESTIMATE_SERVICE]",
+            "[LABOR_COST]",
+            "[MATERIALS_COST]",
+            "[CUSTOMER]",
+            "[CONTRACTOR]",
+          ].includes(key)
+        )
+      );
+      localStorage.setItem(
+        `signoff_custom_vars_${selectedJob.id}`,
+        JSON.stringify(customVars)
+      );
+    }
+  }, [smartVariables, selectedJob]);
+
+  // Save selected job to localStorage
+  useEffect(() => {
+    if (selectedJob?.id) {
+      localStorage.setItem("signoff_selected_job_id", selectedJob.id);
+    }
+  }, [selectedJob]);
 
   const vibrate = (p = 10) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p);
@@ -188,6 +223,13 @@ export default function SignOff() {
           console.error("Load custom vars error:", err);
         }
 
+        const customVarsKey = `signoff_custom_vars_${jobId}`;
+        const storedCustomVars = localStorage.getItem(customVarsKey);
+        if (storedCustomVars) {
+          const parsed = JSON.parse(storedCustomVars);
+          setSmartVariables((prev) => ({ ...prev, ...parsed }));
+        }
+
         setSmartVariables({
           ...baseVars,
           ...customVars,
@@ -278,6 +320,7 @@ export default function SignOff() {
         setLoading(false);
         return;
       }
+      setUser(user);
 
       const [contractsRes, jobsRes, templatesRes, customersRes] = await Promise.all([
         supabase.from("contracts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
@@ -291,16 +334,65 @@ export default function SignOff() {
       if (jobsRes.data) {
         setRecentJobs(jobsRes.data);
         if (jobsRes.data.length > 0) {
-          setSelectedJob(jobsRes.data[0]);
-          await loadJobBrainData(jobsRes.data[0].id);
+          const savedJobId = localStorage.getItem("signoff_selected_job_id");
+          const jobToSelect = savedJobId
+            ? jobsRes.data.find((j) => j.id === savedJobId)
+            : jobsRes.data[0];
+
+          if (jobToSelect) {
+            setSelectedJob(jobToSelect);
+            await loadJobBrainData(jobToSelect.id);
+          }
         }
       }
 
-      const merged = [...(templatesRes.data || [])];
-      defaultSignOffTemplates.forEach((d) => {
-        if (!merged.find((m) => m.label === d.label)) merged.push(d);
-      });
-      setTemplates(merged);
+      if (!templatesRes.data || templatesRes.data.length === 0) {
+        await supabase
+          .from("contract_templates")
+          .insert(
+            TEMPLATES.map((t) => ({
+              user_id: user.id,
+              label: t.label,
+              body: t.body,
+              category: t.category,
+              is_pinned: t.is_pinned,
+            }))
+          );
+      } else {
+        const byLabel = new Map();
+        const duplicates = [];
+
+        templatesRes.data.forEach((template) => {
+          const existing = byLabel.get(template.label);
+          if (!existing) {
+            byLabel.set(template.label, template);
+            return;
+          }
+
+          const currentDate = new Date(template.created_at || 0).getTime();
+          const existingDate = new Date(existing.created_at || 0).getTime();
+          if (currentDate > existingDate) {
+            duplicates.push(existing.id);
+            byLabel.set(template.label, template);
+          } else {
+            duplicates.push(template.id);
+          }
+        });
+
+        if (duplicates.length > 0) {
+          await supabase
+            .from("contract_templates")
+            .delete()
+            .in("id", duplicates);
+        }
+      }
+
+      const { data: refreshedTemplates } = await supabase
+        .from("contract_templates")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("is_pinned", { ascending: false });
+      setTemplates(refreshedTemplates || []);
       
       const savedContractor = localStorage.getItem("fdo_last_contractor");
       if (savedContractor) setContractorName(savedContractor);
@@ -376,6 +468,7 @@ export default function SignOff() {
         localStorage.setItem("fdo_last_contractor", contractorName);
         setSavedSignature(data.signature_data);
         showToast("✓ Contract saved! Signature confirmed.", "success");
+        setIsDocumentLocked(true);
       } else {
         throw new Error("Signature data not saved properly");
       }
@@ -406,6 +499,129 @@ export default function SignOff() {
     }
   };
 
+  const deleteContract = async (contractId) => {
+    if (!window.confirm("Delete this contract? This cannot be undone.")) return;
+
+    try {
+      // Delete photos first
+      const { error: photoError } = await supabase
+        .from("contract_photos")
+        .delete()
+        .eq("contract_id", contractId);
+
+      if (photoError) console.error("Photo delete error:", photoError);
+
+      // Delete contract
+      const { error } = await supabase
+        .from("contracts")
+        .delete()
+        .eq("id", contractId);
+
+      if (error) throw error;
+
+      showToast("Contract deleted", "success");
+      await loadAllData();
+    } catch (error) {
+      console.error("Delete error:", error);
+      showToast("Delete failed", "error");
+    }
+  };
+
+  const editDraft = async (contract) => {
+    // Restore form data for editing
+    setSelectedJob(
+      contract.job_id ? recentJobs.find((j) => j.id === contract.job_id) : null
+    );
+    if (contract.job_id) {
+      await loadJobBrainData(contract.job_id);
+    }
+    setClientName(contract.client_name || "");
+    setContractorName(contract.contractor_name || "");
+    setContractBody(contract.contract_body || "");
+    setFormType(contract.contract_type || "Standard");
+
+    // Load attached photos
+    const { data: photos } = await supabase
+      .from("contract_photos")
+      .select("*")
+      .eq("contract_id", contract.id)
+      .order("display_order");
+
+    if (photos) {
+      setAttachedPhotos(
+        photos.map((p) => ({
+          id: p.id,
+          data: p.photo_data,
+          timestamp: p.created_at,
+        }))
+      );
+    }
+
+    setSignedAt(null);
+    setSavedSignature(null);
+    setHasSigned(false);
+    setDocReadOnly(false);
+    setShowMenu(false);
+    showToast("Draft loaded for editing", "success");
+  };
+
+  const generateShareLink = async (contractId) => {
+    try {
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map((b) => b.toString(36))
+        .join("")
+        .substring(0, 32);
+
+      const { error } = await supabase
+        .from("contract_shares")
+        .insert({
+          contract_id: contractId,
+          share_token: token,
+          is_active: true,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const shareUrl = `${window.location.origin}/sign/${token}`;
+      const shareText = `Please review and sign this contract:\n\n${shareUrl}\n\nThis link expires in 7 days.`;
+
+      if (navigator.share) {
+        await navigator.share({
+          title: "Sign Contract",
+          text: shareText,
+        });
+        showToast("Link sent for signature!", "success");
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Signing link copied!", "success");
+      }
+    } catch (error) {
+      console.error("Share error:", error);
+      showToast("Failed to create link", "error");
+    }
+  };
+
+  const shareSignedContract = (contract) => {
+    const shareText = `Contract: ${contract.job_name}\n\nCustomer: ${contract.client_name}\nContractor: ${contract.contractor_name}\nSigned: ${new Date(
+      contract.signed_at
+    ).toLocaleDateString()}\n\n${contract.contract_body}\n\n✓ This contract has been signed and is legally binding.`;
+
+    if (navigator.share) {
+      navigator
+        .share({
+          title: `Contract - ${contract.job_name}`,
+          text: shareText,
+        })
+        .catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareText);
+      showToast("Contract copied to clipboard", "success");
+    }
+  };
+
   const saveTemplate = async (e) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
     try {
@@ -424,13 +640,22 @@ export default function SignOff() {
         throw new Error("Not authenticated");
       }
 
-      const { error } = await supabase.from("contract_templates").insert({
-        user_id: user.id,
-        label: newTemplateName.trim(),
-        body: newTemplateBody.trim(),
-        category: newTemplateCategory,
-        is_pinned: false
-      });
+      const { error } = editingTemplateId
+        ? await supabase
+            .from("contract_templates")
+            .update({
+              label: newTemplateName.trim(),
+              body: newTemplateBody.trim(),
+              category: newTemplateCategory,
+            })
+            .eq("id", editingTemplateId)
+        : await supabase.from("contract_templates").insert({
+            user_id: user.id,
+            label: newTemplateName.trim(),
+            body: newTemplateBody.trim(),
+            category: newTemplateCategory,
+            is_pinned: false,
+          });
 
       if (error) {
         console.error("Template insert error:", error);
@@ -438,11 +663,12 @@ export default function SignOff() {
         throw error;
       }
 
-      showToast("Template created!", "success");
+      showToast(editingTemplateId ? "Template updated!" : "Template created!", "success");
       setShowTemplateBuilder(false);
       setNewTemplateName("");
       setNewTemplateBody("");
       setNewTemplateCategory("CUSTOM");
+      setEditingTemplateId(null);
       await loadAllData();
     } catch (err) {
       console.error("Template save error:", err);
@@ -477,9 +703,32 @@ export default function SignOff() {
     setShowSiteSnapModal(false);
   };
 
+  const editTemplate = (template) => {
+    setEditingTemplateId(template.id);
+    setNewTemplateName(template.label || "");
+    setNewTemplateBody(template.body || "");
+    setNewTemplateCategory(template.category || "CUSTOM");
+    setShowTemplateBuilder(true);
+  };
+
+  const deleteTemplate = async (templateId) => {
+    if (!window.confirm("Delete this template? This cannot be undone.")) return;
+
+    try {
+      const { error } = await supabase
+        .from("contract_templates")
+        .delete()
+        .eq("id", templateId);
+      if (error) throw error;
+      showToast("Template deleted", "success");
+      await loadAllData();
+    } catch (err) {
+      console.error("Delete template error:", err);
+      showToast("Template delete failed", "error");
+    }
+  };
+
   const togglePin = async (template) => {
-    if (template.id.startsWith("d")) return;
-    
     const pinnedTemplates = templates.filter(t => t.is_pinned);
     
     // Check 5-pin limit
@@ -521,6 +770,44 @@ export default function SignOff() {
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // Real-time contract signature listener
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log("🔔 Setting up contract signature listener...");
+
+    const channel = supabase
+      .channel("contract-signatures")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "contracts",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log("📝 Contract update detected:", payload);
+
+          if (payload.new.signed_at && !payload.old.signed_at) {
+            const contractName = payload.new.job_name || "Contract";
+            const customerName = payload.new.client_name || "Customer";
+
+            showToast(`✓ ${customerName} just signed ${contractName}!`, "success");
+            loadAllData();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("📡 Contract listener status:", status);
+      });
+
+    return () => {
+      console.log("🔌 Cleaning up contract listener");
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   useEffect(() => {
     const checkBuckets = async () => {
@@ -639,12 +926,19 @@ export default function SignOff() {
       </div>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
+        {isDocumentLocked && (
+          <div className="bg-green-500/20 border border-green-500/30 rounded-xl p-4 mb-6">
+            <p className="text-green-400 font-bold">✓ Document Signed - View Only</p>
+            <p className="text-sm text-gray-400">This document is locked and cannot be edited</p>
+          </div>
+        )}
         {/* FORM TYPE */}
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Form Type</label>
           <select
             value={formType}
             onChange={(e) => setFormType(e.target.value)}
+            disabled={isDocumentLocked}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)]"
           >
             {formTypes.map((type) => (
@@ -663,6 +957,7 @@ export default function SignOff() {
             onFocus={() => setShowCustomerDropdown(true)}
             onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
             placeholder="Search or enter customer name"
+            disabled={isDocumentLocked}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
           />
           {showCustomerDropdown && customers.length > 0 && (
@@ -695,6 +990,7 @@ export default function SignOff() {
             value={contractorName}
             onChange={(e) => setContractorName(e.target.value)}
             placeholder="Your business name"
+            disabled={isDocumentLocked}
             className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
           />
         </div>
@@ -730,50 +1026,52 @@ export default function SignOff() {
 
         
 
-        {/* CONTRACT BODY WITH COLLAPSIBLE PREVIEW */}
+        {/* LIVE DOCUMENT EDITOR */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Contract Text
+              Document
             </label>
             <button
               type="button"
-              onClick={() => setPreviewExpanded((prev) => !prev)}
+              onClick={() => {
+                setDocReadOnly(Boolean(signedAt));
+                setShowDocPreview(true);
+              }}
               className="flex items-center gap-1 text-[10px] text-blue-300 uppercase tracking-wide hover:text-blue-200"
             >
-              <span>Document Preview</span>
-              <ChevronDown
-                size={14}
-                className={`transition-transform ${previewExpanded ? "rotate-180" : ""}`}
-              />
+              <span>Open Full Document</span>
+              <ChevronRight size={14} />
             </button>
           </div>
-          <textarea
-            value={contractBody}
-            onChange={(e) => setContractBody(e.target.value)}
-            placeholder="Enter contract terms or use a pinned template..."
-            rows={12}
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] resize-none transition-colors"
-          />
-          {previewExpanded && (clientName || contractorName || Object.keys(smartVariables).length > 0 || contractBody.trim()) && (
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5">
-              <div className="px-4 py-3">
-                <p className="text-xs text-blue-400 mb-1">Preview:</p>
-                <p className="text-sm text-gray-300 whitespace-pre-wrap">
-                  {getDisplayedContractBody()}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDocReadOnly(Boolean(signedAt));
-                  setShowDocPreview(true);
-                }}
-                className="w-full text-left px-4 pb-3 text-[10px] text-blue-300 uppercase tracking-wide flex items-center justify-between hover:text-blue-200"
-              >
-                <span>Open Full Document</span>
-                <ChevronRight size={14} />
-              </button>
+          <div
+            className="w-full min-h-[240px] p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)] whitespace-pre-wrap"
+            contentEditable={!isDocumentLocked}
+            suppressContentEditableWarning
+            onFocus={(e) => {
+              if (!contractBody.trim() && e.currentTarget.textContent === "Enter contract terms or use a pinned template...") {
+                e.currentTarget.textContent = "";
+              }
+            }}
+            onInput={(e) => {
+              const text = e.currentTarget.textContent || "";
+              setContractBody(text);
+            }}
+          >
+            {contractBody.trim()
+              ? getDisplayedContractBody()
+              : "Enter contract terms or use a pinned template..."}
+          </div>
+          {attachedPhotos.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {attachedPhotos.map((photo) => (
+                <img
+                  key={photo.id}
+                  src={getPhotoDisplayUrl(photo)}
+                  alt="Document attachment"
+                  className="w-full h-32 rounded-lg object-cover border border-[var(--border-color)]"
+                />
+              ))}
             </div>
           )}
 
@@ -785,14 +1083,16 @@ export default function SignOff() {
           <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black text-sm font-semibold hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-shadow"
-                >
-                  <Camera size={16} />
-                  Add Photos
-                </button>
+                {!isDocumentLocked && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black text-sm font-semibold hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition-shadow"
+                  >
+                    <Camera size={16} />
+                    Add Photos
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={!selectedJob}
@@ -931,6 +1231,13 @@ export default function SignOff() {
           setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
           selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer, activePhoto, setShowPhotoViewer, setActivePhoto,
           handleSiteSnapImport,
+          deleteContract,
+          editDraft,
+          editTemplate,
+          deleteTemplate,
+          setEditingTemplateId,
+          onGenerateShareLink: generateShareLink,
+          onShareSigned: shareSignedContract,
         }}
       />
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, FileText, Plus, Pin, PinOff, Trash2, Pencil, Eye, Check, Save, RotateCcw, Loader2 } from "lucide-react";
+import { X, FileText, Plus, Pin, PinOff, Trash2, Pencil, Eye, Check, Save, RotateCcw, Loader2, Share, Send } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 
 function SiteSnapImage({ photo, onSelect, selected, supabase }) {
@@ -49,8 +49,27 @@ export default function SignOffModals({ modal }) {
     showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, newVarName,
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
     selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
-    activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport,
+    activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport, deleteContract, editDraft,
+    editTemplate, deleteTemplate, setEditingTemplateId, onGenerateShareLink, onShareSigned,
   } = modal;
+
+  const [historySearch, setHistorySearch] = useState("");
+
+  const filteredContracts = selectedJob
+    ? contracts.filter((c) => c.job_id === selectedJob.id)
+    : contracts;
+
+  const searchedContracts = filteredContracts
+    .filter((c) => {
+      if (!historySearch) return true;
+      const search = historySearch.toLowerCase();
+      return (
+        c.job_name?.toLowerCase().includes(search) ||
+        c.client_name?.toLowerCase().includes(search) ||
+        new Date(c.created_at).toLocaleDateString().includes(search)
+      );
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   return (
     <>
@@ -86,35 +105,150 @@ export default function SignOffModals({ modal }) {
                         <div className="space-y-2">
                           <p className="text-sm font-bold text-gray-400">Smart Variables</p>
                           <div className="grid grid-cols-2 gap-2">
-                            <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30"><p className="text-xs font-mono text-[#FF6700]">[CUSTOMER]</p><p className="text-xs text-gray-400 truncate">{clientName || "Not set"}</p></div>
-                            <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30"><p className="text-xs font-mono text-[#FF6700]">[CONTRACTOR]</p><p className="text-xs text-gray-400 truncate">{contractorName || "Not set"}</p></div>
-                            {Object.keys(smartVariables).map((varName) => {
-                              const isCustom = !baseVarKeys.includes(varName);
-                              return (
-                                <div key={varName} className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30 flex flex-col gap-1">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
-                                    <div className="flex gap-1">
-                                      {isCustom && editingVar !== varName && (
-                                        <button type="button" onClick={() => setSmartVariables((prev) => { const next = { ...prev }; delete next[varName]; return next; })} className="text-red-400 hover:text-red-300 p-1 rounded"><Trash2 size={12} /></button>
-                                      )}
-                                      {editingVar === varName ? null : (
-                                        <button type="button" onClick={() => { setEditingVar(varName); setEditingVarValue(smartVariables[varName] || ""); }} className="text-gray-300 hover:text-white p-1 rounded"><Pencil size={12} /></button>
-                                      )}
-                                    </div>
+                            {/* Customer and Contractor - Always editable */}
+                            <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-mono text-[#FF6700]">[CUSTOMER]</p>
+                                {editingVar === "[CUSTOMER]" ? (
+                                  <div className="flex gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setClientName(editingVarValue || "");
+                                        setEditingVar(null);
+                                      }}
+                                      className="px-2 py-1 bg-[#FF6700] text-black rounded text-xs font-bold"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingVar(null)}
+                                      className="px-2 py-1 bg-gray-700 text-white rounded text-xs"
+                                    >
+                                      Cancel
+                                    </button>
                                   </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingVar("[CUSTOMER]");
+                                      setEditingVarValue(clientName || "");
+                                    }}
+                                    className="text-gray-300 hover:text-white p-1 rounded"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              {editingVar === "[CUSTOMER]" ? (
+                                <input
+                                  value={editingVarValue}
+                                  onChange={(e) => setEditingVarValue(e.target.value)}
+                                  className="w-full mt-2 px-2 py-1 text-sm rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none"
+                                  style={{ fontSize: "16px" }}
+                                />
+                              ) : (
+                                <p className="text-xs text-gray-400 mt-1">{clientName || "Not set"}</p>
+                              )}
+                            </div>
+
+                            <div className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-mono text-[#FF6700]">[CONTRACTOR]</p>
+                                {editingVar === "[CONTRACTOR]" ? (
+                                  <div className="flex gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setContractorName(editingVarValue || "");
+                                        setEditingVar(null);
+                                      }}
+                                      className="px-2 py-1 bg-[#FF6700] text-black rounded text-xs font-bold"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingVar(null)}
+                                      className="px-2 py-1 bg-gray-700 text-white rounded text-xs"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingVar("[CONTRACTOR]");
+                                      setEditingVarValue(contractorName || "");
+                                    }}
+                                    className="text-gray-300 hover:text-white p-1 rounded"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              {editingVar === "[CONTRACTOR]" ? (
+                                <input
+                                  value={editingVarValue}
+                                  onChange={(e) => setEditingVarValue(e.target.value)}
+                                  className="w-full mt-2 px-2 py-1 text-sm rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none"
+                                  style={{ fontSize: "16px" }}
+                                />
+                              ) : (
+                                <p className="text-xs text-gray-400 mt-1">{contractorName || "Not set"}</p>
+                              )}
+                            </div>
+
+                            {Object.keys(smartVariables).map((varName) => (
+                              <div key={varName} className="p-3 rounded-lg bg-[#FF6700]/10 border border-[#FF6700]/30">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-mono text-[#FF6700]">{varName}</p>
                                   {editingVar === varName ? (
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <input type="text" value={editingVarValue} onChange={(e) => setEditingVarValue(e.target.value)} className="flex-1 px-2 py-1 text-xs rounded bg-black/40 border border-[#FF6700]/40 text-white outline-none" />
-                                      <button type="button" onClick={() => { setSmartVariables((prev) => ({ ...prev, [varName]: editingVarValue })); setEditingVar(null); setEditingVarValue(""); }} className="px-2 py-1 text-[10px] rounded bg-[#FF6700] text-black font-bold">Save</button>
-                                      <button type="button" onClick={() => { setEditingVar(null); setEditingVarValue(""); }} className="px-2 py-1 text-[10px] rounded bg-gray-700 text-white">Cancel</button>
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSmartVariables((prev) => ({ ...prev, [varName]: editingVarValue }));
+                                          setEditingVar(null);
+                                        }}
+                                        className="px-2 py-1 bg-[#FF6700] text-black rounded text-xs"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingVar(null)}
+                                        className="px-2 py-1 bg-gray-700 text-white rounded text-xs"
+                                      >
+                                        Cancel
+                                      </button>
                                     </div>
                                   ) : (
-                                    <p className="text-xs text-gray-400 truncate">{smartVariables[varName] || "Not set"}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingVar(varName);
+                                        setEditingVarValue(smartVariables[varName]);
+                                      }}
+                                    >
+                                      <Pencil size={12} />
+                                    </button>
                                   )}
                                 </div>
-                              );
-                            })}
+                                {editingVar === varName ? (
+                                  <input
+                                    value={editingVarValue}
+                                    onChange={(e) => setEditingVarValue(e.target.value)}
+                                    className="w-full mt-2 px-2 py-1 text-sm rounded bg-black/40 border border-[#FF6700]/40 text-white"
+                                  />
+                                ) : (
+                                  <p className="text-xs text-gray-400 mt-1">{smartVariables[varName]}</p>
+                                )}
+                              </div>
+                            ))}
                           </div>
                           <button type="button" onClick={() => setShowAddVarModal(true)} className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[#FF6700]/40 text-xs text-[#FF6700] hover:bg-[#FF6700]/10"><Plus size={12} /> Add Custom Variable</button>
                         </div>
@@ -132,10 +266,10 @@ export default function SignOffModals({ modal }) {
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2"><h3 className="font-bold text-white">{template.label}</h3>{template.is_pinned && <Pin size={14} className="text-[#FF6700]" />}</div>
                           <div className="flex gap-2">
-                            {!template.id.startsWith("d") && (
-                              <button onClick={() => togglePin(template)} className="p-2 hover:bg-[var(--bg-main)] rounded-lg">{template.is_pinned ? <PinOff size={16} className="text-gray-400" /> : <Pin size={16} className="text-gray-400" />}</button>
-                            )}
-                            <button onClick={() => { const bodyText = template.body; setTimeout(() => setContractBody(bodyText), 0); setShowMenu(false); vibrate(10); }} className="px-3 py-1 bg-[#FF6700] text-black rounded-lg text-xs font-bold">Use</button>
+                            <button type="button" onClick={() => togglePin(template)} className="p-2 hover:bg-[var(--bg-main)] rounded-lg">{template.is_pinned ? <PinOff size={16} className="text-gray-400" /> : <Pin size={16} className="text-gray-400" />}</button>
+                            <button type="button" onClick={() => editTemplate(template)} className="p-2 hover:bg-[var(--bg-main)] rounded-lg"><Pencil size={16} className="text-gray-400" /></button>
+                            <button type="button" onClick={() => deleteTemplate(template.id)} className="p-2 hover:bg-[var(--bg-main)] rounded-lg"><Trash2 size={16} className="text-red-400" /></button>
+                            <button type="button" onClick={() => { const bodyText = template.body; setTimeout(() => setContractBody(bodyText), 0); setShowMenu(false); vibrate(10); }} className="px-3 py-1 bg-[#FF6700] text-black rounded-lg text-xs font-bold">Use</button>
                           </div>
                         </div>
                         <p className="text-sm text-gray-400 line-clamp-2">{template.body}</p>
@@ -145,11 +279,107 @@ export default function SignOffModals({ modal }) {
                 )}
                 {menuTab === "HISTORY" && (
                   <div className="space-y-3">
-                    {contracts.length === 0 ? (
+                    <input
+                      type="text"
+                      placeholder="Search contracts..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      className="w-full p-3 rounded-xl bg-[var(--bg-main)] border border-[var(--border-color)]"
+                    />
+                    <p className="text-sm text-gray-400 mb-2">
+                      {selectedJob
+                        ? `Showing ${searchedContracts.length} contracts for ${selectedJob.title}`
+                        : `Showing all ${searchedContracts.length} contracts`}
+                    </p>
+                    {searchedContracts.length === 0 ? (
                       <div className="text-center py-12"><FileText size={48} className="mx-auto text-gray-600 mb-4" /><p className="text-gray-400">No contracts yet</p></div>
                     ) : (
-                      contracts.map((contract) => (
+                      searchedContracts.map((contract) => (
                         <div key={contract.id} className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] hover:border-[#FF6700] transition-colors cursor-pointer" onClick={() => restoreContract(contract)}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {contract.signed_at ? (
+                                <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+                                  SIGNED
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 text-xs font-bold rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                  DRAFT
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-500">
+                                {new Date(contract.created_at).toLocaleString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {!contract.signed_at ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    editDraft(contract);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs text-blue-300 hover:text-blue-200"
+                                >
+                                  <Pencil size={16} /> Edit
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    restoreContract(contract);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs text-blue-300 hover:text-blue-200"
+                                >
+                                  <Eye size={16} /> View
+                                </button>
+                              )}
+                              {!contract.signed_at ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onGenerateShareLink(contract.id);
+                                  }}
+                                  className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+                                  title="Send for remote signature"
+                                >
+                                  <Send size={14} />
+                                  <span className="text-xs font-semibold">Send for Signature</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onShareSigned(contract);
+                                  }}
+                                  className="px-3 py-2 rounded-lg bg-gray-500/10 border border-gray-500/30 text-gray-400 hover:bg-gray-500/20 transition-colors flex items-center gap-2"
+                                  title="Share signed contract"
+                                >
+                                  <Share size={14} />
+                                  <span className="text-xs font-semibold">Share</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteContract(contract.id);
+                                }}
+                              >
+                                <Trash2 size={16} className="text-red-400" />
+                              </button>
+                            </div>
+                          </div>
                           <div className="flex items-start justify-between">
                             <div className="flex-1"><h3 className="font-bold text-white">{contract.job_name}</h3><p className="text-sm text-gray-400">{contract.client_name}</p><p className="text-xs text-gray-500 mt-1">{new Date(contract.created_at).toLocaleDateString()}</p></div>
                             <Eye size={20} className="text-[#FF6700] flex-shrink-0 ml-2" />
@@ -167,13 +397,13 @@ export default function SignOffModals({ modal }) {
 
       {showTemplateBuilder && (
         <>
-          <div className="fixed inset-0 bg-black/90 z-50" onClick={() => { setShowTemplateBuilder(false); setNewTemplateName(""); setNewTemplateBody(""); }} style={{ overflow: "hidden" }} />
+          <div className="fixed inset-0 bg-black/90 z-50" onClick={() => { setShowTemplateBuilder(false); setNewTemplateName(""); setNewTemplateBody(""); setEditingTemplateId(null); }} style={{ overflow: "hidden" }} />
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 pointer-events-none" style={{ overflow: "hidden" }}>
             <div className="bg-[var(--bg-card)] w-full sm:max-w-2xl sm:rounded-2xl rounded-t-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-[#FF6700] pointer-events-auto relative z-[51]" onClick={(e) => e.stopPropagation()}>
               <div className="p-6 border-b border-[#FF6700]/30">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-[#FF6700]">Create Template</h2>
-                  <button onClick={() => { setShowTemplateBuilder(false); setNewTemplateName(""); setNewTemplateBody(""); }} className="p-2 hover:bg-[#FF6700]/10 rounded-lg text-[#FF6700]"><X size={24} /></button>
+                  <button onClick={() => { setShowTemplateBuilder(false); setNewTemplateName(""); setNewTemplateBody(""); setEditingTemplateId(null); }} className="p-2 hover:bg-[#FF6700]/10 rounded-lg text-[#FF6700]"><X size={24} /></button>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -204,7 +434,19 @@ export default function SignOffModals({ modal }) {
                   <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Template Text</label>
                   <textarea value={newTemplateBody} onChange={(e) => setNewTemplateBody(e.target.value)} placeholder="Enter your contract template..." rows={10} className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none resize-none text-white" />
                 </div>
-                <button type="button" onClick={(e) => modal.saveTemplate(e)} className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all relative z-10" style={{ background: "#FF6700", color: "#000", boxShadow: "0 0 20px rgba(255,103,0,0.4)" }}><Save size={20} /> Save Template</button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("SAVE CLICKED");
+                    saveTemplate(e);
+                  }}
+                  className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all relative z-10 pointer-events-auto cursor-pointer"
+                  style={{ background: "#FF6700", color: "#000", boxShadow: "0 0 20px rgba(255,103,0,0.4)" }}
+                >
+                  <Save size={20} /> Save Template
+                </button>
               </div>
             </div>
           </div>
