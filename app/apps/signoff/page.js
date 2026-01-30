@@ -523,6 +523,15 @@ export default function SignOff() {
   }, []);
 
   useEffect(() => {
+    const checkBuckets = async () => {
+      const { data, error } = await supabase.storage.listBuckets();
+      console.log("🪣 REAL BUCKET LIST:", data);
+      if (error) console.error("Bucket Error:", error);
+    };
+    checkBuckets();
+  }, []);
+
+  useEffect(() => {
     // When job changes, clear old data first and persist custom vars per job
     const prevJobId = (SignOff.prevJobId = SignOff.prevJobId || null);
 

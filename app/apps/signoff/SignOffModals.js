@@ -1,7 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { X, FileText, Plus, Pin, PinOff, Trash2, Pencil, Eye, Check, Save, RotateCcw, Loader2 } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
+
+function SiteSnapImage({ photo, onSelect, selected, supabase }) {
+  const [imageUrl, setImageUrl] = useState("/placeholder.png");
+
+  useEffect(() => {
+    async function fetchImage() {
+      if (!photo?.storage_path) return;
+
+      // CORRECT BUCKET NAME: 'fielddeskops-photos'
+      // We use createSignedUrl so it works even if the bucket is Private.
+      const { data } = await supabase.storage
+        .from("fielddeskops-photos")
+        .createSignedUrl(photo.storage_path, 3600);
+
+      if (data?.signedUrl) setImageUrl(data.signedUrl);
+    }
+    fetchImage();
+  }, [photo, supabase]);
+
+  return (
+    <div
+      onClick={() => onSelect(imageUrl)}
+      className={`relative aspect-square cursor-pointer rounded-lg border-2 overflow-hidden ${
+        selected ? "border-orange-500" : "border-transparent"
+      }`}
+    >
+      <img src={imageUrl} alt="SiteSnap" className="w-full h-full object-cover" />
+    </div>
+  );
+}
 
 export default function SignOffModals({ modal }) {
   const {
@@ -312,19 +343,26 @@ export default function SignOffModals({ modal }) {
               <>
                 <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
                   {siteSnapPhotos.map((photo) => {
-                    console.log("Photo Data:", photo);
                     const checked = selectedSiteSnap.has(photo.id);
-                    const imageUrl = photo.storage_path
-                      ? supabase.storage
-                          .from("sitesnap_photos")
-                          .getPublicUrl(photo.storage_path)
-                          .data.publicUrl
-                      : "/placeholder.png";
                     return (
-                      <button key={photo.id} type="button" onClick={() => { setSelectedSiteSnap((prev) => { const next = new Map(prev); if (next.has(photo.id)) next.delete(photo.id); else next.set(photo.id, imageUrl); return next; }); }} className={`relative border rounded-lg overflow-hidden ${checked ? "border-[#FF6700]" : "border-[var(--border-color)]"}`}>
-                        <img src={imageUrl} alt="SiteSnap" className="w-full h-32 object-cover" />
-                        <div className="absolute top-1 left-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center border border-white/40"><input type="checkbox" readOnly checked={checked} className="accent-[#FF6700]" /></div>
-                      </button>
+                      <div key={photo.id} className="relative">
+                        <SiteSnapImage
+                          photo={photo}
+                          selected={checked}
+                          supabase={supabase}
+                          onSelect={(imageUrl) => {
+                            setSelectedSiteSnap((prev) => {
+                              const next = new Map(prev);
+                              if (next.has(photo.id)) next.delete(photo.id);
+                              else next.set(photo.id, imageUrl);
+                              return next;
+                            });
+                          }}
+                        />
+                        <div className="absolute top-1 left-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center border border-white/40">
+                          <input type="checkbox" readOnly checked={checked} className="accent-[#FF6700]" />
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
