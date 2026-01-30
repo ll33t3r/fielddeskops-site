@@ -499,6 +499,74 @@ export default function SignOff() {
     }
   };
 
+  const saveDraft = async () => {
+    if (!contractBody.trim()) {
+      showToast("Add contract text first", "error");
+      return;
+    }
+    if (!clientName.trim()) {
+      showToast("Add customer name", "error");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const processedBody = applySmartVariables(contractBody);
+
+      const { data, error } = await supabase
+        .from("contracts")
+        .insert({
+          user_id: user.id,
+          job_id: selectedJob?.id || null,
+          job_name: selectedJob?.title || "Custom Contract",
+          client_name: clientName.trim(),
+          contractor_name: contractorName.trim(),
+          contract_body: processedBody,
+          contract_type: formType || "Standard",
+          signed_at: null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (attachedPhotos.length > 0 && data?.id) {
+        const photoRows = attachedPhotos.map((photo, index) => ({
+          contract_id: data.id,
+          photo_data: photo.data,
+          display_order: index,
+        }));
+
+        await supabase.from("contract_photos").insert(photoRows);
+      }
+
+      showToast("Draft saved! Send for signature from History.", "success");
+
+      setClientName("");
+      setContractorName("");
+      setContractBody("");
+      setAttachedPhotos([]);
+      setSignedAt(null);
+      setSavedSignature(null);
+      setHasSigned(false);
+      setDocReadOnly(false);
+      setIsDocumentLocked(false);
+      setFormType("Standard");
+      clearSignature();
+
+      await loadAllData();
+    } catch (error) {
+      console.error("Draft save error:", error);
+      showToast("Failed to save draft", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const deleteContract = async (contractId) => {
     if (!window.confirm("Delete this contract? This cannot be undone.")) return;
 
@@ -1074,6 +1142,39 @@ export default function SignOff() {
               ))}
             </div>
           )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={saveDraft}
+              disabled={saving || isDocumentLocked}
+              className="flex-1 px-6 py-4 rounded-xl border-2 border-[#FF6700] text-[#FF6700] font-bold hover:bg-[#FF6700]/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Save as Draft
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDocReadOnly(Boolean(signedAt));
+                setShowDocPreview(true);
+              }}
+              disabled={isDocumentLocked}
+              className="flex-1 px-6 py-4 rounded-xl bg-[#FF6700] text-black font-bold hover:shadow-[0_0_20px_rgba(255,103,0,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <PenTool size={20} />
+              Sign &amp; Finalize
+            </button>
+          </div>
 
         {/* ATTACH PHOTOS */}
         <div className="space-y-2">
