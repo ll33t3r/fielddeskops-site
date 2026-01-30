@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
@@ -6,7 +6,7 @@ import {
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil, List
 } from "lucide-react";
 import Link from "next/link";
 
@@ -17,12 +17,12 @@ export default function LoadOut() {
   
   // --- GLOBAL STATE ---
   const [activeTab, setActiveTab] = useState("STOCK");
-  const [vans, setVans] = useState([]);
-  const [currentVan, setCurrentVan] = useState(null);
+  const [rigs, setRigs] = useState([]);
+  const [currentRig, setCurrentRig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [renameVanName, setRenameVanName] = useState("");
+  const [renameRigName, setRenameRigName] = useState("");
 
   // --- STOCK STATE ---
   const [items, setItems] = useState([]);
@@ -30,6 +30,7 @@ export default function LoadOut() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
+  const [viewMode, setViewMode] = useState("buttons");
   
   // --- SMART SELECTION STATE ---
   const [selectedIndices, setSelectedIndices] = useState([]); // Stores indexes of selected cards
@@ -60,57 +61,96 @@ export default function LoadOut() {
   };
 
   useEffect(() => { initFleet(); }, []);
+  useEffect(() => {
+    const saved = localStorage.getItem("loadout-view-mode");
+    if (saved) setViewMode(saved);
+  }, []);
 
   // 1. INIT
   const initFleet = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: user } = await supabase.auth.getUser();
     if (!user) return;
 
-    let { data: userVans } = await supabase.from("vans").select("*").order("created_at");
-    if (!userVans || userVans.length === 0) {
-        const { data: newVan } = await supabase.from("vans").insert({ user_id: user.id, name: "Van #1" }).select().single();
-        userVans = [newVan];
-    }
-    setVans(userVans);
-    setCurrentVan(userVans[0]);
-    setRenameVanName(userVans[0].name);
+    let { data: userRigs } = await supabase
+      .from("rigs")
+      .select("*")
+      .order("created_at");
 
-    const { data: team } = await supabase.from("team_members").select("*").order("name");
+    if (!userRigs || userRigs.length === 0) {
+      const { data: newRig } = await supabase
+        .from("rigs")
+        .insert({
+          user_id: user.id,
+          name: "Rig 1",
+        })
+        .select()
+        .single();
+      userRigs = [newRig];
+    }
+
+    setRigs(userRigs);
+    setCurrentRig(userRigs[0]);
+    setRenameRigName(userRigs[0].name);
+
+    const { data: team } = await supabase
+      .from("team_members")
+      .select("*")
+      .order("name");
     if (team) setTeamMembers(team);
 
-    fetchVanData(userVans[0].id);
+    fetchRigData(userRigs[0].id);
   };
 
-  const fetchVanData = async (vanId) => {
+  const fetchRigData = async (rigId) => {
     setLoading(true);
-    const { data: stock } = await supabase.from("inventory").select("*").eq("van_id", vanId).order("created_at", { ascending: false });
+
+    const { data: stock } = await supabase
+      .from("inventory")
+      .select("*")
+      .eq("rig_id", rigId)
+      .order("created_at", { ascending: false });
+
     if (stock) setItems(stock);
-    
-    const { data: assets } = await supabase.from("assets").select("*").eq("van_id", vanId).order("created_at", { ascending: false });
-    if (assets) setTools(assets);
-    
+
+    const { data: tools } = await supabase
+      .from("tools")
+      .select("*")
+      .eq("rig_id", rigId)
+      .order("created_at", { ascending: false });
+
+    if (tools) setTools(tools);
+
     setLoading(false);
   };
 
-  const switchVan = (vanId) => {
+  const switchRig = (rigId) => {
     vibrate();
-    const selected = vans.find(v => v.id === vanId);
-    setCurrentVan(selected);
-    setRenameVanName(selected.name);
-    fetchVanData(vanId);
+    const selected = rigs.find((v) => v.id === rigId);
+    setCurrentRig(selected);
+    setRenameRigName(selected.name);
+    fetchRigData(rigId);
     setShowSettings(false);
   };
 
-  const createVan = async () => {
-    const name = prompt("Enter Name for new Vehicle/Location:");
+  const createRig = async () => {
+    const name = prompt("Enter Name for new Rig");
     if (!name) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: newVan } = await supabase.from("vans").insert({ user_id: user.id, name: name }).select().single();
-    if (newVan) {
-        setVans([...vans, newVan]);
-        setCurrentVan(newVan);
-        fetchVanData(newVan.id);
-        setShowSettings(false);
+
+    const { data: user } = await supabase.auth.getUser();
+    const { data: newRig } = await supabase
+      .from("rigs")
+      .insert({
+        user_id: user.id,
+        name: name,
+      })
+      .select()
+      .single();
+
+    if (newRig) {
+      setRigs([...rigs, newRig]);
+      setCurrentRig(newRig);
+      fetchRigData(newRig.id);
+      setShowSettings(false);
     }
   };
 
@@ -184,30 +224,27 @@ export default function LoadOut() {
   };
 
   const saveBatch = async () => {
-      vibrate(20);
-      const validRows = batchRows.filter(r => r.name.trim() !== "");
-      if(validRows.length === 0) return;
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Optimistic
-      const newItems = validRows.map(r => ({
-          id: Math.random(), name: r.name, quantity: 1, min_quantity: parseInt(r.qty) || 3, color: THEME_ORANGE
-      }));
-      setItems([...newItems, ...items]);
-      
-      setBatchRows([{ name: "", qty: 3 }]);
-      setShowAddModal(false);
+    vibrate(20);
+    const validRows = batchRows.filter((r) => r.name.trim() !== "");
+    if (validRows.length === 0) return;
 
-      // DB Loop
-      for (const row of validRows) {
-          await supabase.from("inventory").insert({
-            user_id: user.id, van_id: currentVan.id, name: row.name, 
-            quantity: 1, min_quantity: parseInt(row.qty) || 3, color: THEME_ORANGE 
-          });
-      }
-      fetchVanData(currentVan.id); 
-      showToast(`${validRows.length} Items Added`, "success");
+    const { data: user } = await supabase.auth.getUser();
+
+    for (const row of validRows) {
+      await supabase.from("inventory").insert({
+        user_id: user.id,
+        rig_id: currentRig.id,
+        name: row.name,
+        quantity: 1,
+        min_quantity: parseInt(row.qty) || 3,
+        color: THEME_ORANGE,
+      });
+    }
+
+    fetchRigData(currentRig.id);
+    showToast(`${validRows.length} Items Added`, "success");
+    setBatchRows([{ name: "", qty: "3" }]);
+    setShowAddModal(false);
   };
 
   const updateStockQty = async (id, currentQty, change) => {
@@ -253,53 +290,76 @@ export default function LoadOut() {
   };
 
   const addTool = async () => {
-    if (!newTool.name) return showToast("Name required", "error");
+    if (!newTool.name) {
+      showToast("Name required", "error");
+      return;
+    }
+
     vibrate();
     setUploading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
+
+    const { data: user } = await supabase.auth.getUser();
+
     let finalPhotoUrl = null;
+
     if (newPhoto) {
-        const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
-        const { error: uploadError } = await supabase.storage.from("tool-photos").upload(fileName, newPhoto);
-        if (uploadError) {
-            showToast("Photo failed, saving tool anyway...", "error");
-        } else {
-            const { data } = supabase.storage.from("tool-photos").getPublicUrl(fileName);
-            finalPhotoUrl = data.publicUrl;
-        }
+      const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("tool-photos")
+        .upload(fileName, newPhoto);
+
+      if (!uploadError) {
+        const { data } = supabase.storage
+          .from("tool-photos")
+          .getPublicUrl(fileName);
+        finalPhotoUrl = data.publicUrl;
+      }
     }
 
-    const { data, error } = await supabase.from("assets").insert({
-        user_id: user.id, van_id: currentVan.id, name: newTool.name, 
-        brand: newTool.brand, serial_number: newTool.serial, 
-        photo_url: finalPhotoUrl, status: "IN_VAN"
-    }).select().single();
+    const { data, error } = await supabase
+      .from("tools")
+      .insert({
+        user_id: user.id,
+        rig_id: currentRig.id,
+        name: newTool.name,
+        brand: newTool.brand || null,
+        serial_number: newTool.serial || null,
+        photo_url: finalPhotoUrl,
+        status: "IN_RIG",
+      })
+      .select()
+      .single();
 
     if (error) {
-        showToast("Error saving: " + error.message, "error");
+      console.error("Tool save error:", error);
+      showToast(`Error: ${error.message}`, "error");
     } else if (data) {
-        setTools([data, ...tools]);
-        setShowAddTool(false);
-        setNewTool({ name: "", brand: "", serial: "" });
-        setNewPhoto(null); setPhotoPreview(null);
-        showToast("Tool Added", "success");
+      setTools([data, ...tools]);
+      setShowAddTool(false);
+      setNewTool({ name: "", brand: "", serial: "" });
+      setNewPhoto(null);
+      setPhotoPreview(null);
+      showToast("Tool Added", "success");
     }
+
     setUploading(false);
   };
 
   const updateToolStatus = async (id, status, memberId = null) => {
     vibrate();
-    setTools(tools.map(t => t.id === id ? { ...t, status, assigned_to: memberId } : t));
+    setTools(tools.map((t) => (t.id === id ? { ...t, status, assigned_to: memberId } : t)));
     setSelectedAsset(null);
-    await supabase.from("assets").update({ status, assigned_to: memberId }).eq("id", id);
+    await supabase
+      .from("tools")
+      .update({ status, assigned_to: memberId })
+      .eq("id", id);
   };
 
   const deleteTool = async (id) => {
-    if(!confirm("Delete tool?")) return;
+    if (!confirm("Delete tool?")) return;
     vibrate();
-    setTools(tools.filter(t => t.id !== id));
-    await supabase.from("assets").delete().eq("id", id);
+    setTools(tools.filter((t) => t.id !== id));
+    await supabase.from("tools").delete().eq("id", id);
   };
 
   // 4. TEAM ACTIONS
@@ -322,32 +382,38 @@ export default function LoadOut() {
   };
 
   // 5. GLOBAL MENU
-  const handleRenameVan = async () => {
-    if(!renameVanName.trim()) return;
+  const handleRenameRig = async () => {
+    if(!renameRigName.trim()) return;
     vibrate();
-    const updatedVans = vans.map(v => v.id === currentVan.id ? {...v, name: renameVanName} : v);
-    setVans(updatedVans);
-    setCurrentVan({...currentVan, name: renameVanName});
-    await supabase.from("vans").update({ name: renameVanName }).eq("id", currentVan.id);
-    showToast("Van Renamed", "success");
+    const updatedRigs = rigs.map(v => v.id === currentRig.id ? {...v, name: renameRigName} : v);
+    setRigs(updatedRigs);
+    setCurrentRig({...currentRig, name: renameRigName});
+    await supabase.from("rigs").update({ name: renameRigName }).eq("id", currentRig.id);
+    showToast("Rig Renamed", "success");
   };
 
-  const handleDeleteVan = async () => {
-    if (vans.length <= 1) return showToast("Cannot delete only van", "error");
-    if (!confirm("Delete this van and ALL contents?")) return;
+  const handleDeleteRig = async () => {
+    if (rigs.length === 1) {
+      showToast("Cannot delete only rig", "error");
+      return;
+    }
+    if (!confirm("Delete this rig and ALL contents?")) return;
+
     vibrate();
     setLoading(true);
-    await supabase.from("inventory").delete().eq("van_id", currentVan.id);
-    await supabase.from("assets").delete().eq("van_id", currentVan.id);
-    await supabase.from("vans").delete().eq("id", currentVan.id);
-    window.location.reload(); 
+
+    await supabase.from("inventory").delete().eq("rig_id", currentRig.id);
+    await supabase.from("tools").delete().eq("rig_id", currentRig.id);
+    await supabase.from("rigs").delete().eq("id", currentRig.id);
+
+    window.location.reload();
   };
 
   const copyShoppingList = () => {
     vibrate();
     const toBuy = items.filter(i => i.quantity < i.min_quantity);
     if (toBuy.length === 0) { showToast("Nothing to buy!", "success"); return; }
-    let text = `🛒 ${currentVan.name.toUpperCase()} SHOPPING LIST:\n`;
+    let text = `🛒 ${currentRig.name.toUpperCase()} SHOPPING LIST:\n`;
     toBuy.forEach(i => text += `- ${i.name} (${i.quantity}/${i.min_quantity})\n`);
     navigator.clipboard.writeText(text);
     showToast("Copied!", "success");
@@ -388,26 +454,47 @@ export default function LoadOut() {
   return (
     <div className="min-h-screen bg-background text-foreground font-inter pb-32">
       
-      {/* CUSTOM HEADER */}
-      <div className="flex items-center gap-4 px-6 pt-4 mb-4">
-        <Link href="/" className="p-2 rounded-lg hover:text-[#FF6700] transition-colors text-foreground border border-transparent hover:border-[#FF6700]/30">
-          <ArrowLeft size={28} />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold uppercase tracking-wide text-[#FF6700] font-oswald">LOADOUT</h1>
-          <p className="text-xs text-foreground font-bold tracking-widest opacity-60">INVENTORY TRACKER</p>
+      {/* HEADER */}
+      <div className="sticky top-0 z-40 bg-var(--bg-main) border-b border-var(--border-color) px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors">
+              <ArrowLeft size={28} />
+            </Link>
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#FF6700]">FIELDDESKOPS</p>
+              <h1 
+                className="text-2xl font-bold uppercase tracking-wider"
+                style={{
+                  color: "#FF6700",
+                  textShadow: "0 0 10px rgba(255,103,0,0.5), 0 0 20px rgba(255,103,0,0.3), 0 0 30px rgba(255,103,0,0.2)"
+                }}
+              >
+                LOADOUT
+              </h1>
+              <p 
+                className="text-[8px] font-bold uppercase tracking-widest"
+                style={{
+                  color: "#FF6700",
+                  textShadow: "0 0 8px rgba(255,103,0,0.3)"
+                }}
+              >
+                INVENTORY TRACKER
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-6 pt-2">
         
-        {/* TOP BAR - VAN SELECTOR (Z-40 to fix stacking) */}
+        {/* TOP BAR - RIG SELECTOR (Z-40 to fix stacking) */}
         <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-40">
             <div className="relative w-full">
                 <button onClick={() => { vibrate(); setShowSettings(!showSettings); }} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
                     <div className="flex items-center gap-3">
                         <Truck className="text-[#FF6700]" size={20} />
-                        <span className="text-foreground">{currentVan ? currentVan.name : "Loading..."}</span>
+                        <span className="text-foreground">{currentRig ? currentRig.name : "Loading..."}</span>
                     </div>
                     <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
                 </button>
@@ -424,18 +511,18 @@ export default function LoadOut() {
                             </div>
                         )}
                         <div className="mb-4 pb-4 border-b border-gray-700">
-                            <label className="text-xs text-gray-500 font-bold uppercase mb-1">Vehicle Name</label>
+                                <label className="text-xs text-gray-500 font-bold uppercase mb-1">Rig Name</label>
                             <div className="flex gap-2">
-                                <input value={renameVanName} onChange={e => setRenameVanName(e.target.value)} className="bg-black/40 border border-gray-700 rounded p-2 text-sm flex-1 text-white outline-none focus:border-[#FF6700]" />
-                                <button onClick={handleRenameVan} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2/></button>
+                                <input value={renameRigName} onChange={e => setRenameRigName(e.target.value)} className="bg-black/40 border border-gray-700 rounded p-2 text-sm flex-1 text-white outline-none focus:border-[#FF6700]" />
+                                <button onClick={handleRenameRig} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2/></button>
                             </div>
                         </div>
                         <div className="mb-4 pb-4 border-b border-gray-700 space-y-2">
-                            <label className="text-xs text-gray-500 font-bold uppercase">Switch Vehicle</label>
-                            {vans.map(v => (
-                                <button key={v.id} onClick={() => switchVan(v.id)} className={`w-full text-left text-sm p-2 rounded hover:bg-white/5 ${v.id === currentVan.id ? "text-[#FF6700] bg-[#FF6700]/10" : "text-gray-400"}`}>{v.name}</button>
+                            <label className="text-xs text-gray-500 font-bold uppercase">Switch Rig</label>
+                            {rigs.map(v => (
+                                <button key={v.id} onClick={() => switchRig(v.id)} className={`w-full text-left text-sm p-2 rounded hover:bg-white/5 ${v.id === currentRig.id ? "text-[#FF6700] bg-[#FF6700]/10" : "text-gray-400"}`}>{v.name}</button>
                             ))}
-                            <button onClick={createVan} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Van</button>
+                            <button onClick={createRig} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Rig</button>
                         </div>
                         <div className="mb-4 pb-4 border-b border-gray-700">
                              <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
@@ -446,7 +533,7 @@ export default function LoadOut() {
                             <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
                             <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
                         </div>
-                        <div className="pt-2"><button onClick={handleDeleteVan} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2"><Trash2 size={14}/> Delete Vehicle</button></div>
+                        <div className="pt-2"><button onClick={handleDeleteRig} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2"><Trash2 size={14}/> Delete Rig</button></div>
                     </div>
                 )}
             </div>
@@ -478,50 +565,177 @@ export default function LoadOut() {
                             className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" 
                         />
                     </div>
+                    <button
+                      onClick={() => {
+                        vibrate();
+                        const newMode = viewMode === "buttons" ? "list" : "buttons";
+                        setViewMode(newMode);
+                        localStorage.setItem("loadout-view-mode", newMode);
+                      }}
+                      className="bg-industrial-card text-foreground h-full px-4 rounded-xl font-bold flex items-center justify-center hover:bg-white/5 transition border border-industrial-border shrink-0"
+                      title={viewMode === "buttons" ? "Switch to List View" : "Switch to Button View"}
+                    >
+                      {viewMode === "buttons" ? <List size={24} /> : <LayoutGrid size={24} />}
+                    </button>
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
                 </div>
 
                 {/* THE CONTROL DECK GRID */}
-                <div className="grid grid-cols-3 gap-3 pb-24 select-none">
+                {viewMode === "buttons" ? (
+                  // EXISTING BUTTON GRID - Keep as is
+                  <div className="grid grid-cols-3 gap-3 pb-24 select-none">
                     {filteredItems.map((item, index) => {
-                        const isSelected = selectedIndices.includes(index);
-                        return (
-                            <div 
-                                key={item.id} 
-                                onClick={() => { if(isEditMode) toggleSelection(index); }} 
-                                style={{ backgroundColor: item.color || "#262626" }} 
-                                className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 
-                                    ${isEditMode ? "cursor-pointer active:scale-95 transition-transform" : ""}
-                                    ${isSelected ? "ring-4 ring-[#FF6700] scale-95" : (isEditMode ? "ring-2 ring-white/20" : "")} 
-                                    ${item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""}`}
-                            >
-                                {/* TOP */}
-                                <div className="p-3 flex justify-between items-start h-[30%]">
-                                    <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">{item.name}</h3>
-                                    {isEditMode && isSelected && <div className="w-3 h-3 bg-[#FF6700] rounded-full shadow-[0_0_10px_#FF6700]"></div>}
-                                    {!isEditMode && item.quantity < (item.min_quantity || 3) && <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1"></div>}
-                                </div>
-                                {/* MIDDLE */}
-                                <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
-                                    <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">{item.quantity}</span>
-                                </div>
-                                {/* BOTTOM */}
-                                {!isEditMode ? (
-                                    <div className="flex h-[35%] border-t border-white/10">
-                                        <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, -1); }} className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"><Minus size={24} /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); updateStockQty(item.id, item.quantity, 1); }} className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors"><Plus size={24} /></button>
-                                    </div>
-                                ) : (
-                                   <div className={`absolute inset-x-0 bottom-0 h-[35%] flex items-center justify-center text-[10px] font-bold uppercase ${isSelected ? "bg-[#FF6700] text-black" : "bg-black/50 text-white"}`}>
-                                      {isSelected ? "SELECTED" : "TAP TO SELECT"}
-                                   </div>
-                                )}
+                      const isSelected = selectedIndices.includes(index);
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (isEditMode) toggleSelection(index);
+                          }}
+                          style={{ backgroundColor: item.color || "#262626" }}
+                          className={`relative h-44 rounded-xl overflow-hidden flex flex-col justify-between shadow-lg border border-white/5 ${
+                            isEditMode ? "cursor-pointer active:scale-95 transition-transform" : ""
+                          } ${isSelected ? "ring-4 ring-[#FF6700] scale-95" : isEditMode ? "ring-2 ring-white/20" : ""} ${
+                            item.quantity < (item.min_quantity || 3) ? "ring-2 ring-red-500" : ""
+                          }`}
+                        >
+                          {/* TOP */}
+                          <div className="p-3 flex justify-between items-start h-[30%]">
+                            <h3 className="font-oswald font-bold text-sm leading-tight truncate text-white w-full opacity-90">
+                              {item.name}
+                            </h3>
+                            {isEditMode && isSelected && (
+                              <div className="w-3 h-3 bg-[#FF6700] rounded-full shadow-[0_0_10px_#FF6700]" />
+                            )}
+                            {!isEditMode && item.quantity < (item.min_quantity || 3) && (
+                              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0 ml-1" />
+                            )}
+                          </div>
+
+                          {/* MIDDLE */}
+                          <div className="flex-1 flex items-center justify-center h-[35%] bg-black/10">
+                            <span className="text-5xl font-oswald font-bold text-white tracking-tighter drop-shadow-md">
+                              {item.quantity}
+                            </span>
+                          </div>
+
+                          {/* BOTTOM */}
+                          {!isEditMode ? (
+                            <div className="flex h-[35%] border-t border-white/10">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStockQty(item.id, item.quantity, -1);
+                                }}
+                                className="flex-1 bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white flex items-center justify-center transition-colors border-r border-white/10"
+                              >
+                                <Minus size={24} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStockQty(item.id, item.quantity, 1);
+                                }}
+                                className="flex-1 bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white flex items-center justify-center transition-colors"
+                              >
+                                <Plus size={24} />
+                              </button>
                             </div>
-                        );
+                          ) : (
+                            <div className="absolute inset-x-0 bottom-0 h-[35%] flex items-center justify-center text-[10px] font-bold uppercase bg-black/50 text-white">
+                              {isSelected ? "SELECTED" : "TAP TO SELECT"}
+                            </div>
+                          )}
+                        </div>
+                      );
                     })}
-                </div>
+                  </div>
+                ) : (
+                  // NEW LIST VIEW
+                  <div className="space-y-2 pb-24">
+                    {filteredItems.map((item, index) => {
+                      const isSelected = selectedIndices.includes(index);
+                      const minQuantity = item.min_quantity ?? 3;
+                      const isLowStock = item.quantity <= minQuantity - 3;
+                      
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (isEditMode) toggleSelection(index);
+                          }}
+                          className={`bg-industrial-card border rounded-xl p-4 flex items-center justify-between transition-all ${
+                            isEditMode ? "cursor-pointer hover:bg-white/5" : ""
+                          } ${isSelected ? "ring-2 ring-[#FF6700] bg-[#FF6700]/10" : "border-white/5"} ${
+                            isLowStock ? "ring-2 ring-red-500 bg-red-500/5" : ""
+                          }`}
+                        >
+                          {/* Left: Name + Stock Status */}
+                          <div className="flex-1 flex items-center gap-4">
+                            <div 
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: item.color || "#FF6700" }}
+                            />
+                            <div>
+                              <h3 className="font-bold text-lg text-white">{item.name}</h3>
+                              <p className="text-xs text-industrial-muted">
+                                Target: {minQuantity} | 
+                                {isLowStock ? (
+                                  <span className="text-red-500 font-bold"> LOW STOCK</span>
+                                ) : (
+                                  <span className="text-green-500"> In Stock</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Center: Quantity Display */}
+                          <div className="text-4xl font-bold text-white font-oswald mx-8">
+                            {item.quantity}
+                          </div>
+
+                          {/* Right: Controls or Edit Indicator */}
+                          {!isEditMode ? (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStockQty(item.id, item.quantity, -1);
+                                }}
+                                className="bg-black/20 hover:bg-red-500/20 active:bg-red-500 text-white w-12 h-12 rounded-lg flex items-center justify-center transition-colors border border-white/10"
+                              >
+                                <Minus size={20} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStockQty(item.id, item.quantity, 1);
+                                }}
+                                className="bg-black/20 hover:bg-green-500/20 active:bg-green-500 text-white w-12 h-12 rounded-lg flex items-center justify-center transition-colors border border-white/10"
+                              >
+                                <Plus size={20} />
+                              </button>
+                              <button
+                                onClick={(e) => openStockEdit(e, item)}
+                                className="bg-black/20 hover:bg-white/10 text-white w-12 h-12 rounded-lg flex items-center justify-center transition-colors border border-white/10"
+                              >
+                                <Pencil size={18} />
+                              </button>
+                            </div>
+                          ) : (
+                            isSelected && (
+                              <div className="w-6 h-6 bg-[#FF6700] rounded-full flex items-center justify-center">
+                                <CheckCircle2 size={16} className="text-black" />
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
             </div>
         )}
 
@@ -552,7 +766,7 @@ export default function LoadOut() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start">
                                         <h3 className="font-bold text-lg leading-tight truncate pr-2 text-foreground">{tool.name}</h3>
-                                        {tool.status === "IN_VAN" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN VAN</span>}
+                                        {tool.status === "IN_RIG" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN RIG</span>}
                                         {tool.status === "CHECKED_OUT" && <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded">OUT</span>}
                                         {tool.status === "BROKEN" && <span className="text-[10px] font-bold bg-red-500/20 text-red-500 px-2 py-1 rounded">BROKEN</span>}
                                     </div>
@@ -564,7 +778,7 @@ export default function LoadOut() {
                             </div>
                             {selectedAsset === tool.id && (
                                 <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
-                                    {tool.status === "IN_VAN" ? (
+                                    {tool.status === "IN_RIG" ? (
                                         <div className="flex gap-2">
                                             <div className="relative flex-1">
                                                 <select onChange={(e) => { if(e.target.value) updateToolStatus(tool.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-industrial-card border border-industrial-border rounded-lg px-3 py-2 text-sm text-foreground outline-none appearance-none focus:border-[#FF6700]">
@@ -577,7 +791,7 @@ export default function LoadOut() {
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={() => updateToolStatus(tool.id, "IN_VAN")} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO VAN</button>
+                                            <button onClick={() => updateToolStatus(tool.id, "IN_RIG")} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO RIG</button>
                                             <button onClick={() => deleteTool(tool.id)} className="px-3 py-2 text-industrial-muted hover:text-foreground transition"><Trash2 size={18}/></button>
                                         </div>
                                     )}
@@ -675,7 +889,7 @@ export default function LoadOut() {
                     </div>
                 </div>
                 <button onClick={addTool} disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
-                    {uploading ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>} SAVE TO VAN
+                    {uploading ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>} SAVE TO RIG
                 </button>
             </div>
         </div>
