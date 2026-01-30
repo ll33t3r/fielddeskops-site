@@ -8,7 +8,7 @@ export default function SignOffModals({ modal }) {
     showMenu, setShowMenu, menuTab, setMenuTab, jobLinkedData, linkedEstimate, smartVariables, baseVarKeys,
     clientName, contractorName, editingVar, setEditingVar, editingVarValue, setEditingVarValue, setSmartVariables,
     setShowAddVarModal, templates, togglePin, setContractBody, vibrate, setShowTemplateBuilder, contracts,
-    restoreContract, showTemplateBuilder, setShowTemplateBuilder, newTemplateName, setNewTemplateName,
+    restoreContract, showTemplateBuilder, newTemplateName, setNewTemplateName,
     newTemplateBody, setNewTemplateBody, newTemplateCategory, setNewTemplateCategory, insertVariable,
     removeVariableFromTemplate, saveTemplate, toast, showDocPreview, setShowDocPreview, signedAt, savedSignature,
     getDisplayedContractBody, attachedPhotos, getPhotoDisplayUrl, docReadOnly, sigPad, handleSignatureEnd,
@@ -17,7 +17,7 @@ export default function SignOffModals({ modal }) {
     showNewJobModal, setShowNewJobModal, newJobTitle, setNewJobTitle, newJobCustomer, setNewJobCustomer,
     showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, setShowAddVarModal, newVarName,
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
-    selectedSiteSnap, setSelectedSiteSnap, setAttachedPhotos, showPhotoViewer,
+    selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
     activePhoto, setShowPhotoViewer, setActivePhoto,
   } = modal;
 
