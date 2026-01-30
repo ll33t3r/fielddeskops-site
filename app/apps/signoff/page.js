@@ -18,7 +18,7 @@ export default function SignOff() {
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toastState, setToastState] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuTab, setMenuTab] = useState("DATA");
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
@@ -67,8 +67,12 @@ export default function SignOff() {
   };
 
   const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setToastState({ msg, type });
+    setTimeout(() => setToastState(null), 3000);
+  };
+
+  const toast = {
+    error: (msg) => showToast(msg, "error"),
   };
 
   const getPhotoDisplayUrl = (photo) => {
@@ -406,17 +410,17 @@ export default function SignOff() {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
     try {
       if (!newTemplateName.trim()) {
-        showToast("Missing Name", "error");
+        toast.error("Missing Name");
         return;
       }
       if (!newTemplateBody.trim()) {
-        showToast("Missing template text", "error");
+        toast.error("Missing template text");
         return;
       }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        showToast("You must be logged in to save templates", "error");
+        toast.error("You must be logged in to save templates");
         throw new Error("Not authenticated");
       }
 
@@ -430,7 +434,7 @@ export default function SignOff() {
 
       if (error) {
         console.error("Template insert error:", error);
-        showToast(error.message || "Template save failed", "error");
+        toast.error(error.message || "Template save failed");
         throw error;
       }
 
@@ -442,8 +446,35 @@ export default function SignOff() {
       await loadAllData();
     } catch (err) {
       console.error("Template save error:", err);
-      showToast(err?.message || "Template save failed", "error");
+      toast.error(err?.message || "Template save failed");
     }
+  };
+
+  const handleSiteSnapImport = () => {
+    const toAdd = siteSnapPhotos.filter((p) => selectedSiteSnap.has(p.id));
+    if (toAdd.length === 0) {
+      showToast("Select at least one photo", "error");
+      return;
+    }
+
+    setAttachedPhotos((prev) => [
+      ...prev,
+      ...toAdd.map((p) => ({
+        id: `sitesnap-${p.id}`,
+        data: p.displayUrl || p.photo_url || p.photo_data,
+        path:
+          p.path ||
+          p.storage_path ||
+          (typeof p.photo_url === "string" &&
+          !p.photo_url.startsWith("http") &&
+          !p.photo_url.startsWith("data:")
+            ? p.photo_url
+            : undefined),
+        timestamp: p.created_at || new Date().toISOString(),
+        sitesnap_photo_id: p.id,
+      })),
+    ]);
+    setShowSiteSnapModal(false);
   };
 
   const togglePin = async (template) => {
@@ -881,7 +912,7 @@ export default function SignOff() {
           setShowAddVarModal, templates, togglePin, setContractBody, vibrate, setShowTemplateBuilder, contracts,
           restoreContract, showTemplateBuilder, setShowTemplateBuilder, newTemplateName, setNewTemplateName,
           newTemplateBody, setNewTemplateBody, newTemplateCategory, setNewTemplateCategory, insertVariable,
-          removeVariableFromTemplate, saveTemplate, toast, showDocPreview, setShowDocPreview, signedAt, savedSignature,
+          removeVariableFromTemplate, saveTemplate, toast: toastState, showDocPreview, setShowDocPreview, signedAt, savedSignature,
           getDisplayedContractBody, attachedPhotos, getPhotoDisplayUrl, docReadOnly, sigPad, handleSignatureEnd,
           clearSignature, saveContract, saving, contractBody, hasSigned, setClientName, setContractorName,
           setAttachedPhotos, setSignedAt, setSavedSignature, setHasSigned, setDocReadOnly, selectedJob,
@@ -889,6 +920,7 @@ export default function SignOff() {
           showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, setShowAddVarModal, newVarName,
           setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
           selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer, activePhoto, setShowPhotoViewer, setActivePhoto,
+          handleSiteSnapImport,
         }}
       />
 

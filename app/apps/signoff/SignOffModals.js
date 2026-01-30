@@ -18,8 +18,13 @@ export default function SignOffModals({ modal }) {
     showToast, supabase, setRecentJobs, setSelectedJob, showAddVarModal, newVarName,
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
     selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
-    activePhoto, setShowPhotoViewer, setActivePhoto,
+    activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport,
   } = modal;
+
+  const getUrl = (path) => {
+    if (!path) return "";
+    return supabase.storage.from("sitesnap_photos").getPublicUrl(path).data.publicUrl;
+  };
 
   return (
     <>
@@ -173,7 +178,7 @@ export default function SignOffModals({ modal }) {
                   <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Template Text</label>
                   <textarea value={newTemplateBody} onChange={(e) => setNewTemplateBody(e.target.value)} placeholder="Enter your contract template..." rows={10} className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none resize-none text-white" />
                 </div>
-                <button type="button" onClick={saveTemplate} className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all relative z-10" style={{ background: "#FF6700", color: "#000", boxShadow: "0 0 20px rgba(255,103,0,0.4)" }}><Save size={20} /> Save Template</button>
+                <button type="button" onClick={(e) => modal.saveTemplate(e)} className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all relative z-10" style={{ background: "#FF6700", color: "#000", boxShadow: "0 0 20px rgba(255,103,0,0.4)" }}><Save size={20} /> Save Template</button>
               </div>
             </div>
           </div>
@@ -313,9 +318,20 @@ export default function SignOffModals({ modal }) {
                 <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
                   {siteSnapPhotos.map((photo) => {
                     const checked = selectedSiteSnap.has(photo.id);
+                    const storagePath =
+                      photo.path ||
+                      photo.storage_path ||
+                      (typeof photo.photo_url === "string" &&
+                      !photo.photo_url.startsWith("http") &&
+                      !photo.photo_url.startsWith("data:")
+                        ? photo.photo_url
+                        : null);
+                    const photoSrc = storagePath
+                      ? getUrl(storagePath)
+                      : (photo.displayUrl || photo.photo_url || photo.photo_data || "");
                     return (
                       <button key={photo.id} type="button" onClick={() => { setSelectedSiteSnap((prev) => { const next = new Set(prev); if (next.has(photo.id)) next.delete(photo.id); else next.add(photo.id); return next; }); }} className={`relative border rounded-lg overflow-hidden ${checked ? "border-[#FF6700]" : "border-[var(--border-color)]"}`}>
-                        <img src={photo.displayUrl || photo.photo_url || photo.photo_data} alt="SiteSnap" className="w-full h-32 object-cover" />
+                        <img src={photoSrc} alt="SiteSnap" className="w-full h-32 object-cover" />
                         <div className="absolute top-1 left-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center border border-white/40"><input type="checkbox" readOnly checked={checked} className="accent-[#FF6700]" /></div>
                       </button>
                     );
@@ -325,13 +341,7 @@ export default function SignOffModals({ modal }) {
                   <p className="text-[var(--text-sub)]">Selected: {selectedSiteSnap.size}</p>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setShowSiteSnapModal(false)} className="px-3 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700">Cancel</button>
-                    <button type="button" disabled={selectedSiteSnap.size === 0} onClick={() => {
-                      const toAdd = siteSnapPhotos.filter((p) => selectedSiteSnap.has(p.id));
-                      if (toAdd.length > 0) {
-                        setAttachedPhotosState((prev) => [...prev, ...toAdd.map((p) => ({ id: `sitesnap-${p.id}`, data: p.displayUrl || p.photo_url || p.photo_data, path: p.storage_path || p.path || (typeof p.photo_url === "string" && !p.photo_url.startsWith("http") && !p.photo_url.startsWith("data:") ? p.photo_url : undefined), timestamp: p.created_at || new Date().toISOString(), sitesnap_photo_id: p.id }))]);
-                      }
-                      setShowSiteSnapModal(false);
-                    }} className="px-3 py-2 rounded-lg bg-[#FF6700] text-black font-bold disabled:opacity-50 disabled:cursor-not-allowed">Add Selected ({selectedSiteSnap.size})</button>
+                    <button type="button" disabled={selectedSiteSnap.size === 0} onClick={() => modal.handleSiteSnapImport()} className="px-3 py-2 rounded-lg bg-[#FF6700] text-black font-bold disabled:opacity-50 disabled:cursor-not-allowed">Add Selected ({selectedSiteSnap.size})</button>
                   </div>
                 </div>
               </>
