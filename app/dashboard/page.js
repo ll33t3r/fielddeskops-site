@@ -146,8 +146,10 @@ export default function Dashboard() {
         />
       </div>
 
-      <main className="flex-1 flex items-center justify-center px-6 pb-40">
-        <AppsGrid activeJob={activeJob} />
+      <main className="flex-1 flex items-center justify-center px-6 pb-24">
+        <div className="w-full flex items-center justify-center pb-32">
+          <AppsGrid activeJob={activeJob} />
+        </div>
       </main>
 
       <div className="pb-4 text-center shrink-0">

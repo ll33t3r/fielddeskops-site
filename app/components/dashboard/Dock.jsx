@@ -15,9 +15,9 @@ export default function Dock({ onButtonClick }) {
   const [activeButton, setActiveButton] = useState(null);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 pb-3 px-4 pointer-events-none">
-      <div className="mx-auto max-w-xl pointer-events-auto">
-        <div className="grid grid-cols-5 gap-2 items-end rounded-2xl bg-black/60 border border-white/10 backdrop-blur-xl px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
+    <div className="fixed inset-x-0 bottom-0 z-50 px-4 pb-3 pointer-events-none h-24">
+      <div className="mx-auto max-w-xl pointer-events-auto h-full">
+        <div className="grid grid-cols-5 gap-2 items-center h-full rounded-2xl bg-black/60 border border-white/10 backdrop-blur-xl px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
           {BUTTONS.map((button) => {
             const Icon = button.icon;
             const isActive = activeButton === button.id;
