@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Sun, Moon, RefreshCw, LogOut } from "lucide-react";
 import JobsTab from "./tabs/JobsTab";
 import WorkersTab from "./tabs/WorkersTab";
@@ -28,11 +28,24 @@ export default function HamburgerMenu({
 }) {
   const [activeTab, setActiveTab] = useState("JOBS");
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const { body } = document;
+    const previousOverflow = body.style.overflow;
+    const previousTouchAction = body.style.touchAction;
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    return () => {
+      body.style.overflow = previousOverflow || "";
+      body.style.touchAction = previousTouchAction || "";
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
+      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in pointer-events-auto" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 w-96 max-w-[90vw] z-50 bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
         <div className="sticky top-0 bg-[var(--bg-card)] border-b border-[var(--border-color)] p-5 flex justify-between items-center backdrop-blur-xl z-10">
           <h2 className="font-oswald text-xl text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">COMMAND MENU</h2>

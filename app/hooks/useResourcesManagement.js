@@ -117,20 +117,54 @@ export default function useResourcesManagement(supabase, options = {}) {
   }, [supabase, loadFleet]);
 
   const addCustomer = useCallback(async (newCustomer) => {
-    if (!newCustomer?.name?.trim()) return { error: null };
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("customers").insert({
-      user_id: user.id,
-      name: newCustomer.name,
-      phone: newCustomer.phone,
-      email: newCustomer.email,
-      address: newCustomer.address,
-      notes: newCustomer.notes,
-    });
-    if (!error) {
+    const name = newCustomer?.name?.trim();
+    if (!name) return { error: null };
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user?.id) {
+      console.log("Add customer failed: missing user", { userError, userData });
+      return { error: userError || new Error("Missing authenticated user") };
+    }
+
+    let payload = {
+      user_id: userData.user.id,
+      name,
+      phone: newCustomer.phone?.trim() || null,
+      email: newCustomer.email?.trim() || null,
+      address: newCustomer.address?.trim() || null,
+      notes: newCustomer.notes?.trim() || null,
+    };
+
+    const insertCustomer = async (data) => supabase
+      .from("customers")
+      .insert(data)
+      .select()
+      .single();
+
+    let result = await insertCustomer(payload);
+    let retries = 0;
+    while (result.error && retries < 4) {
+      const message = result.error?.message || "";
+      const match = message.match(/column "(.*)" of relation "customers" does not exist/i);
+      if (!match) break;
+      const missingColumn = match[1];
+      if (!Object.prototype.hasOwnProperty.call(payload, missingColumn)) break;
+      console.log("Add customer retry: missing column", missingColumn);
+      // Drop missing column and retry insert.
+      const { [missingColumn]: _removed, ...rest } = payload;
+      payload = rest;
+      result = await insertCustomer(payload);
+      retries += 1;
+    }
+    const { data, error } = result;
+
+    if (error) {
+      console.log("Add customer insert failed", { error, payload });
+    } else {
+      console.log("Add customer success", data);
       await loadCustomers();
     }
-    return { error };
+    return { data, error };
   }, [supabase, loadCustomers]);
 
   const deleteCustomer = useCallback(async (id) => {
@@ -139,6 +173,55 @@ export default function useResourcesManagement(supabase, options = {}) {
       await loadCustomers();
     }
     return { error };
+  }, [supabase, loadCustomers]);
+
+  const updateCustomer = useCallback(async (id, updates) => {
+    if (!id) return { error: null };
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData?.user?.id) {
+      console.log("Update customer failed: missing user", { userError, userData });
+      return { error: userError || new Error("Missing authenticated user") };
+    }
+
+    let payload = {
+      name: updates?.name?.trim() || null,
+      phone: updates?.phone?.trim() || null,
+      email: updates?.email?.trim() || null,
+      address: updates?.address?.trim() || null,
+      notes: updates?.notes?.trim() || null,
+    };
+
+    const updateCustomerRow = async (data) => supabase
+      .from("customers")
+      .update(data)
+      .eq("id", id)
+      .eq("user_id", userData.user.id)
+      .select()
+      .single();
+
+    let result = await updateCustomerRow(payload);
+    let retries = 0;
+    while (result.error && retries < 4) {
+      const message = result.error?.message || "";
+      const match = message.match(/column "(.*)" of relation "customers" does not exist/i);
+      if (!match) break;
+      const missingColumn = match[1];
+      if (!Object.prototype.hasOwnProperty.call(payload, missingColumn)) break;
+      console.log("Update customer retry: missing column", missingColumn);
+      const { [missingColumn]: _removed, ...rest } = payload;
+      payload = rest;
+      result = await updateCustomerRow(payload);
+      retries += 1;
+    }
+
+    const { data, error } = result;
+    if (error) {
+      console.log("Update customer failed", { error, payload, id });
+    } else {
+      console.log("Update customer success", data);
+      await loadCustomers();
+    }
+    return { data, error };
   }, [supabase, loadCustomers]);
 
   return {
@@ -157,5 +240,6 @@ export default function useResourcesManagement(supabase, options = {}) {
     deleteRig,
     addCustomer,
     deleteCustomer,
+    updateCustomer,
   };
 }
