@@ -1,43 +1,68 @@
-﻿"use client";
-import { useState, useEffect } from "react";
+"use client";
+import { useCallback, useEffect, useState } from "react";
+
+const ACTIVE_JOB_KEY = "fieldDeskOps_activeJob";
+
+const isValidJob = (job) => Boolean(job && typeof job === "object" && job.id);
 
 // A safe hook that doesn"t require wrapping root layout
 export function useActiveJob() {
   const [activeJob, setActiveJobState] = useState(null);
 
-  useEffect(() => {
-    // Load on mount
-    const saved = localStorage.getItem("fdo_active_job");
-    if (saved) {
-      try {
-        setActiveJobState(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse active job");
+  const syncActiveJob = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_JOB_KEY);
+      if (!saved) {
+        setActiveJobState(null);
+        return;
       }
+      const parsed = JSON.parse(saved);
+      if (isValidJob(parsed)) {
+        setActiveJobState(parsed);
+      } else {
+        localStorage.removeItem(ACTIVE_JOB_KEY);
+        setActiveJobState(null);
+      }
+    } catch (e) {
+      console.error("Failed to sync active job");
+      setActiveJobState(null);
     }
+  }, []);
 
-    // Listen for cross-tab or cross-component updates
-    const handleStorageChange = () => {
-       const current = localStorage.getItem("fdo_active_job");
-       if (current) setActiveJobState(JSON.parse(current));
+  useEffect(() => {
+    syncActiveJob();
+
+    const handleStorageChange = (event) => {
+      if (event?.key && event.key !== ACTIVE_JOB_KEY) return;
+      syncActiveJob();
     };
 
     window.addEventListener("storage", handleStorageChange);
-    // Custom event for same-tab updates
-    window.addEventListener("active-job-update", handleStorageChange);
+    window.addEventListener("active-job-update", syncActiveJob);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("active-job-update", handleStorageChange);
+      window.removeEventListener("active-job-update", syncActiveJob);
     };
+  }, [syncActiveJob]);
+
+  const setActiveJob = useCallback((job) => {
+    if (!isValidJob(job)) {
+      localStorage.removeItem(ACTIVE_JOB_KEY);
+      setActiveJobState(null);
+      window.dispatchEvent(new Event("active-job-update"));
+      return;
+    }
+    setActiveJobState(job);
+    localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify(job));
+    window.dispatchEvent(new Event("active-job-update"));
   }, []);
 
-  const setActiveJob = (job) => {
-    setActiveJobState(job);
-    localStorage.setItem("fdo_active_job", JSON.stringify(job));
-    // Dispatch event so other components update instantly
+  const clearActiveJob = useCallback(() => {
+    localStorage.removeItem(ACTIVE_JOB_KEY);
+    setActiveJobState(null);
     window.dispatchEvent(new Event("active-job-update"));
-  };
+  }, []);
 
-  return { activeJob, setActiveJob };
+  return { activeJob, setActiveJob, clearActiveJob, syncActiveJob };
 }

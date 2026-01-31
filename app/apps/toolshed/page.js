@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { createClient } from '../../../utils/supabase/client';
@@ -45,7 +45,7 @@ export default function ToolShed() {
     if (!user) return;
 
     // 1. Get Default Van (For Syncing)
-    const { data: vans } = await supabase.from('vans').select('id').order('created_at').limit(1);
+    const { data: vans } = await supabase.from('fleet').select('id').order('created_at').limit(1);
     if (vans && vans.length > 0) setDefaultVanId(vans[0].id);
 
     // 2. Get Assets
@@ -149,7 +149,7 @@ export default function ToolShed() {
       
       {/* 1. FLUSH HEADER (Orange Title) */}
       <div className="flex items-center gap-4">
-        <Link href="/" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors">
+        <Link href="/dashboard" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors">
           <ArrowLeft size={24} />
         </Link>
         <div>

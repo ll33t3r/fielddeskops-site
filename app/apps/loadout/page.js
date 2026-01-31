@@ -2,18 +2,34 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
+import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
   RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil, List
+  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil, List, Check
 } from "lucide-react";
 import Link from "next/link";
+import JobSelector from "../../components/shared/JobSelector";
 
 const THEME_ORANGE = "#FF6700";
 
+const colors = [
+  { hex: "#FF6700" }, // Orange
+  { hex: "#3B82F6" }, // Blue
+  { hex: "#10B981" }, // Green
+  { hex: "#EF4444" }, // Red
+  { hex: "#8B5CF6" }, // Purple
+  { hex: "#F59E0B" }, // Amber
+  { hex: "#06B6D4" }, // Cyan
+  { hex: "#EC4899" }, // Pink
+  { hex: "#6B7280" }, // Gray
+  { hex: "#14B8A6" }, // Teal
+];
+
 export default function LoadOut() {
   const supabase = createClient();
+  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
   
   // --- GLOBAL STATE ---
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -31,6 +47,8 @@ export default function LoadOut() {
   const [editingItem, setEditingItem] = useState(null);
   const [targetQtyInput, setTargetQtyInput] = useState("");
   const [viewMode, setViewMode] = useState("buttons");
+  const [massSelectMode, setMassSelectMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState(new Set());
   
   // --- SMART SELECTION STATE ---
   const [selectedIndices, setSelectedIndices] = useState([]); // Stores indexes of selected cards
@@ -52,6 +70,8 @@ export default function LoadOut() {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [toolFilter, setToolFilter] = useState("ALL");
   const [newMemberName, setNewMemberName] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toolToDelete, setToolToDelete] = useState(null);
 
   // HAPTIC ENGINE
   const vibrate = (pattern = 10) => {
@@ -61,6 +81,9 @@ export default function LoadOut() {
   };
 
   useEffect(() => { initFleet(); }, []);
+  useEffect(() => {
+    syncActiveJob();
+  }, [syncActiveJob]);
   useEffect(() => {
     const saved = localStorage.getItem("loadout-view-mode");
     if (saved) setViewMode(saved);
@@ -77,13 +100,13 @@ export default function LoadOut() {
     if (!user) return;
 
     let { data: userRigs } = await supabase
-      .from("rigs")
+      .from("fleet")
       .select("*")
       .order("created_at");
 
     if (!userRigs || userRigs.length === 0) {
       const { data: newRig } = await supabase
-        .from("rigs")
+        .from("fleet")
         .insert({
           user_id: user.id,
           name: "Rig 1",
@@ -146,7 +169,7 @@ export default function LoadOut() {
 
     const { data: { user } } = await supabase.auth.getUser();
     const { data: newRig } = await supabase
-      .from("rigs")
+      .from("fleet")
       .insert({
         user_id: user.id,
         name: name,
@@ -210,6 +233,45 @@ export default function LoadOut() {
       if (selectedIndices.length !== 1) return;
       openStockEdit(null, items[selectedIndices[0]]);
       setSelectedIndices([]);
+  };
+
+  const toggleMassSelect = () => {
+    setMassSelectMode(!massSelectMode);
+    setSelectedItems(new Set());
+  };
+
+  const toggleItemSelect = (itemId) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  const deleteMassSelected = async () => {
+    if (selectedItems.size === 0) return;
+    
+    if (!confirm(`Delete ${selectedItems.size} items?`)) return;
+
+    vibrate(50);
+
+    // Delete all selected items
+    const idsToDelete = Array.from(selectedItems);
+    
+    for (const id of idsToDelete) {
+      await supabase.from("inventory").delete().eq("id", id);
+    }
+
+    // Refresh data
+    await fetchRigData(currentRig.id);
+    
+    setSelectedItems(new Set());
+    setMassSelectMode(false);
+    showToast(`${idsToDelete.length} items deleted`, "success");
   };
 
   // --- UNIFIED BATCH ADD LOGIC ---
@@ -398,19 +460,71 @@ export default function LoadOut() {
 
   const updateToolStatus = async (id, status, memberId = null) => {
     vibrate();
-    setTools(tools.map((t) => (t.id === id ? { ...t, status, assigned_to: memberId } : t)));
+    
+    const currentTool = tools.find((t) => t.id === id);
+    
+    console.log("=== UPDATE TOOL STATUS ===");
+    console.log("Tool ID:", id);
+    console.log("New status:", status);
+    console.log("memberId passed:", memberId);
+    console.log("Current tool assigned_to:", currentTool?.assigned_to);
+    
+    let finalAssignedTo = memberId;
+    
+    if (status === "BROKEN" && memberId !== null) {
+      // Keep the passed memberId (should be current user)
+      finalAssignedTo = memberId;
+    } else if (status === "IN_RIG") {
+      // Clear assignment when returning to rig
+      finalAssignedTo = null;
+    }
+    
+    console.log("Final assigned_to value:", finalAssignedTo);
+
+    setTools(
+      tools.map((t) =>
+        t.id === id ? { ...t, status, assigned_to: finalAssignedTo } : t
+      )
+    );
     setSelectedAsset(null);
-    await supabase
+
+    const { data, error } = await supabase
       .from("tools")
-      .update({ status, assigned_to: memberId })
+      .update({ status, assigned_to: finalAssignedTo })
       .eq("id", id);
+    
+    if (!error && status === "CHECKED_OUT" && activeJob?.id && currentRig?.id) {
+      const { error: jobError } = await supabase
+        .from("jobs")
+        .update({ rig_id: currentRig.id })
+        .eq("id", activeJob.id);
+      if (!jobError) {
+        setActiveJob({ ...activeJob, rig_id: currentRig.id });
+      } else {
+        showToast("Error assigning rig to job", "error");
+      }
+    }
+
+    console.log("Database update result:", { data, error });
+    console.log("=== END UPDATE ===");
   };
 
   const deleteTool = async (id) => {
-    if (!confirm("Delete tool?")) return;
-    vibrate();
-    setTools(tools.filter((t) => t.id !== id));
-    await supabase.from("tools").delete().eq("id", id);
+    const tool = tools.find((t) => t.id === id);
+    setToolToDelete(tool);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteTool = async () => {
+    if (!toolToDelete) return;
+    
+    vibrate(50);
+    setTools(tools.filter((t) => t.id !== toolToDelete.id));
+    await supabase.from("tools").delete().eq("id", toolToDelete.id);
+    
+    setShowDeleteConfirm(false);
+    setToolToDelete(null);
+    showToast("Tool deleted", "success");
   };
 
   // 4. TEAM ACTIONS
@@ -439,7 +553,7 @@ export default function LoadOut() {
     const updatedRigs = rigs.map(v => v.id === currentRig.id ? {...v, name: renameRigName} : v);
     setRigs(updatedRigs);
     setCurrentRig({...currentRig, name: renameRigName});
-    await supabase.from("rigs").update({ name: renameRigName }).eq("id", currentRig.id);
+    await supabase.from("fleet").update({ name: renameRigName }).eq("id", currentRig.id);
     showToast("Rig Renamed", "success");
   };
 
@@ -455,7 +569,7 @@ export default function LoadOut() {
 
     await supabase.from("inventory").delete().eq("rig_id", currentRig.id);
     await supabase.from("tools").delete().eq("rig_id", currentRig.id);
-    await supabase.from("rigs").delete().eq("id", currentRig.id);
+    await supabase.from("fleet").delete().eq("id", currentRig.id);
 
     window.location.reload();
   };
@@ -487,6 +601,7 @@ export default function LoadOut() {
 
   const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
+
   // FILTERS
   const filteredTools = tools.filter(t => {
       const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
@@ -506,10 +621,11 @@ export default function LoadOut() {
     <div className="min-h-screen bg-background text-foreground font-inter pb-32">
       
       {/* HEADER */}
-      <div className="sticky top-0 z-40 bg-var(--bg-main) border-b border-var(--border-color) px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors">
+      <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-md">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -533,8 +649,13 @@ export default function LoadOut() {
                 INVENTORY TRACKER
               </p>
             </div>
+            </div>
           </div>
-        </div>
+      </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 pt-2">
+        <JobSelector />
       </div>
 
       <main className="max-w-6xl mx-auto px-6 pt-2">
@@ -605,7 +726,7 @@ export default function LoadOut() {
             <div className="animate-in fade-in slide-in-from-left-4">
                 
                 {/* ACTION BAR (STICKY Z-30 - Lower than Menu) */}
-                <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
+                <div className="sticky top-0 z-30 bg-[var(--bg-main)] pt-2 pb-4 flex gap-2 h-16 border-b border-[var(--border-color)]">
                     <div className="relative flex-1 h-full">
                         <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
                         <input 
@@ -627,6 +748,20 @@ export default function LoadOut() {
                       title={viewMode === "buttons" ? "Switch to List View" : "Switch to Button View"}
                     >
                       {viewMode === "buttons" ? <List size={24} /> : <LayoutGrid size={24} />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        vibrate();
+                        toggleMassSelect();
+                      }}
+                      className={`h-full px-4 rounded-xl font-bold flex items-center justify-center transition border shrink-0 ${
+                        massSelectMode 
+                          ? "bg-[#FF6700] text-black border-[#FF6700]" 
+                          : "bg-industrial-card text-foreground border-industrial-border hover:bg-white/5"
+                      }`}
+                      title={massSelectMode ? "Exit Mass Select" : "Mass Select & Delete"}
+                    >
+                      {massSelectMode ? <X size={24} /> : <Trash2 size={24} />}
                     </button>
                     <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
@@ -716,15 +851,27 @@ export default function LoadOut() {
                           key={item.id}
                           onClick={() => {
                             if (isEditMode) toggleSelection(index);
+                            if (massSelectMode) toggleItemSelect(item.id);
                           }}
                           className={`bg-industrial-card border rounded-xl p-4 flex items-center justify-between transition-all ${
-                            isEditMode ? "cursor-pointer hover:bg-white/5" : ""
+                            isEditMode || massSelectMode ? "cursor-pointer hover:bg-white/5" : ""
                           } ${isSelected ? "ring-2 ring-[#FF6700] bg-[#FF6700]/10" : "border-white/5"} ${
                             isLowStock ? "ring-2 ring-red-500 bg-red-500/5" : ""
-                          }`}
+                          } ${massSelectMode && selectedItems.has(item.id) ? "ring-2 ring-red-500 bg-red-500/10" : ""}`}
                         >
                           {/* Left: Name + Stock Status */}
                           <div className="flex-1 flex items-center gap-4">
+                            {massSelectMode && (
+                              <div
+                                className={`w-6 h-6 rounded border-2 flex items-center justify-center transition ${
+                                  selectedItems.has(item.id) 
+                                    ? "bg-red-500 border-red-500" 
+                                    : "border-gray-600"
+                                }`}
+                              >
+                                {selectedItems.has(item.id) && <Check size={16} className="text-white" />}
+                              </div>
+                            )}
                             <div 
                               className="w-3 h-3 rounded-full shrink-0"
                               style={{ backgroundColor: item.color || "#FF6700" }}
@@ -748,7 +895,7 @@ export default function LoadOut() {
                           </div>
 
                           {/* Right: Controls or Edit Indicator */}
-                          {!isEditMode ? (
+                          {!isEditMode && !massSelectMode ? (
                             <div className="flex gap-2">
                               <button
                                 onClick={(e) => {
@@ -775,16 +922,34 @@ export default function LoadOut() {
                                 <Pencil size={18} />
                               </button>
                             </div>
-                          ) : (
-                            isSelected && (
-                              <div className="w-6 h-6 bg-[#FF6700] rounded-full flex items-center justify-center">
-                                <CheckCircle2 size={16} className="text-black" />
-                              </div>
-                            )
-                          )}
+                          ) : massSelectMode && selectedItems.has(item.id) ? (
+                            <Trash2 size={20} className="text-red-500" />
+                          ) : null}
                         </div>
                       );
                     })}
+                  </div>
+                )}
+                
+                {/* Mass Delete Floating Action Bar */}
+                {massSelectMode && selectedItems.size > 0 && (
+                  <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom">
+                    <div className="bg-red-500 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-4">
+                      <span className="font-bold">{selectedItems.size} Selected</span>
+                      <button
+                        onClick={deleteMassSelected}
+                        className="bg-white text-red-500 px-4 py-2 rounded-full font-bold flex items-center gap-2 hover:scale-105 transition"
+                      >
+                        <Trash2 size={18} />
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => setSelectedItems(new Set())}
+                        className="text-white/80 hover:text-white"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
                   </div>
                 )}
             </div>
@@ -817,9 +982,24 @@ export default function LoadOut() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start">
                                         <h3 className="font-bold text-lg leading-tight truncate pr-2 text-foreground">{tool.name}</h3>
-                                        {tool.status === "IN_RIG" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN RIG</span>}
-                                        {tool.status === "CHECKED_OUT" && <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded">OUT</span>}
-                                        {tool.status === "BROKEN" && <span className="text-[10px] font-bold bg-red-500/20 text-red-500 px-2 py-1 rounded">BROKEN</span>}
+                                        <div className="flex items-start gap-2">
+                                          {tool.status === "IN_RIG" && <span className="text-[10px] font-bold bg-green-500/20 text-green-500 px-2 py-1 rounded">IN RIG</span>}
+                                          {tool.status === "CHECKED_OUT" && <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded">OUT</span>}
+                                          {tool.status === "BROKEN" && (
+                                            <>
+                                              <span className="text-[10px] font-bold bg-red-500/20 text-red-500 px-2 py-1 rounded">
+                                                BROKEN
+                                              </span>
+                                              {tool.assigned_to && (
+                                                <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1">
+                                                  <AlertTriangle size={10} />
+                                                  Last user: {teamMembers.find((m) => m.id === tool.assigned_to)?.name || "Unknown"}
+                                                </p>
+                                              )}
+                                            </>
+                                          )}
+                                          {selectedAsset === tool.id && null}
+                                        </div>
                                     </div>
                                     <p className="text-xs text-industrial-muted mt-1">{tool.brand} {tool.serial_number && `• S/N: ${tool.serial_number}`}</p>
                                     {tool.status === "CHECKED_OUT" && tool.assigned_to && (
@@ -830,20 +1010,133 @@ export default function LoadOut() {
                             {selectedAsset === tool.id && (
                                 <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
                                     {tool.status === "IN_RIG" ? (
-                                        <div className="flex gap-2">
+                                        <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
+                                          <div className="flex gap-2 items-center">
+                                            {/* Left: Report Broken Button */}
+                                            <button
+                                              onClick={() => {
+                                                console.log("=== MARKING TOOL AS BROKEN ===");
+                                                console.log("Tool ID:", tool.id);
+                                                console.log("Current assigned_to:", tool.assigned_to);
+                                                updateToolStatus(tool.id, "BROKEN", tool.assigned_to);
+                                              }}
+                                              className="px-4 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40 transition flex items-center gap-2"
+                                            >
+                                              <AlertTriangle size={18} />
+                                              <span className="text-sm font-bold">Report Broken</span>
+                                            </button>
+
+                                            {/* Center: Technician Selector */}
                                             <div className="relative flex-1">
-                                                <select onChange={(e) => { if(e.target.value) updateToolStatus(tool.id, "CHECKED_OUT", e.target.value); }} className="w-full bg-industrial-card border border-industrial-border rounded-lg px-3 py-2 text-sm text-foreground outline-none appearance-none focus:border-[#FF6700]">
-                                                    <option value="">Select Technician...</option>
-                                                    {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                                </select>
-                                                <ChevronDown size={14} className="absolute right-3 top-3 text-industrial-muted pointer-events-none"/>
+                                              <select
+                                                onChange={(e) => {
+                                                  if (e.target.value) {
+                                                    updateToolStatus(tool.id, "CHECKED_OUT", e.target.value);
+                                                  }
+                                                }}
+                                                className="w-full bg-industrial-card border border-industrial-border rounded-lg px-3 py-2 text-sm text-foreground outline-none appearance-none focus:border-[#FF6700] cursor-pointer"
+                                              >
+                                                <option value="">Select Technician...</option>
+                                                {teamMembers.map((m) => (
+                                                  <option key={m.id} value={m.id}>
+                                                    {m.name}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                              <ChevronDown size={14} className="absolute right-3 top-3 text-industrial-muted pointer-events-none" />
                                             </div>
-                                            <button onClick={() => updateToolStatus(tool.id, "BROKEN")} className="px-3 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40"><AlertTriangle size={18}/></button>
+
+                                            {/* Right: Delete Button */}
+                                            <button
+                                              onClick={() => deleteTool(tool.id)}
+                                              className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:bg-red-900/20 hover:border-red-500/50 hover:text-red-500 transition flex items-center gap-2"
+                                            >
+                                              <Trash2 size={18} />
+                                              <span className="text-sm font-bold">Delete</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                    ) : tool.status === "BROKEN" ? (
+                                        <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
+                                          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-3">
+                                            <p className="text-xs text-red-400 flex items-center gap-2">
+                                              <AlertTriangle size={14} />
+                                              <span>Tool marked as broken</span>
+                                              {tool.assigned_to ? (
+                                                <span className="font-bold ml-2 text-red-300">
+                                                  Last used by: {teamMembers.find((m) => m.id === tool.assigned_to)?.name || "Unknown User"}
+                                                </span>
+                                              ) : (
+                                                <span className="font-bold ml-2 text-gray-500">
+                                                  (No user recorded)
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            {/* Left: Mark as Fixed */}
+                                            <button
+                                              onClick={() => updateToolStatus(tool.id, "IN_RIG", null)}
+                                              className="flex-1 bg-green-500/20 border border-green-500/50 hover:bg-green-500/40 py-2 rounded-lg font-bold text-sm transition text-green-400 flex items-center justify-center gap-2"
+                                            >
+                                              <CheckCircle2 size={18} />
+                                              Mark as Fixed
+                                            </button>
+
+                                            {/* Right: Delete Button */}
+                                            <button
+                                              onClick={() => deleteTool(tool.id)}
+                                              className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:bg-red-900/20 hover:border-red-500/50 hover:text-red-500 transition flex items-center gap-2"
+                                            >
+                                              <Trash2 size={18} />
+                                              <span className="text-sm font-bold">Delete</span>
+                                            </button>
+                                          </div>
+                                        </div>
+                                    ) : tool.status === "CHECKED_OUT" ? (
+                                        <div className="mt-4 pt-4 border-t border-industrial-border animate-in slide-in-from-top-2">
+                                          <div className="flex gap-2 items-center">
+                                            {/* Left: Report Broken Button */}
+                                            <button
+                                              onClick={() => {
+                                                console.log("=== MARKING TOOL AS BROKEN ===");
+                                                console.log("Tool ID:", tool.id);
+                                                console.log("Current assigned_to:", tool.assigned_to);
+                                                updateToolStatus(tool.id, "BROKEN", tool.assigned_to);
+                                              }}
+                                              className="px-4 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40 transition flex items-center gap-2"
+                                            >
+                                              <AlertTriangle size={18} />
+                                              <span className="text-sm font-bold">Report Broken</span>
+                                            </button>
+
+                                            {/* Center: Return to Rig Button */}
+                                            <button
+                                              onClick={() => updateToolStatus(tool.id, "IN_RIG", null)}
+                                              className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground"
+                                            >
+                                              RETURN TO RIG
+                                            </button>
+
+                                            {/* Right: Delete Button */}
+                                            <button
+                                              onClick={() => deleteTool(tool.id)}
+                                              className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:bg-red-900/20 hover:border-red-500/50 hover:text-red-500 transition flex items-center gap-2"
+                                            >
+                                              <Trash2 size={18} />
+                                              <span className="text-sm font-bold">Delete</span>
+                                            </button>
+                                          </div>
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={() => updateToolStatus(tool.id, "IN_RIG")} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO RIG</button>
-                                            <button onClick={() => deleteTool(tool.id)} className="px-3 py-2 text-industrial-muted hover:text-foreground transition"><Trash2 size={18}/></button>
+                                            <button onClick={() => updateToolStatus(tool.id, "IN_RIG", null)} className="flex-1 bg-industrial-card hover:bg-white hover:text-black py-2 rounded-lg font-bold text-sm transition text-foreground">RETURN TO RIG</button>
+                                            <button
+                                              onClick={() => deleteTool(tool.id)}
+                                              className="px-3 py-2 text-industrial-muted hover:text-foreground transition"
+                                            >
+                                              <Trash2 size={18}/>
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -889,26 +1182,66 @@ export default function LoadOut() {
       {/* --- ADD ITEMS MODAL --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/90 flex items-end sm:items-center justify-center z-[100] sm:p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
-             <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl p-6 shadow-2xl border-t sm:border border-gray-700 h-[80vh] flex flex-col">
-                <div className="flex justify-between items-center mb-6 shrink-0">
-                    <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2"><ListPlus size={24}/> ADD ITEMS</h2>
-                    <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+          <div className="bg-[#121212] w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl border-t sm:border border-gray-700 max-h-[90vh] flex flex-col">
+            
+            {/* Fixed header */}
+            <div className="p-6 border-b border-gray-700 shrink-0">
+              <div className="flex justify-between items-center">
+                <h2 className="font-oswald font-bold text-2xl text-[#FF6700] flex items-center gap-2">
+                  <ListPlus size={24} />
+                  ADD ITEMS
+                </h2>
+                <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {batchRows.map((row, idx) => (
+                <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2">
+                  <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
+                  <input
+                    placeholder="Item Name (e.g. Wire Nuts)"
+                    value={row.name}
+                    onChange={(e) => handleBatchRowChange(idx, "name", e.target.value)}
+                    className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Qty"
+                    value={row.qty}
+                    onChange={(e) => handleBatchRowChange(idx, "qty", e.target.value)}
+                    className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]"
+                  />
+                  {batchRows.length > 1 && (
+                    <button onClick={() => removeBatchRow(idx)} className="text-gray-600 hover:text-red-500 p-2">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
-                <div className="flex-1 flex flex-col">
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 mb-4">
-                        {batchRows.map((row, idx) => (
-                            <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2">
-                                <span className="text-gray-600 font-mono text-xs w-4">{idx + 1}</span>
-                                <input placeholder="Item Name (e.g. Wire Nuts)" value={row.name} onChange={(e) => handleBatchRowChange(idx, "name", e.target.value)} className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]" />
-                                <input type="number" placeholder="Qty" value={row.qty} onChange={(e) => handleBatchRowChange(idx, "qty", e.target.value)} className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]" />
-                                {batchRows.length > 1 && <button onClick={() => removeBatchRow(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>}
-                            </div>
-                        ))}
-                        <button onClick={addBatchRow} className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"><Plus size={16}/> Add Row</button>
-                    </div>
-                    <button onClick={saveBatch} className="bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl shrink-0 hover:scale-[1.02] transition">SAVE ITEMS</button>
-                </div>
-             </div>
+              ))}
+              
+              <button
+                onClick={addBatchRow}
+                className="w-full py-3 border border-dashed border-gray-800 rounded-lg text-gray-500 flex justify-center items-center gap-2 hover:border-gray-500 hover:text-white"
+              >
+                <Plus size={16} />
+                Add Row
+              </button>
+            </div>
+
+            {/* Fixed save button at bottom */}
+            <div className="p-6 border-t border-gray-700 shrink-0">
+              <button
+                onClick={saveBatch}
+                className="w-full bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl hover:scale-[1.02] transition"
+              >
+                SAVE ITEMS
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -994,6 +1327,53 @@ export default function LoadOut() {
       )}
 
       {toast && <div className={`fixed bottom-24 right-6 px-6 py-3 rounded shadow-xl font-bold text-white z-[60] animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-blue-600"}`}>{toast.msg}</div>}
+
+      {/* DELETE TOOL CONFIRMATION MODAL */}
+      {showDeleteConfirm && toolToDelete && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+          <div className="bg-[#1a1a1a] border-2 border-red-500/50 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle size={24} className="text-red-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Delete Tool?</h2>
+            </div>
+            
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4">
+              <p className="text-white font-bold text-lg mb-1">{toolToDelete.name}</p>
+              {toolToDelete.brand && (
+                <p className="text-gray-400 text-sm">{toolToDelete.brand}</p>
+              )}
+              {toolToDelete.serial_number && (
+                <p className="text-gray-400 text-xs mt-1">SN: {toolToDelete.serial_number}</p>
+              )}
+            </div>
+            
+            <p className="text-gray-300 text-sm mb-6">
+              This action cannot be undone. The tool will be permanently removed from your inventory.
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setToolToDelete(null);
+                }}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteTool}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-bold transition flex items-center justify-center gap-2"
+              >
+                <Trash2 size={18} />
+                Delete Tool
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
@@ -9,10 +9,11 @@ import {
   AlertTriangle, Eye, EyeOff, DollarSign, Percent, Search, Info
 } from "lucide-react";
 import Link from "next/link";
+import JobSelector from "../../components/shared/JobSelector";
 
 export default function ProfitLock() {
   const supabase = createClient();
-  const { activeJob, setActiveJob } = useActiveJob();
+  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
   
   const [allJobs, setAllJobs] = useState([]);
   const [estimateHistory, setEstimateHistory] = useState([]); 
@@ -69,6 +70,10 @@ export default function ProfitLock() {
       loadData(); 
       loadSettings();
   }, []);
+
+  useEffect(() => {
+    syncActiveJob();
+  }, [syncActiveJob]);
 
   useEffect(() => {
     if (activeJob?.customer_id) {
@@ -135,7 +140,11 @@ export default function ProfitLock() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: jobs } = await supabase.from("jobs").select("*").order("updated_at", { ascending: false });
+    const { data: jobs } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
     setAllJobs(jobs || []);
 
     const { data: est } = await supabase.from("estimates").select("*, jobs(title)").order("created_at", { ascending: false });
@@ -165,6 +174,7 @@ export default function ProfitLock() {
     }
     setLoading(false);
   };
+
 
   const filteredJobs = allJobs.filter(j => 
     j.title?.toLowerCase().includes(jobSearch.toLowerCase()) &&
@@ -317,37 +327,27 @@ export default function ProfitLock() {
   return (
     <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
       
-      <header className="p-4 shrink-0 flex justify-between items-center z-10 border-b border-[var(--border-color)]">
-        <div className="flex items-center gap-3">
-            <Link href="/" className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] hover:text-[#FF6700] transition">
-                <ArrowLeft size={20} />
-            </Link>
-            <div>
-                <h1 className="text-[11px] font-oswald font-bold text-[#FF6700] tracking-wide uppercase">FIELDDESKOPS</h1>
-                <p className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_8px_rgba(255,103,0,0.5)]">PROFITLOCK</p>
+      <header className="p-4 shrink-0 z-10 border-b border-[var(--border-color)]">
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+                <Link href="/dashboard" className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] hover:text-[#FF6700] transition">
+                    <ArrowLeft size={20} />
+                </Link>
+                <div>
+                    <h1 className="text-[11px] font-oswald font-bold text-[#FF6700] tracking-wide uppercase">FIELDDESKOPS</h1>
+                    <p className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_8px_rgba(255,103,0,0.5)]">PROFITLOCK</p>
+                </div>
             </div>
+            <button onClick={() => setShowMenu(true)} className="p-2 rounded-lg bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95">
+                <Menu size={20} strokeWidth={3} />
+            </button>
+          </div>
         </div>
-        <button onClick={() => setShowMenu(true)} className="p-2 rounded-lg bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95">
-            <Menu size={20} strokeWidth={3} />
-        </button>
       </header>
 
       <div className="mx-4 my-3">
-        <label className="text-xs font-black text-[var(--text-sub)] uppercase ml-1 mb-1.5 block">Connect to Job</label>
-        <button 
-          onClick={() => setShowJobSelect(true)}
-          className="w-full bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-left font-bold uppercase outline-none hover:border-[#FF6700] transition flex justify-between items-center"
-        >
-          {activeJob ? (
-            <div>
-              <p className="text-sm text-[var(--text-main)]">{activeJob.title}</p>
-              {customer && <p className="text-xs text-[var(--text-sub)] font-normal">{customer.name}</p>}
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--text-sub)]">-- Select Job --</p>
-          )}
-          <ChevronDown size={16} className="text-[var(--text-sub)]"/>
-        </button>
+        <JobSelector />
       </div>
 
       {isInvoiceMode ? (

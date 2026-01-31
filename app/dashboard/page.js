@@ -1,130 +1,253 @@
-﻿'use client'
+"use client";
 
-import Link from 'next/link'
-import { Wallet, Truck, Camera, FileSignature, LogOut, UserCircle, BarChart3, Zap, ShieldCheck } from 'lucide-react'
+import { useState, useEffect } from "react";
+import { createClient } from "../utils/supabase/client";
+import { useActiveJob } from "../../hooks/useActiveJob";
+import useDashboardPageState from "../hooks/useDashboardPageState";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import DashboardHeader from "../components/dashboard/DashboardHeader";
+import MetricsBar from "../components/dashboard/MetricsBar";
+import AppsGrid from "../components/dashboard/AppsGrid";
+import SpeedDial from "../components/dashboard/SpeedDial";
+import ActiveJobsModal from "../components/dashboard/modals/ActiveJobsModal";
+import AlertsModal from "../components/dashboard/modals/AlertsModal";
+import AssignResourcesModal from "../components/dashboard/modals/AssignResourcesModal";
+import HamburgerMenu from "../components/dashboard/HamburgerMenu";
+import JobSelector from "../components/shared/JobSelector";
+import QuickEstimateModal from "../components/dashboard/quickadd/QuickEstimateModal";
+import QuickInventoryModal from "../components/dashboard/quickadd/QuickInventoryModal";
+import QuickToolModal from "../components/dashboard/quickadd/QuickToolModal";
+import QuickPhotoModal from "../components/dashboard/quickadd/QuickPhotoModal";
 
 export default function Dashboard() {
-  const apps = [
-    {
-      name: 'PROFITLOCK',
-      description: 'Bids & Invoices',
-      icon: <Wallet className="w-10 h-10 md:w-16 md:h-16" />,
-      href: '/apps/profitlock',
-      color: 'text-green-500', 
-      border: 'hover:border-green-500',
-      bg: 'hover:bg-green-500/10'
-    },
-    {
-      name: 'LOADOUT',
-      description: 'Inventory',
-      icon: <Truck className="w-10 h-10 md:w-16 md:h-16" />,
-      href: '/apps/loadout',
-      color: 'text-blue-500',
-      border: 'hover:border-blue-500',
-      bg: 'hover:bg-blue-500/10'
-    },
-    {
-      name: 'SITESNAP',
-      description: 'Photos',
-      icon: <Camera className="w-10 h-10 md:w-16 md:h-16" />,
-      href: '/apps/sitesnap',
-      color: 'text-purple-500',
-      border: 'hover:border-purple-500',
-      bg: 'hover:bg-purple-500/10'
-    },
-    {
-      name: 'SIGNOFF',
-      description: 'Contracts',
-      icon: <FileSignature className="w-10 h-10 md:w-16 md:h-16" />,
-      href: '/apps/signoff',
-      color: 'text-[#FF6700]',
-      border: 'hover:border-[#FF6700]',
-      bg: 'hover:bg-[#FF6700]/10'
-    },
-  ]
+  const supabase = createClient();
+  const router = useRouter();
+  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+
+  const [showHamburger, setShowHamburger] = useState(false);
+  const [showActiveJobsModal, setShowActiveJobsModal] = useState(false);
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [assigningJob, setAssigningJob] = useState(null);
+  const [theme, setTheme] = useState("dark");
+  const [privacyMode, setPrivacyMode] = useState(true);
+  const [showQuickEstimate, setShowQuickEstimate] = useState(false);
+  const [showQuickInventory, setShowQuickInventory] = useState(false);
+  const [showQuickTool, setShowQuickTool] = useState(false);
+  const [showQuickPhoto, setShowQuickPhoto] = useState(false);
+
+  const {
+    loading,
+    greeting,
+    showSpeedDial,
+    setShowSpeedDial,
+    refreshing,
+    manualRefresh,
+    metrics,
+    alertList,
+    dismissAlert,
+    jobs,
+    fleet,
+    customers,
+    rigs,
+    workers,
+    handleUpdateJob,
+    handleAssignToJob,
+    refreshJobsData,
+    loadResources,
+    refreshDashboardData,
+  } = useDashboardPageState({ supabase, router, setActiveJob });
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    setTheme(savedTheme);
+    document.documentElement.setAttribute("data-theme", savedTheme);
+
+    const savedPrivacy = localStorage.getItem("privacyMode");
+    if (savedPrivacy !== null) {
+      setPrivacyMode(savedPrivacy === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    syncActiveJob();
+  }, [syncActiveJob]);
+
+
+  const formatCurrency = (val) => {
+    if (privacyMode) return "****";
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
+  };
+
+  const togglePrivacyMode = () => {
+    const newMode = !privacyMode;
+    setPrivacyMode(newMode);
+    localStorage.setItem("privacyMode", newMode.toString());
+  };
+
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth/login");
+  };
+
+  const handleQuickAddSaved = async () => {
+    await refreshDashboardData();
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#FF6700]" size={40} />
+      </div>
+    );
+  }
 
   return (
-    // h-screen locks the height to the viewport (no scrolling)
-    <div className="h-screen bg-[#0a0a0a] flex flex-col p-4 md:p-6 overflow-hidden font-sans">
-      
-      {/* 1. HEADER */}
-      <header className="flex justify-between items-center mb-4 shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-wide font-oswald">
-            FIELDDESK<span className="text-[#FF6700]">OPS</span>
-          </h1>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Link href="/account" className="p-2 text-gray-400 hover:text-white transition-colors">
-            <UserCircle size={28} />
-          </Link>
-          <Link href="/auth/login" className="p-2 text-gray-400 hover:text-[#FF6700] transition-colors">
-            <LogOut size={28} />
-          </Link>
-        </div>
-      </header>
+    <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
+      <DashboardHeader
+        greeting={greeting}
+        onOpenHamburger={() => setShowHamburger(true)}
+      />
 
-      {/* 2. STATS BAR (Kept at top) */}
-      <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
-        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
-          <ShieldCheck size={20} className="text-[#FF6700] mb-1"/>
-          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Plan</p>
-          <p className="text-lg font-bold text-white">PRO</p>
-        </div>
-        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
-          <Zap size={20} className="text-yellow-500 mb-1"/>
-          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Credits</p>
-          <p className="text-lg font-bold text-white">∞</p>
-        </div>
-        <div className="bg-[#151515] rounded-xl p-3 border border-white/5 flex flex-col justify-center items-center text-center">
-          <BarChart3 size={20} className="text-blue-500 mb-1"/>
-          <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Projects</p>
-          <p className="text-lg font-bold text-white">3/10</p>
-        </div>
+      <div className="px-6 mb-3">
+        <JobSelector />
       </div>
 
-      {/* 3. CORE 4 GRID (Fills remaining space) */}
-      <div className="flex-1 grid grid-cols-2 grid-rows-2 gap-3 min-h-0">
-        {apps.map((app) => (
-          <Link
-            key={app.name}
-            href={app.href}
-            className={`
-              group relative flex flex-col items-center justify-center p-4 
-              bg-[#121212] rounded-2xl border-2 border-white/5
-              transition-all duration-300 active:scale-95 shadow-xl
-              ${app.border} ${app.bg}
-            `}
-          >
-            {/* Icon Circle */}
-            <div className={`mb-3 p-4 rounded-full bg-black/40 ${app.color} ring-1 ring-white/5 group-hover:scale-110 transition-transform`}>
-              {app.icon}
-            </div>
-            
-            <h3 className="text-xl md:text-3xl font-bold text-white mb-1 tracking-wide font-oswald">
-              {app.name}
-            </h3>
-            
-            <p className="text-gray-500 text-[10px] md:text-xs uppercase tracking-widest font-bold group-hover:text-gray-300 transition-colors">
-              {app.description}
-            </p>
-          </Link>
-        ))}
+      <div className="px-6 pb-3 shrink-0">
+          <MetricsBar
+          metrics={metrics}
+          privacyMode={privacyMode}
+          formatCurrency={formatCurrency}
+          onTogglePrivacyMode={togglePrivacyMode}
+          onOpenActiveJobsModal={() => setShowActiveJobsModal(true)}
+          onOpenAlertsModal={() => metrics.alerts > 0 ? setShowAlertsModal(true) : alert("No system alerts!")}
+        />
       </div>
 
-      {/* 4. ACTIVITY FOOTER (Compact at bottom) */}
-      <div className="mt-4 pt-4 border-t border-white/5 shrink-0">
-        <div className="flex items-center justify-between text-xs text-gray-500 px-2">
-            <span className="uppercase tracking-widest font-bold">Recent Activity</span>
-            <span>View All</span>
-        </div>
-        <div className="mt-2 flex items-center gap-3 px-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-sm text-gray-300">New Quote Created #1024</span>
-            <span className="ml-auto text-xs text-gray-600">2h ago</span>
-        </div>
+      <main className="flex-1 flex items-center justify-center px-6 pb-16">
+        <AppsGrid activeJob={activeJob} />
+      </main>
+
+      <div className="pb-4 text-center shrink-0">
+        <p className="text-[9px] font-bold uppercase tracking-widest">
+          <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
+          <span className="text-[#FF6700]">FIELDDESKOPS</span>
+        </p>
       </div>
-      
+
+      <SpeedDial
+        isOpen={showSpeedDial}
+        onToggle={() => setShowSpeedDial(!showSpeedDial)}
+        activeJob={activeJob}
+        onQuickEstimate={() => {
+          setShowSpeedDial(false);
+          setShowQuickEstimate(true);
+        }}
+        onQuickInventory={() => {
+          setShowSpeedDial(false);
+          setShowQuickInventory(true);
+        }}
+        onQuickTool={() => {
+          setShowSpeedDial(false);
+          setShowQuickTool(true);
+        }}
+        onQuickPhoto={() => {
+          setShowSpeedDial(false);
+          setShowQuickPhoto(true);
+        }}
+      />
+
+      <ActiveJobsModal
+        isOpen={showActiveJobsModal}
+        onClose={() => setShowActiveJobsModal(false)}
+        data={{
+          jobs: jobs.filter((job) => job.status === "ACTIVE"),
+          jobsCount: metrics.jobs,
+          onSelectJob: (job) => {
+            setActiveJob(job);
+            setShowActiveJobsModal(false);
+          },
+          onMarkComplete: (jobId) => handleUpdateJob(jobId, { status: "COMPLETED" }),
+        }}
+      />
+
+      <AlertsModal
+        isOpen={showAlertsModal}
+        onClose={() => setShowAlertsModal(false)}
+        data={{
+          alertList,
+          onDismissAlert: (index) => dismissAlert(index),
+        }}
+      />
+
+      <HamburgerMenu
+        isOpen={showHamburger}
+        onClose={() => setShowHamburger(false)}
+        supabase={supabase}
+        activeJob={activeJob}
+        rigs={rigs}
+        workers={workers}
+        onSelectJob={(job) => {
+          setActiveJob(job);
+          setShowHamburger(false);
+        }}
+        onAssignResources={(job) => {
+          setAssigningJob(job);
+          setShowHamburger(false);
+        }}
+        onJobsUpdated={refreshJobsData}
+        onResourcesUpdated={loadResources}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onManualRefresh={manualRefresh}
+        refreshing={refreshing}
+        onLogout={handleLogout}
+      />
+
+      <AssignResourcesModal
+        isOpen={Boolean(assigningJob)}
+        onClose={() => setAssigningJob(null)}
+        data={{
+          assigningJob,
+          customers,
+          fleet,
+          rigs,
+          workers,
+          onAssign: handleAssignToJob,
+        }}
+      />
+
+      <QuickEstimateModal
+        isOpen={showQuickEstimate}
+        onClose={() => setShowQuickEstimate(false)}
+        activeJob={activeJob}
+        onSaved={handleQuickAddSaved}
+      />
+      <QuickInventoryModal
+        isOpen={showQuickInventory}
+        onClose={() => setShowQuickInventory(false)}
+        activeJob={activeJob}
+        onSaved={handleQuickAddSaved}
+      />
+      <QuickToolModal
+        isOpen={showQuickTool}
+        onClose={() => setShowQuickTool(false)}
+        activeJob={activeJob}
+        onSaved={handleQuickAddSaved}
+      />
+      <QuickPhotoModal
+        isOpen={showQuickPhoto}
+        onClose={() => setShowQuickPhoto(false)}
+        activeJob={activeJob}
+        onSaved={handleQuickAddSaved}
+      />
     </div>
-  )
+  );
 }

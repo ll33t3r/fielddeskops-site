@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
+import { useActiveJob } from "../../../hooks/useActiveJob";
 import {
   PenTool, Save, RotateCcw, FileText, Calendar, User, Trash2, CheckCircle2, Loader2, X,
   ArrowLeft, Menu, Plus, ChevronDown, Clock, Copy, Eye, Pencil, Pin, PinOff,
@@ -10,9 +11,11 @@ import {
 import { baseVarKeys, formTypes, TEMPLATES } from "../../../src/data/signOffTemplates";
 import Link from "next/link";
 import SignOffModals from "./SignOffModals";
+import JobSelector from "../../components/shared/JobSelector";
 
 export default function SignOff() {
   const supabase = createClient();
+  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
   const sigPad = useRef({});
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
@@ -92,6 +95,19 @@ export default function SignOff() {
     }
   }, [smartVariables, selectedJob]);
 
+  useEffect(() => {
+    syncActiveJob();
+  }, [syncActiveJob]);
+
+  useEffect(() => {
+    if (activeJob?.id && activeJob.id !== selectedJob?.id) {
+      setSelectedJob(activeJob);
+    }
+    if (!activeJob && selectedJob) {
+      setSelectedJob(null);
+    }
+  }, [activeJob, selectedJob]);
+
   // Save selected job to localStorage
   useEffect(() => {
     if (selectedJob?.id) {
@@ -107,6 +123,7 @@ export default function SignOff() {
     setToastState({ msg, type });
     setTimeout(() => setToastState(null), 3000);
   };
+
 
   const toast = {
     error: (msg) => showToast(msg, "error"),
@@ -236,7 +253,11 @@ export default function SignOff() {
     }
     
     try {
-      const { data: job } = await supabase.from("jobs").select("*").eq("id", jobId).single();
+      const { data: job } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", jobId)
+        .single();
       if (job) {
         setJobLinkedData(job);
         
@@ -372,7 +393,7 @@ export default function SignOff() {
 
       const [contractsRes, jobsRes, templatesRes, customersRes] = await Promise.all([
         supabase.from("contracts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-        supabase.from("jobs").select("*").eq("user_id", user.id).order("updated_at", { ascending: false }),
+        supabase.from("jobs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
         supabase.from("contract_templates").select("*").eq("user_id", user.id).order("is_pinned", { ascending: false }),
         supabase.from("customers").select("id, name").eq("user_id", user.id).order("name", { ascending: true }),
       ]);
@@ -389,6 +410,7 @@ export default function SignOff() {
 
           if (jobToSelect) {
             setSelectedJob(jobToSelect);
+            setActiveJob(jobToSelect);
             await loadJobBrainData(jobToSelect.id);
           }
         }
@@ -990,9 +1012,10 @@ export default function SignOff() {
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
       {/* HEADER */}
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -1019,32 +1042,10 @@ export default function SignOff() {
           </button>
         </div>
       </div>
+      </div>
 
-      {/* JOB SELECTOR - PRIMARY FUNCTIONALITY */}
       <div className="px-6 py-3 bg-[var(--bg-card)] border-b border-[var(--border-color)]">
-        <div className="flex items-center gap-3">
-          <FileText size={18} className="text-[#FF6700]" />
-          <select
-            value={selectedJob?.id || "NEW"}
-            onChange={(e) => {
-              if (e.target.value === "NEW") {
-                setShowNewJobModal(true);
-              } else {
-                const job = recentJobs.find(j => j.id === e.target.value);
-                setSelectedJob(job || null);
-              }
-            }}
-            className="flex-1 p-2 rounded-lg bg-[var(--bg-main)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)]"
-          >
-            <option value="NEW">+ Create New Job</option>
-            <option value="">───────────</option>
-            {recentJobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.title}
-              </option>
-            ))}
-          </select>
-        </div>
+        <JobSelector />
       </div>
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">

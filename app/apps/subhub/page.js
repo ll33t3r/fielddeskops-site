@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { createClient } from '../../../utils/supabase/client';
@@ -47,7 +47,7 @@ export default function SubHub() {
       
       {/* 1. FLUSH HEADER (Orange Title) */}
       <div className="flex items-center gap-4">
-        <Link href="/" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors">
+        <Link href="/dashboard" className="industrial-card p-2 rounded-lg hover:text-[#FF6700] transition-colors">
           <ArrowLeft size={24} />
         </Link>
         <div>

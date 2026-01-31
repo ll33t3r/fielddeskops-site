@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { createClient } from '../../lib/supabase/client';
@@ -53,7 +53,7 @@ export default function SupabaseTestPage() {
         <li>Test Supabase client creation</li>
       </ol>
       
-      <a href="/">Back to Home</a>
+      <a href="/dashboard">Back to Dashboard</a>
     </div>
   );
 }

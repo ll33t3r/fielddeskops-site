@@ -1,4 +1,4 @@
-﻿-- ═══════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════
 -- FIELDDESKOPS MASTER DATABASE SCHEMA
 -- One database to rule them all
 -- Run this ONCE in Supabase SQL Editor
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.jobs (
     status TEXT DEFAULT 'ACTIVE', -- ACTIVE, PENDING, COMPLETED
     customer_id UUID,
     fleet_id UUID,
+    rig_id UUID REFERENCES public.fleet(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -159,7 +160,19 @@ ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
 
 -- JOBS
 DROP POLICY IF EXISTS "Users can manage their own jobs" ON public.jobs;
-CREATE POLICY "Users can manage their own jobs" ON public.jobs FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can manage their own jobs" ON public.jobs FOR ALL
+USING (auth.uid() = user_id)
+WITH CHECK (
+    auth.uid() = user_id
+    AND (
+        rig_id IS NULL
+        OR EXISTS (
+            SELECT 1 FROM public.fleet f
+            WHERE f.id = rig_id
+            AND f.user_id = auth.uid()
+        )
+    )
+);
 
 -- CUSTOMERS
 DROP POLICY IF EXISTS "Users can manage their own customers" ON public.customers;
@@ -204,6 +217,7 @@ CREATE POLICY "Users can manage their own inventory" ON public.inventory FOR ALL
 CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON public.jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON public.jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_customer_id ON public.jobs(customer_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_rig_id ON public.jobs(rig_id);
 CREATE INDEX IF NOT EXISTS idx_customers_user_id ON public.customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_fleet_user_id ON public.fleet(user_id);
 CREATE INDEX IF NOT EXISTS idx_crew_user_id ON public.crew(user_id);

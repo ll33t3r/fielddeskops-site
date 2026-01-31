@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState } from 'react';
 import { createClient } from '../../../utils/supabase/client';
 import { ShieldCheck, Loader2, ArrowLeft, Zap } from 'lucide-react';
@@ -36,7 +36,7 @@ export default function SubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] flex flex-col items-center justify-center p-6">
-      <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 font-bold text-[var(--text-sub)] hover:text-[#FF6700]"><ArrowLeft size={20}/> BACK</Link>
+      <Link href="/dashboard" className="absolute top-6 left-6 flex items-center gap-2 font-bold text-[var(--text-sub)] hover:text-[#FF6700]"><ArrowLeft size={20}/> BACK</Link>
       
       <div className="industrial-card rounded-2xl p-8 max-w-md w-full text-center border-2 border-[#FF6700]">
         <h1 className="text-4xl font-oswald font-bold mb-2">PRO PLAN</h1>

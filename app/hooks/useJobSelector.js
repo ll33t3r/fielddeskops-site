@@ -27,7 +27,7 @@ export const useJobSelector = () => {
         .from('jobs')
         .select('*')
         .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+        .order('created_at', { ascending: false });
       
       if (jobs) {
         setAllJobs(jobs);

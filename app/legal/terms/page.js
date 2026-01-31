@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { Shield, ArrowLeft } from "lucide-react";
@@ -8,7 +8,7 @@ export default function TermsOfService() {
     <div className="min-h-screen bg-background text-foreground font-inter">
       <div className="p-6 border-b border-industrial-border flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
-            <Link href="/" className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground">
+            <Link href="/dashboard" className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground">
                 <ArrowLeft size={20}/>
             </Link>
             <h1 className="font-oswald font-bold text-xl tracking-wide uppercase">Terms of Service</h1>

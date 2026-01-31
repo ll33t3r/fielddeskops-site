@@ -10,6 +10,7 @@ import {
   Share2, DollarSign, Plus, ChevronDown, Lock, CheckSquare
 } from 'lucide-react';
 import Link from 'next/link';
+import JobSelector from '../../components/shared/JobSelector';
 import {
   ReactCompareSlider,
   ReactCompareSliderImage
@@ -17,7 +18,7 @@ import {
 
 export default function SiteSnap() {
   const supabase = createClient();
-  const { activeJob, setActiveJob } = useActiveJob();
+  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,10 +41,6 @@ export default function SiteSnap() {
   const [selectedBeforeAfter, setSelectedBeforeAfter] = useState({ before: null, after: null });
   const [selectMode, setSelectMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState([]);
-  const [allJobs, setAllJobs] = useState([]);
-  const [showJobSelector, setShowJobSelector] = useState(false);
-  const [newJobName, setNewJobName] = useState('');
-  const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [linkedEstimate, setLinkedEstimate] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -60,8 +57,8 @@ export default function SiteSnap() {
   };
 
   useEffect(() => {
-    loadAllJobs();
-  }, []);
+    syncActiveJob();
+  }, [syncActiveJob]);
 
   useEffect(() => {
     if (activeJob?.id) {
@@ -81,55 +78,6 @@ export default function SiteSnap() {
       setLinkedEstimate(null);
     }
   }, [fullscreenPhoto, estimates]);
-
-  const loadAllJobs = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: jobs } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
-
-      setAllJobs(jobs || []);
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    }
-  };
-
-  const createNewJob = async () => {
-    if (!newJobName.trim()) return;
-    try {
-      setIsCreatingJob(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: newJob, error } = await supabase
-        .from('jobs')
-        .insert({
-          user_id: user.id,
-          title: newJobName.trim(),
-          status: 'ACTIVE'
-        })
-        .select()
-        .single();
-
-      if (!error && newJob) {
-        setActiveJob(newJob);
-        setAllJobs([newJob, ...allJobs]);
-        setNewJobName('');
-        setShowJobSelector(false);
-        showToast('Job created!', 'success');
-      }
-    } catch (error) {
-      console.error('Error creating job:', error);
-      showToast('Error creating job', 'error');
-    } finally {
-      setIsCreatingJob(false);
-    }
-  };
 
   const loadPhotos = async () => {
     try {
@@ -397,26 +345,13 @@ export default function SiteSnap() {
     );
   }
 
-  if (!activeJob) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-main)] px-6">
-        <AlertTriangle size={48} className="text-[#FF6700] mb-4" />
-        <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">No Active Job</h2>
-        <p className="text-[var(--text-sub)] text-center mb-6">Select a job from Command Center to view photos</p>
-        <Link href="/" className="bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)]">
-          Go to Command Center
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[var(--bg-main)] pb-32 relative">
       {/* HEADER - STICKY */}
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
-            <Link href="/" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -430,79 +365,31 @@ export default function SiteSnap() {
               vibrate();
               setShowUploadPanel(!showUploadPanel);
             }}
-            className="bg-[#FF6700] text-black p-3 rounded-xl transition-all hover:scale-105 shadow-[0_0_30px_rgba(255,103,0,0.6)] active:scale-95"
+            disabled={!activeJob}
+            className={`bg-[#FF6700] text-black p-3 rounded-xl transition-all shadow-[0_0_30px_rgba(255,103,0,0.6)] active:scale-95 ${activeJob ? "hover:scale-105" : "opacity-50 cursor-not-allowed"}`}
           >
             <Camera size={24} />
           </button>
         </div>
         
-        {/* JOB SELECTOR */}
-        <div className="relative">
-          <button
-            onClick={() => setShowJobSelector(!showJobSelector)}
-            className="w-full industrial-card p-3 rounded-lg flex items-center justify-between hover:border-[#FF6700] transition-colors"
-          >
-            <div>
-              <p className="text-[var(--text-main)] font-bold uppercase text-sm">{activeJob.title}</p>
-              <p className="text-[var(--text-sub)] text-xs">{uploadedPhotos.length} photo{uploadedPhotos.length !== 1 ? 's' : ''}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {(beforePhotos.length > 0 && afterPhotos.length > 0) && (
-                <div className="flex items-center gap-1 text-[10px] font-bold text-green-500">
-                  <SplitSquareVertical size={14} />
-                  <span>B/A READY</span>
-                </div>
-              )}
-              <ChevronDown size={20} className={`text-[var(--text-sub)] transition-transform ${showJobSelector ? 'rotate-180' : ''}`} />
-            </div>
-          </button>
-
-          {showJobSelector && (
-            <>
-              <div className="fixed inset-0 z-30" onClick={() => setShowJobSelector(false)} />
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-xl shadow-2xl z-40 max-h-80 overflow-y-auto backdrop-blur-xl">
-                <div className="p-3 border-b border-[var(--border-color)]">
-                  <div className="flex gap-2">
-                    <input
-                      placeholder="New job name..."
-                      value={newJobName}
-                      onChange={e => setNewJobName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && createNewJob()}
-                      className="flex-1 bg-[var(--bg-card)] border border-[var(--border-color)] rounded px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-                      style={{ fontSize: '16px' }}
-                    />
-                    <button
-                      onClick={createNewJob}
-                      disabled={isCreatingJob || !newJobName.trim()}
-                      className="bg-[#FF6700] text-black px-3 rounded font-bold disabled:opacity-50 shadow-[0_0_15px_rgba(255,103,0,0.3)]"
-                    >
-                      {isCreatingJob ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                    </button>
-                  </div>
-                </div>
-                {allJobs.map(job => (
-                  <button
-                    key={job.id}
-                    onClick={() => {
-                      setActiveJob(job);
-                      setShowJobSelector(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 hover:bg-[var(--bg-surface)] transition-colors ${
-                      activeJob.id === job.id ? 'bg-[#FF6700]/10 border-l-4 border-[#FF6700]' : ''
-                    }`}
-                  >
-                    <p className="font-bold text-sm text-[var(--text-main)]">{job.title}</p>
-                    <p className="text-xs text-[var(--text-sub)]">{job.status}</p>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+        <div className="mt-3">
+          <JobSelector />
         </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-6">
-        {showUploadPanel && (
+        {!activeJob ? (
+          <div className="py-12 text-center mt-6">
+            <AlertTriangle size={48} className="mx-auto mb-4 text-[#FF6700]" />
+            <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">No Active Job</h2>
+            <p className="text-[var(--text-sub)] mb-6">Select an existing job or create a new one above to get started.</p>
+            <Link href="/dashboard" className="bg-[#FF6700] text-black font-bold uppercase px-6 py-3 rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)]">
+              Go to Command Center
+            </Link>
+          </div>
+        ) : (
+          <>
+            {showUploadPanel && (
           <div className="industrial-card rounded-2xl p-6 mb-8 mt-6 border-2 border-[#FF6700] shadow-[0_0_30px_rgba(255,103,0,0.2)]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#FF6700] uppercase">Add Photo</h2>
@@ -586,7 +473,7 @@ export default function SiteSnap() {
           </div>
         )}
 
-        {uploadedPhotos.length === 0 ? (
+            {uploadedPhotos.length === 0 ? (
           <div className="py-12 text-center mt-8">
             <ImageIcon size={48} className="mx-auto mb-4 text-[var(--text-sub)] opacity-50" />
             <p className="text-[var(--text-sub)] font-bold mb-4">No photos yet for this job</p>
@@ -597,7 +484,7 @@ export default function SiteSnap() {
               + Upload First Photo
             </button>
           </div>
-        ) : (
+            ) : (
           <>
             {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
               <div className="mb-6 mt-6">
@@ -790,6 +677,8 @@ export default function SiteSnap() {
                 ))}
               </div>
             </div>
+          </>
+            )}
           </>
         )}
       </main>
