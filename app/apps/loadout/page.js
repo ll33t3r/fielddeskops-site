@@ -313,52 +313,84 @@ if (!limitCheck.allowed) {
 	
 
     // Get user correctly
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const saveBatch = async () => {
+  vibrate(20);
+  const validRows = batchRows.filter((r) => r.name.trim() !== "");
+  if (validRows.length === 0) return;
 
-    console.log("Auth result:", { user, authError });
+  // Get user correctly
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!user || !user.id) {
-      alert("Not authenticated. Please log in again.");
-      return;
-    }
+  console.log("Auth result:", { user, authError });
 
-    if (!currentRig || !currentRig.id) {
-      alert("No rig selected");
-      return;
-    }
+  if (!user || !user.id) {
+    alert("Not authenticated. Please log in again.");
+    return;
+  }
 
-    for (const row of validRows) {
-      const payload = {
-        user_id: user.id,
-        rig_id: currentRig.id,
-        name: row.name,
-        quantity: 1,
-        min_quantity: parseInt(row.qty) || 3,
-        color: THEME_ORANGE,
-      };
+  if (!currentRig || !currentRig.id) {
+    alert("No rig selected");
+    return;
+  }
 
-      console.log("Inserting payload:", payload);
-
-      const { data, error } = await supabase
-        .from("inventory")
-        .insert(payload)
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Insert error:", error);
-        alert(`Error: ${error.message}`);
-        return;
+  // ✅ FIX: Check limit for EACH item, not just once
+  const { canCreateResource, incrementResourceUsage } = await import('../../../lib/subscription/subscriptionHelpers');
+  
+  let successCount = 0;
+  
+  for (const row of validRows) {
+    // Check before EACH insert
+    const limitCheck = await canCreateResource('items');
+    
+    if (!limitCheck.allowed) {
+      // Show upgrade prompt
+      setShowUpgradePrompt(true);
+      
+      // If we managed to add some items, refresh and show partial success
+      if (successCount > 0) {
+        await fetchRigData(currentRig.id);
+        showToast(`Added ${successCount} items. Upgrade to add more!`, "success");
       }
-
-      console.log("Success:", data);
+      
+      return; // Stop processing
     }
 
-    await fetchRigData(currentRig.id);
-    showToast(`${validRows.length} Items Added`, "success");
-    setBatchRows([{ name: "", qty: "3" }]);
-    setShowAddModal(false);
-  };
+    const payload = {
+      user_id: user.id,
+      rig_id: currentRig.id,
+      name: row.name,
+      quantity: 1,
+      min_quantity: parseInt(row.qty) || 3,
+      color: THEME_ORANGE,
+    };
+
+    console.log("Inserting payload:", payload);
+
+    const { data, error } = await supabase
+      .from("inventory")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Insert error:", error);
+      alert(`Error: ${error.message}`);
+      return;
+    }
+
+    console.log("Success:", data);
+    
+    // ✅ Increment usage count after successful insert
+    await incrementResourceUsage('items');
+    successCount++;
+  }
+
+  await fetchRigData(currentRig.id);
+  showToast(`${validRows.length} Items Added`, "success");
+  setBatchRows([{ name: "", qty: "3" }]);
+  setShowAddModal(false);
+};
+
 
   const updateStockQty = async (id, currentQty, change) => {
     vibrate(5); 
