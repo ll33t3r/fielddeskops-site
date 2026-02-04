@@ -297,23 +297,6 @@ export default function LoadOut() {
   };
 
   const saveBatch = async () => {
-    vibrate(20);
-    const validRows = batchRows.filter((r) => r.name.trim() !== "");
-    if (validRows.length === 0) return;
-
-    // Check subscription limits
-const { canCreateResource } = await import('../../../lib/subscription/subscriptionHelpers');
-const limitCheck = await canCreateResource('items');
-
-if (!limitCheck.allowed) {
-  setShowUpgradePrompt(true);
-  return;
-}
-
-	
-
-    // Get user correctly
-    const saveBatch = async () => {
   vibrate(20);
   const validRows = batchRows.filter((r) => r.name.trim() !== "");
   if (validRows.length === 0) return;
@@ -333,26 +316,24 @@ if (!limitCheck.allowed) {
     return;
   }
 
-  // ✅ FIX: Check limit for EACH item, not just once
+  // Import helpers
   const { canCreateResource, incrementResourceUsage } = await import('../../../lib/subscription/subscriptionHelpers');
   
   let successCount = 0;
-  
+
   for (const row of validRows) {
-    // Check before EACH insert
+    // ✅ Check limit BEFORE each insert
     const limitCheck = await canCreateResource('items');
     
     if (!limitCheck.allowed) {
-      // Show upgrade prompt
       setShowUpgradePrompt(true);
       
-      // If we managed to add some items, refresh and show partial success
       if (successCount > 0) {
         await fetchRigData(currentRig.id);
         showToast(`Added ${successCount} items. Upgrade to add more!`, "success");
       }
       
-      return; // Stop processing
+      return; // Stop adding
     }
 
     const payload = {
@@ -380,7 +361,7 @@ if (!limitCheck.allowed) {
 
     console.log("Success:", data);
     
-    // ✅ Increment usage count after successful insert
+    // ✅ Increment usage after successful insert
     await incrementResourceUsage('items');
     successCount++;
   }
