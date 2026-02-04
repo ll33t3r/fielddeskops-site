@@ -37,13 +37,15 @@ export async function middleware(request) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  // Define public routes (no auth required)
-  const publicRoutes = ['/welcome', '/auth/login', '/auth/signup', '/auth/callback']
+  const pathname = request.nextUrl.pathname
+
+    // Define public routes (no auth required)
+  const publicRoutes = ['/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
   const publicApiRoutes = ['/api/stripe/checkout']
   
   // Define protected routes
-  const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command']
-  const { pathname } = request.nextUrl
+  const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command', '/account']
+
 
   // Check if route is public
   const isPublicRoute = publicRoutes.some((route) => pathname === route || pathname.startsWith(route))
@@ -75,3 +77,5 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|auth/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
+
+

@@ -87,14 +87,23 @@ export async function POST(request) {
 
     // Price ID is now from environment variable (already validated above)
 
-    // Try to get authenticated user (optional - allows guest checkout)
+        // Require authenticated user
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
-    // If user is logged in, ensure profile exists
-    if (user && !authError) {
+    // Block checkout if not authenticated
+    if (!user || authError) {
+      return NextResponse.json(
+        { error: 'Authentication required. Please log in to subscribe.' },
+        { status: 401 }
+      )
+    }
+
+    // Ensure profile exists
+    if (user) {
+
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id')
@@ -134,17 +143,16 @@ export async function POST(request) {
       cancel_url: `${siteUrl}/welcome`,
     }
 
-    // If user is logged in, add their email and user ID
-    if (user && !authError) {
-      sessionConfig.customer_email = user.email
-      sessionConfig.client_reference_id = user.id
-    }
-    // If not logged in, Stripe will collect email during checkout (guest checkout)
+        // Add authenticated user's email and ID
+    sessionConfig.customer_email = user.email
+    sessionConfig.client_reference_id = user.id
+
 
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    return NextResponse.json({ sessionId: session.id })
+    return NextResponse.json({ url: session.url })
+
   } catch (error) {
     console.error('Checkout session creation error:', error)
     return NextResponse.json(

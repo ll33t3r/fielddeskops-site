@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import JobSelector from "../../components/shared/JobSelector";
+import UpgradePrompt from '../../../components/UpgradePrompt';
+
 
 const THEME_ORANGE = "#FF6700";
 
@@ -72,6 +74,7 @@ export default function LoadOut() {
   const [newMemberName, setNewMemberName] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toolToDelete, setToolToDelete] = useState(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   // HAPTIC ENGINE
   const vibrate = (pattern = 10) => {
@@ -297,6 +300,17 @@ export default function LoadOut() {
     vibrate(20);
     const validRows = batchRows.filter((r) => r.name.trim() !== "");
     if (validRows.length === 0) return;
+
+    // Check subscription limits
+const { canCreateResource } = await import('../../../lib/subscription/subscriptionHelpers');
+const limitCheck = await canCreateResource('items');
+
+if (!limitCheck.allowed) {
+  setShowUpgradePrompt(true);
+  return;
+}
+
+	
 
     // Get user correctly
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -1374,6 +1388,15 @@ export default function LoadOut() {
           </div>
         </div>
       )}
+
+      {/* UPGRADE PROMPT MODAL */}
+      {showUpgradePrompt && (
+        <UpgradePrompt 
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+        />
+      )}
     </div>
   );
 }
+
