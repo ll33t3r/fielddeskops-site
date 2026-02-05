@@ -38,7 +38,10 @@ export async function POST(request) {
     if (!priceId && !paymentLink) {
       logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK')
       return NextResponse.json(
-        { error: 'Stripe Price ID or Payment Link not configured. Check environment variables.' },
+        {
+          error:
+            'Add NEXT_PUBLIC_STRIPE_PAYMENT_LINK in Vercel (exact name, Production). Value = your Stripe Payment Link URL (https://buy.stripe.com/...). Then redeploy.',
+        },
         { status: 500 }
       )
     }
