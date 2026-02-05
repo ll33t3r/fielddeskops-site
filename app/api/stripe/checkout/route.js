@@ -36,12 +36,14 @@ export async function POST(request) {
     }
     const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim()
     if (!priceId && !paymentLink) {
-      logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK')
+      const rawLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+      const debug =
+        typeof rawLink === 'string'
+          ? `NEXT_PUBLIC_STRIPE_PAYMENT_LINK is set but empty or invalid (length ${rawLink.trim().length}).`
+          : 'NEXT_PUBLIC_STRIPE_PAYMENT_LINK is not set on the server. Add it in Vercel for Production, then redeploy (try "Clear cache and deploy" if you just added it).'
+      logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK', { rawLinkType: typeof rawLink })
       return NextResponse.json(
-        {
-          error:
-            'Add NEXT_PUBLIC_STRIPE_PAYMENT_LINK in Vercel (exact name, Production). Value = your Stripe Payment Link URL (https://buy.stripe.com/...). Then redeploy.',
-        },
+        { error: debug },
         { status: 500 }
       )
     }
