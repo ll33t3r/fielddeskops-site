@@ -34,14 +34,21 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim()
+    // Support both: server-only STRIPE_PAYMENT_LINK (recommended for API) and NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+    const paymentLink = (
+      process.env.STRIPE_PAYMENT_LINK ||
+      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+    )?.trim()
     if (!priceId && !paymentLink) {
-      const rawLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+      const rawPublic = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+      const rawServer = process.env.STRIPE_PAYMENT_LINK
       const debug =
-        typeof rawLink === 'string'
-          ? `NEXT_PUBLIC_STRIPE_PAYMENT_LINK is set but empty or invalid (length ${rawLink.trim().length}).`
-          : 'NEXT_PUBLIC_STRIPE_PAYMENT_LINK is not set on the server. Add it in Vercel for Production, then redeploy (try "Clear cache and deploy" if you just added it).'
-      logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK', { rawLinkType: typeof rawLink })
+        typeof rawServer === 'string' && rawServer.trim()
+          ? `STRIPE_PAYMENT_LINK is set but invalid (length ${rawServer.trim().length}).`
+          : typeof rawPublic === 'string' && rawPublic.trim()
+            ? `NEXT_PUBLIC_STRIPE_PAYMENT_LINK is set but invalid (length ${rawPublic.trim().length}).`
+            : 'Payment link not set. In Vercel add STRIPE_PAYMENT_LINK (or NEXT_PUBLIC_STRIPE_PAYMENT_LINK) = your https://buy.stripe.com/... URL. Check Production, save, then Clear cache and redeploy.'
+      logError('Checkout missing price ID and payment link', { hasServer: !!rawServer, hasPublic: !!rawPublic })
       return NextResponse.json(
         { error: debug },
         { status: 500 }
