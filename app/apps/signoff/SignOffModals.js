@@ -51,7 +51,7 @@ export default function SignOffModals({ modal }) {
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
     selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
     activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport, deleteContract, editDraft,
-    editTemplate, deleteTemplate, isOnline, setEditingTemplateId, onGenerateShareLink, onShareSigned,
+    editTemplate, deleteTemplate, isOnline, setEditingTemplateId, onGenerateShareLink, onShareSigned, onLimitReached,
   } = modal;
 
   const [historySearch, setHistorySearch] = useState("");
@@ -537,8 +537,15 @@ export default function SignOffModals({ modal }) {
                   try {
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) { showToast("You must be logged in", "error"); return; }
+                    const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+                    const limitCheck = await canCreateResource('jobs');
+                    if (!limitCheck.allowed && onLimitReached) {
+                      onLimitReached({ resourceType: 'jobs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+                      return;
+                    }
                     const { data, error } = await supabase.from("jobs").insert({ user_id: user.id, title, customer_name: newJobCustomer.trim() || null, status: "ACTIVE" }).select().single();
                     if (error) { logError("SignOff job create failed", error, { title }); showToast(`Failed to create job: ${error.message}`, "error"); return; }
+                    await incrementResourceUsage('jobs');
                     setRecentJobs((prev) => [data, ...prev]); setSelectedJob(data); showToast("Job created", "success"); setShowNewJobModal(false); setNewJobTitle(""); setNewJobCustomer("");
                   } catch (err) { logError("SignOff job create unexpected error", err, { title }); showToast("Failed to create job", "error"); }
                 }} className="px-3 py-2 rounded-lg text-xs bg-[#FF6700] text-black font-bold hover:shadow-[0_0_10px_rgba(255,103,0,0.4)]">Create</button>

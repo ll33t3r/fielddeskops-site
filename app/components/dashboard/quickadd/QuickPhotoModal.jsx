@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import { createClient } from "../../../utils/supabase/client";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -15,6 +16,8 @@ export default function QuickPhotoModal({ isOpen, onClose, activeJob, onSaved })
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'photos', currentCount: 0, limit: 0, tier: 'free' });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,7 +66,13 @@ export default function QuickPhotoModal({ isOpen, onClose, activeJob, onSaved })
         setError("Not authenticated.");
         return;
       }
-
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('photos');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'photos', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
       const fileExt = file.name.split(".").pop() || "jpg";
       const filePath = `${user.id}/${activeJob.id}/${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase
@@ -90,6 +99,7 @@ export default function QuickPhotoModal({ isOpen, onClose, activeJob, onSaved })
         });
 
       if (insertError) throw insertError;
+      await incrementResourceUsage('photos');
 
       setMessage("Photo added! Open SiteSnap to view all photos");
       window.dispatchEvent(new Event("photos-updated"));
@@ -108,6 +118,16 @@ export default function QuickPhotoModal({ isOpen, onClose, activeJob, onSaved })
 
   return (
     <>
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto z-50 bg-[var(--bg-card)]/80 border border-[var(--border-color)] rounded-2xl shadow-2xl backdrop-blur-xl animate-in zoom-in-95">
         <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">

@@ -4,10 +4,22 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logError } from '../utils/logger';
 
-export default function UpgradePrompt({ resourceType, currentCount, limit, tier }) {
+export default function UpgradePrompt({
+  isOpen = true,
+  onClose,
+  resourceType = 'resources',
+  currentCount = 0,
+  limit = 0,
+  tier = 'free',
+}) {
   const router = useRouter();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else router.back();
+  };
 
   const handleUpgrade = async () => {
     setError('');
@@ -40,6 +52,8 @@ export default function UpgradePrompt({ resourceType, currentCount, limit, tier 
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full shadow-xl">
@@ -60,10 +74,10 @@ export default function UpgradePrompt({ resourceType, currentCount, limit, tier 
             Unlock Unlimited Access - $19.99/month
           </h3>
           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-            <li>? Unlimited jobs, customers & photos</li>
-            <li>? Unlimited estimates & contracts</li>
-            <li>? Share SignOff documents</li>
-            <li>? All apps included</li>
+            <li>• Unlimited jobs, customers & photos</li>
+            <li>• Unlimited estimates & contracts</li>
+            <li>• Share SignOff documents</li>
+            <li>• All apps included</li>
           </ul>
         </div>
 
@@ -73,10 +87,10 @@ export default function UpgradePrompt({ resourceType, currentCount, limit, tier 
 
         <div className="flex gap-3">
           <button
-            onClick={() => router.back()}
+            onClick={handleClose}
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
-            Go Back
+            {onClose ? 'Close' : 'Go Back'}
           </button>
           <button
             onClick={handleUpgrade}

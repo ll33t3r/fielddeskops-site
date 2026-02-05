@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Users, Trash2 } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import PanelContainer from "./PanelContainer";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpdated }) {
   const { workers, addWorker, deleteWorker } = useResourcesManagement(supabase, {
@@ -11,11 +12,18 @@ export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpd
     includeCustomers: false,
   });
   const [newWorker, setNewWorker] = useState({ name: "", role: "" });
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'workers', currentCount: 0, limit: 0, tier: 'free' });
 
   const handleAddWorker = async () => {
     if (!newWorker.name.trim()) return;
     const { data, error } = await addWorker(newWorker);
-    if (data && !error) {
+    if (error?.limitReached) {
+      setUpgradePromptData({ resourceType: error.resourceType || 'workers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
+      setShowUpgradePrompt(true);
+      return;
+    }
+    if (!error && data) {
       setNewWorker({ name: "", role: "" });
       if (onResourcesUpdated) await onResourcesUpdated();
     }
@@ -31,6 +39,16 @@ export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpd
 
   return (
     <PanelContainer isOpen={isOpen} onClose={onClose} title="Workers">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div className="space-y-4">
         <div>
           <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Worker</label>

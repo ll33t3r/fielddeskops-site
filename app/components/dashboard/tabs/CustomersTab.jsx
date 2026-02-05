@@ -6,6 +6,7 @@ import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import { logError } from "../../../../utils/logger";
 import FormField from "../../shared/FormField";
 import { buildFieldErrors, isEmail, isPhone, isRequired } from "../../../utils/validation";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const { customers, addCustomer, deleteCustomer, updateCustomer } = useResourcesManagement(supabase, {
@@ -18,6 +19,8 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [newErrors, setNewErrors] = useState({});
   const [editErrors, setEditErrors] = useState({});
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'customers', currentCount: 0, limit: 0, tier: 'free' });
 
   const validateCustomer = (values) =>
     buildFieldErrors({
@@ -38,6 +41,11 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
     setNewErrors(errors);
     if (Object.keys(errors).length > 0) return;
     const { error } = await addCustomer({ ...newCustomer, name: trimmedName });
+    if (error?.limitReached) {
+      setUpgradePromptData({ resourceType: error.resourceType || 'customers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (!error) {
       setNewCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
       setNewErrors({});
@@ -84,6 +92,16 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
 
   return (
     <div className="space-y-4">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Customer</label>
         <div className="space-y-2">

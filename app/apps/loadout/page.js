@@ -86,6 +86,7 @@ export default function LoadOut() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toolToDelete, setToolToDelete] = useState(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'resources', currentCount: 0, limit: 0, tier: 'free' });
 
   // HAPTIC ENGINE
   const vibrate = (pattern = 10) => {
@@ -246,6 +247,14 @@ export default function LoadOut() {
         return;
       }
 
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('rigs');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'rigs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
+
       const { data: newRig, error } = await supabase
         .from("fleet")
         .insert({
@@ -262,6 +271,7 @@ export default function LoadOut() {
       }
 
       if (newRig) {
+        await incrementResourceUsage('rigs');
         setRigs([...rigs, newRig]);
         setCurrentRig(newRig);
         fetchRigData(newRig.id);
@@ -456,6 +466,7 @@ export default function LoadOut() {
         const limitCheck = await canCreateResource('items');
         
         if (!limitCheck.allowed) {
+          setUpgradePromptData({ resourceType: 'items', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
           setShowUpgradePrompt(true);
           
           if (successCount > 0) {
@@ -810,6 +821,13 @@ export default function LoadOut() {
         if (authError) logError("LoadOut auth failed", authError);
         return;
       }
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('workers');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'workers', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
       const { data, error } = await supabase
         .from("team_members")
         .insert({ user_id: user.id, name: newMemberName.trim() })
@@ -821,6 +839,7 @@ export default function LoadOut() {
         return;
       }
       if (data) {
+        await incrementResourceUsage('workers');
         setTeamMembers([...teamMembers, data]);
         setNewMemberName("");
         setFormErrors((prev) => ({ ...prev, teamMember: {} }));
@@ -1939,6 +1958,10 @@ export default function LoadOut() {
         <UpgradePrompt 
           isOpen={showUpgradePrompt}
           onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
         />
       )}
     </div>

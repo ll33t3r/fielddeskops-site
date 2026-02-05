@@ -17,6 +17,7 @@ import FormField from "../../components/shared/FormField";
 import { buildFieldErrors, inRange, isEmail, isPhone, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function SignOff() {
   const supabase = createClient();
@@ -76,6 +77,8 @@ export default function SignOff() {
   const [jobLinkedData, setJobLinkedData] = useState(null);
   const [smartVariables, setSmartVariables] = useState({});
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'signoff_docs', currentCount: 0, limit: 0, tier: 'free' });
 
   // Save custom variables to localStorage whenever they change
   useEffect(() => {
@@ -558,6 +561,14 @@ export default function SignOff() {
         throw new Error("Failed to capture signature. Please try signing again.");
       }
       
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('signoff_docs');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'signoff_docs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
+
       const processedBody = applySmartVariables(contractBody);
       const nowIso = new Date().toISOString();
       setSignedAt(nowIso);
@@ -578,6 +589,7 @@ export default function SignOff() {
         logError("SignOff contract save failed", error);
         throw error;
       }
+      await incrementResourceUsage('signoff_docs');
 
       // Verify signature was saved
       if (data && data.signature_data) {
@@ -646,6 +658,13 @@ export default function SignOff() {
         if (authError) logError("SignOff auth failed", authError);
         return;
       }
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('signoff_docs');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'signoff_docs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
 
       const processedBody = applySmartVariables(contractBody);
 
@@ -665,6 +684,7 @@ export default function SignOff() {
         .single();
 
       if (error) throw error;
+      await incrementResourceUsage('signoff_docs');
 
       if (attachedPhotos.length > 0 && data?.id) {
         const photoRows = attachedPhotos.map((photo, index) => ({
@@ -1075,6 +1095,16 @@ export default function SignOff() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       {/* HEADER */}
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
         <div className="flex flex-col gap-3">
@@ -1554,6 +1584,10 @@ export default function SignOff() {
           setEditingTemplateId,
           onGenerateShareLink: generateShareLink,
           onShareSigned: shareSignedContract,
+          onLimitReached: (limitResult) => {
+            setUpgradePromptData(limitResult);
+            setShowUpgradePrompt(true);
+          },
         }}
       />
 

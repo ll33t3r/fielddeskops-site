@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FolderOpen, ChevronDown, Plus, Pencil, X } from 'lucide-react';
 import { useJobSelector } from '../hooks/useJobSelector';
+import UpgradePrompt from './UpgradePrompt';
 
 export default function JobSelector() {
   const { activeJob, setActiveJob, recentJobs, createQuickJob } = useJobSelector();
@@ -10,6 +11,8 @@ export default function JobSelector() {
   const [isCreating, setIsCreating] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
   const dropdownRef = useRef(null);
 
   const vibrate = (pattern = 10) => {
@@ -29,15 +32,34 @@ export default function JobSelector() {
   const handleCreateJob = async () => {
     if (!newJobTitle.trim()) return;
     setCreating(true);
-    await createQuickJob(newJobTitle.trim());
-    setNewJobTitle('');
-    setIsCreating(false);
-    setIsOpen(false);
+    const result = await createQuickJob(newJobTitle.trim());
+    if (result?.limitReached && result?.limitResult) {
+      setUpgradePromptData({
+        resourceType: result.limitResult.resourceType || 'jobs',
+        currentCount: result.limitResult.currentCount ?? 0,
+        limit: result.limitResult.limit ?? 0,
+        tier: result.limitResult.tier || 'free',
+      });
+      setShowUpgradePrompt(true);
+    } else if (result?.job) {
+      setNewJobTitle('');
+      setIsOpen(false);
+    }
     setCreating(false);
   };
 
   return (
     <div className="relative mb-6" ref={dropdownRef}>
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       {isCreating ? (
         <div className="flex items-center gap-2 industrial-card p-4 rounded-xl border-2 border-[#FF6700]">
           <Pencil className="text-[#FF6700]" size={20} />

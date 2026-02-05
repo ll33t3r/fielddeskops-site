@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, UserCircle, Plus, Upload, Phone } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import PanelContainer from "./PanelContainer";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function PhoneBookPanel({
   isOpen,
@@ -20,6 +21,8 @@ export default function PhoneBookPanel({
   const [customerSearch, setCustomerSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'customers', currentCount: 0, limit: 0, tier: 'free' });
   const nameInputRef = useRef(null);
 
   useEffect(() => {
@@ -34,6 +37,11 @@ export default function PhoneBookPanel({
     const trimmedName = newCustomer.name.trim();
     if (!trimmedName) return;
     const { error } = await addCustomer({ ...newCustomer, name: trimmedName });
+    if (error?.limitReached) {
+      setUpgradePromptData({ resourceType: error.resourceType || 'customers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (!error) {
       setNewCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
       if (onResourcesUpdated) await onResourcesUpdated();
@@ -48,6 +56,16 @@ export default function PhoneBookPanel({
 
   return (
     <PanelContainer isOpen={isOpen} onClose={onClose} title="Phone Book">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div className="space-y-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)]" size={16} />

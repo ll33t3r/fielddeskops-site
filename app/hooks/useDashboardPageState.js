@@ -59,12 +59,23 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
     loadDashboardData();
   }, [loadDashboardData]);
 
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
+
   const handleCreateJob = useCallback(async () => {
     if (!quickJobName.trim()) return;
     setIsCreating(true);
 
     const { data, error } = await createJob(quickJobName);
-    if (error) {
+    if (error?.limitReached) {
+      setUpgradePromptData({
+        resourceType: error.resourceType || 'jobs',
+        currentCount: error.currentCount ?? 0,
+        limit: error.limit ?? 0,
+        tier: error.tier || 'free',
+      });
+      setShowUpgradePrompt(true);
+    } else if (error) {
       alert(error.message || "Error creating job");
     } else if (data) {
       setActiveJob(data);
@@ -154,5 +165,8 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
     refreshJobsData,
     loadResources,
     refreshDashboardData,
+    showUpgradePrompt,
+    setShowUpgradePrompt,
+    upgradePromptData,
   };
 }

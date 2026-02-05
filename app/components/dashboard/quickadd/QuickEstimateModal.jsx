@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, DollarSign } from "lucide-react";
 import { createClient } from "../../../utils/supabase/client";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved }) {
   const supabase = createClient();
@@ -19,6 +20,8 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'estimates', currentCount: 0, limit: 0, tier: 'free' });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -105,7 +108,13 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
         setError("Not authenticated.");
         return;
       }
-
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('estimates');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'estimates', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
       const notes = serviceName.trim()
         ? `Service: ${serviceName.trim()}`
         : null;
@@ -123,6 +132,7 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
         });
 
       if (insertError) throw insertError;
+      await incrementResourceUsage('estimates');
 
       setMessage("Estimate created! Open ProfitLock to edit details");
       window.dispatchEvent(new Event("estimates-updated"));
@@ -141,6 +151,16 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
 
   return (
     <>
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto z-50 bg-[var(--bg-card)]/80 border border-[var(--border-color)] rounded-2xl shadow-2xl backdrop-blur-xl animate-in zoom-in-95">
         <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">

@@ -24,6 +24,7 @@ import QuickInventoryModal from "../components/dashboard/quickadd/QuickInventory
 import QuickToolModal from "../components/dashboard/quickadd/QuickToolModal";
 import QuickPhotoModal from "../components/dashboard/quickadd/QuickPhotoModal";
 import JobHistory from "../components/JobHistory";
+import UpgradePrompt from "../components/UpgradePrompt";
 
 export default function Dashboard() {
   const supabase = createClient();
@@ -63,6 +64,9 @@ export default function Dashboard() {
     refreshJobsData,
     loadResources,
     refreshDashboardData,
+    showUpgradePrompt,
+    setShowUpgradePrompt,
+    upgradePromptData,
   } = useDashboardPageState({ supabase, router, setActiveJob });
 
   useEffect(() => {
@@ -129,6 +133,16 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <DashboardHeader
         greeting={greeting}
         onOpenJobHistory={() => setShowJobHistory(true)}

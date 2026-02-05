@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Truck, Trash2 } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import PanelContainer from "./PanelContainer";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function FleetPanel({ isOpen, onClose, supabase, onResourcesUpdated }) {
   const { fleet, addRig, deleteRig } = useResourcesManagement(supabase, {
@@ -11,10 +12,17 @@ export default function FleetPanel({ isOpen, onClose, supabase, onResourcesUpdat
     includeCustomers: false,
   });
   const [newRig, setNewRig] = useState({ name: "", plate: "" });
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'rigs', currentCount: 0, limit: 0, tier: 'free' });
 
   const handleAddRig = async () => {
     if (!newRig.name.trim()) return;
-    const { error } = await addRig(newRig);
+    const { data, error } = await addRig(newRig);
+    if (error?.limitReached) {
+      setUpgradePromptData({ resourceType: error.resourceType || 'rigs', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (!error) {
       setNewRig({ name: "", plate: "" });
       if (onResourcesUpdated) await onResourcesUpdated();
@@ -31,6 +39,16 @@ export default function FleetPanel({ isOpen, onClose, supabase, onResourcesUpdat
 
   return (
     <PanelContainer isOpen={isOpen} onClose={onClose} title="Fleet">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div className="space-y-4">
         <div>
           <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Rig</label>

@@ -15,6 +15,7 @@ import FormField from "../../components/shared/FormField";
 import { buildFieldErrors, inRange, isNumber, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function ProfitLock() {
   const supabase = createClient();
@@ -73,6 +74,8 @@ export default function ProfitLock() {
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState("");
   const [jobSearch, setJobSearch] = useState("");
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'resources', currentCount: 0, limit: 0, tier: 'free' });
 
   useEffect(() => { 
       loadData(); 
@@ -218,7 +221,13 @@ export default function ProfitLock() {
         if (authError) logError("ProfitLock auth failed", authError);
         return;
       }
-      
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const jobLimitCheck = await canCreateResource('jobs');
+      if (!jobLimitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'jobs', currentCount: jobLimitCheck.currentCount, limit: jobLimitCheck.limit, tier: jobLimitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
       const { data: job, error } = await supabase.from("jobs").insert({
         user_id: user.id,
         title: newJobTitle.trim(),
@@ -230,7 +239,7 @@ export default function ProfitLock() {
         logError("ProfitLock job create failed", error);
         return;
       }
-
+      await incrementResourceUsage('jobs');
       setActiveJob(job);
       setAllJobs([job, ...allJobs]);
       setNewJobTitle("");
@@ -366,6 +375,15 @@ export default function ProfitLock() {
       return;
     }
 
+    const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+    const estimateLimitCheck = await canCreateResource('estimates');
+    if (!estimateLimitCheck.allowed) {
+      setSavingEstimate(false);
+      setUpgradePromptData({ resourceType: 'estimates', currentCount: estimateLimitCheck.currentCount, limit: estimateLimitCheck.limit, tier: estimateLimitCheck.tier });
+      setShowUpgradePrompt(true);
+      return;
+    }
+
     const estimateData = {
         user_id: user.id,
         job_id: activeJob.id,
@@ -390,6 +408,7 @@ export default function ProfitLock() {
         logError("ProfitLock estimate save failed", error);
         return;
       }
+      await incrementResourceUsage('estimates');
 
       if (mode === "ADVANCED") {
         const items = lineItems
@@ -497,7 +516,16 @@ export default function ProfitLock() {
 
   return (
     <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
-      
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <header className="p-4 shrink-0 z-10 border-b border-[var(--border-color)]">
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">

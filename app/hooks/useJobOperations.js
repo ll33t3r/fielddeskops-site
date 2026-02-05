@@ -56,6 +56,22 @@ export default function useJobOperations(supabase, options = {}) {
       }
       const user = userData?.user;
       if (!user) return { data: null, error: new Error("User not found") };
+
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('jobs');
+      if (!limitCheck.allowed) {
+        return {
+          data: null,
+          error: Object.assign(new Error('Limit reached'), {
+            limitReached: true,
+            resourceType: 'jobs',
+            currentCount: limitCheck.currentCount,
+            limit: limitCheck.limit,
+            tier: limitCheck.tier,
+          }),
+        };
+      }
+
       const { data, error } = await supabase.from("jobs").insert({
         user_id: user.id,
         title: title.trim(),
@@ -66,13 +82,15 @@ export default function useJobOperations(supabase, options = {}) {
 
       if (error) {
         logError("Create job failed", error);
+        return { data: null, error };
       }
 
-      if (data && !error) {
+      if (data) {
+        await incrementResourceUsage('jobs');
         await loadJobs();
       }
 
-      return { data, error };
+      return { data, error: null };
     } catch (error) {
       logError("Create job failed", error);
       return { data: null, error };

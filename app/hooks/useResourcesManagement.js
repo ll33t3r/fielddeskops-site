@@ -132,16 +132,30 @@ export default function useResourcesManagement(supabase, options = {}) {
         logError("Resources add worker missing user", userError, { userData });
         return { data: null, error: userError || new Error("Missing authenticated user") };
       }
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('workers');
+      if (!limitCheck.allowed) {
+        return {
+          data: null,
+          error: Object.assign(new Error('Limit reached'), {
+            limitReached: true,
+            resourceType: 'workers',
+            currentCount: limitCheck.currentCount,
+            limit: limitCheck.limit,
+            tier: limitCheck.tier,
+          }),
+        };
+      }
       const { data, error } = await supabase.from("crew").insert({
         user_id: userData.user.id,
         name: newWorker.name,
         role: newWorker.role || "Tech",
       }).select("id, user_id, name, role, phone, email, status, created_at, updated_at").single();
 
-      if (data && !error) {
-        await loadWorkers();
-      }
-      return { data, error };
+      if (error) return { data: null, error };
+      await incrementResourceUsage('workers');
+      await loadWorkers();
+      return { data, error: null };
     } catch (error) {
       logError("Resources add worker failed", error);
       return { data: null, error };
@@ -162,22 +176,36 @@ export default function useResourcesManagement(supabase, options = {}) {
   }, [supabase, loadWorkers]);
 
   const addRig = useCallback(async (newRig) => {
-    if (!newRig?.name?.trim()) return { error: null };
+    if (!newRig?.name?.trim()) return { data: null, error: null };
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user?.id) {
         logError("Resources add rig missing user", userError, { userData });
-        return { error: userError || new Error("Missing authenticated user") };
+        return { data: null, error: userError || new Error("Missing authenticated user") };
+      }
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('rigs');
+      if (!limitCheck.allowed) {
+        return {
+          data: null,
+          error: Object.assign(new Error('Limit reached'), {
+            limitReached: true,
+            resourceType: 'rigs',
+            currentCount: limitCheck.currentCount,
+            limit: limitCheck.limit,
+            tier: limitCheck.tier,
+          }),
+        };
       }
       const payload = { user_id: userData.user.id, name: newRig.name };
-      const { error } = await supabase.from("fleet").insert(payload);
-      if (!error) {
-        await loadFleet();
-      }
-      return { error };
+      const { data, error } = await supabase.from("fleet").insert(payload).select().single();
+      if (error) return { data: null, error };
+      await incrementResourceUsage('rigs');
+      await loadFleet();
+      return { data, error: null };
     } catch (error) {
       logError("Resources add rig failed", error);
-      return { error };
+      return { data: null, error };
     }
   }, [supabase, loadFleet]);
 
@@ -196,12 +224,27 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const addCustomer = useCallback(async (newCustomer) => {
     const name = newCustomer?.name?.trim();
-    if (!name) return { error: null };
+    if (!name) return { data: null, error: null };
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user?.id) {
       logError("Resources add customer missing user", userError, { userData });
-      return { error: userError || new Error("Missing authenticated user") };
+      return { data: null, error: userError || new Error("Missing authenticated user") };
+    }
+
+    const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+    const limitCheck = await canCreateResource('customers');
+    if (!limitCheck.allowed) {
+      return {
+        data: null,
+        error: Object.assign(new Error('Limit reached'), {
+          limitReached: true,
+          resourceType: 'customers',
+          currentCount: limitCheck.currentCount,
+          limit: limitCheck.limit,
+          tier: limitCheck.tier,
+        }),
+      };
     }
 
     let payload = {
@@ -238,10 +281,11 @@ export default function useResourcesManagement(supabase, options = {}) {
 
     if (error) {
       logError("Resources add customer failed", error, { payload });
-    } else {
-      await loadCustomers();
+      return { data: null, error };
     }
-    return { data, error };
+    await incrementResourceUsage('customers');
+    await loadCustomers();
+    return { data, error: null };
   }, [supabase, loadCustomers]);
 
   const deleteCustomer = useCallback(async (id) => {

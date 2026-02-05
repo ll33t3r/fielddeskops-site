@@ -20,6 +20,7 @@ import {
   ReactCompareSlider,
   ReactCompareSliderImage
 } from 'react-compare-slider';
+import UpgradePrompt from '../../../components/UpgradePrompt';
 
 export default function SiteSnap() {
   const supabase = createClient();
@@ -50,6 +51,8 @@ export default function SiteSnap() {
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [linkedEstimate, setLinkedEstimate] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'photos', currentCount: 0, limit: 0, tier: 'free' });
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -260,6 +263,13 @@ export default function SiteSnap() {
         if (authError) logError('SiteSnap auth failed', authError);
         return;
       }
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('photos');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'photos', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
 
       const optimizedBlob = await compressImage(fileToUpload);
       const timestamp = Date.now();
@@ -304,6 +314,7 @@ export default function SiteSnap() {
         logError('SiteSnap photo save failed', dbError);
         return;
       }
+      await incrementResourceUsage('photos');
 
       const { data: signedData, error: signedError } = await supabase.storage
         .from('fielddeskops-photos')
@@ -496,6 +507,16 @@ export default function SiteSnap() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] pb-32 relative">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       {/* HEADER - STICKY */}
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between mb-3">

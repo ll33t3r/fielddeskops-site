@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, CheckCircle2, Edit2, MoreVertical, Archive, RotateCcw, Trash2, Users, UserCircle, Truck, Plus, X } from "lucide-react";
 import useJobOperations from "../../../hooks/useJobOperations";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], onSelectJob, onAssignResources, onJobsUpdated }) {
   const { jobs, createJob, updateJob, deleteJob } = useJobOperations(supabase);
@@ -12,6 +13,8 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
   const [newJobWorkerId, setNewJobWorkerId] = useState("");
   const [editingJob, setEditingJob] = useState(null);
   const [jobMenuOpen, setJobMenuOpen] = useState(null);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
 
   const addJobFromMenu = async () => {
     if (!newJobTitle.trim()) return;
@@ -20,6 +23,16 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
       assigned_worker_id: newJobWorkerId || null,
     });
 
+    if (error?.limitReached) {
+      setUpgradePromptData({
+        resourceType: error.resourceType || 'jobs',
+        currentCount: error.currentCount ?? 0,
+        limit: error.limit ?? 0,
+        tier: error.tier || 'free',
+      });
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (data && !error) {
       setNewJobTitle("");
       setNewJobRigId("");
@@ -56,6 +69,16 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
 
   return (
     <div className="space-y-4">
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Create Job</label>
         <div className="flex gap-2">

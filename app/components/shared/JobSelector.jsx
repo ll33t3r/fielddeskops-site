@@ -6,6 +6,7 @@ import { createClient } from "../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import { buildFieldErrors, isRequired } from "../../utils/validation";
 import { logError } from "../../../utils/logger";
+import UpgradePrompt from "../../../components/UpgradePrompt";
 
 export default function JobSelector() {
   const supabase = useMemo(() => createClient(), []);
@@ -18,6 +19,8 @@ export default function JobSelector() {
   const [error, setError] = useState(null);
   const [touched, setTouched] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
   const inputRef = useRef(null);
 
   const loadJobs = useCallback(async () => {
@@ -98,6 +101,14 @@ export default function JobSelector() {
         return;
       }
 
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('jobs');
+      if (!limitCheck.allowed) {
+        setUpgradePromptData({ resourceType: 'jobs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
+        setShowUpgradePrompt(true);
+        return;
+      }
+
       const { data, error: insertError } = await supabase
         .from("jobs")
         .insert({
@@ -114,6 +125,7 @@ export default function JobSelector() {
       }
 
       if (data) {
+        await incrementResourceUsage('jobs');
         setJobs((prev) => [data, ...prev]);
         setActiveJob(data);
         setJobName("");
@@ -232,6 +244,17 @@ export default function JobSelector() {
           </>
         )}
       </div>
+
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          isOpen={showUpgradePrompt}
+          onClose={() => setShowUpgradePrompt(false)}
+          resourceType={upgradePromptData.resourceType}
+          currentCount={upgradePromptData.currentCount}
+          limit={upgradePromptData.limit}
+          tier={upgradePromptData.tier}
+        />
+      )}
 
       {activeJob && (
         <div className="flex items-center justify-between bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-lg p-3 mt-3 shadow-[0_0_10px_rgba(255,103,0,0.15)]">

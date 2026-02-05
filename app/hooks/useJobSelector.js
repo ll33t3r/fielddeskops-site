@@ -51,7 +51,17 @@ export const useJobSelector = () => {
   const createQuickJob = async (title) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) return { job: null };
+
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      const limitCheck = await canCreateResource('jobs');
+      if (!limitCheck.allowed) {
+        return {
+          job: null,
+          limitReached: true,
+          limitResult: { resourceType: 'jobs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier },
+        };
+      }
 
       const { data: newJob } = await supabase
         .from('jobs')
@@ -60,14 +70,15 @@ export const useJobSelector = () => {
         .single();
       
       if (newJob) {
+        await incrementResourceUsage('jobs');
         setAllJobs([newJob, ...allJobs]);
         setActiveJob(newJob);
-        return newJob;
+        return { job: newJob };
       }
     } catch (error) {
       logError('Job selector create failed', error);
     }
-    return null;
+    return { job: null };
   };
 
   return {
