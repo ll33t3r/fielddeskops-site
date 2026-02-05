@@ -29,10 +29,11 @@ export async function POST(request) {
     }
 
     const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID
-    if (!priceId) {
-      logError('Checkout missing NEXT_PUBLIC_STRIPE_PRICE_ID')
+    const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+    if (!priceId && !paymentLink) {
+      logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK')
       return NextResponse.json(
-        { error: 'Stripe Price ID not configured. Check environment variables.' },
+        { error: 'Stripe Price ID or Payment Link not configured. Check environment variables.' },
         { status: 500 }
       )
     }
@@ -104,7 +105,6 @@ export async function POST(request) {
 
     // Ensure profile exists (RLS should restrict profiles by auth.uid()).
     if (user) {
-
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id')
@@ -112,7 +112,6 @@ export async function POST(request) {
         .single()
 
       if (profileError && profileError.code === 'PGRST116') {
-        // Profile doesn't exist, create it
         const { error: createError } = await supabase
           .from('profiles')
           .insert({
@@ -122,12 +121,16 @@ export async function POST(request) {
 
         if (createError) {
           logError('Checkout profile create failed', createError)
-          // Don't fail checkout if profile creation fails
         }
       }
     }
 
-    // Build checkout session config
+    // If using Payment Link (no Price ID), redirect to the link
+    if (!priceId && paymentLink?.trim()) {
+      return NextResponse.json({ url: paymentLink.trim() })
+    }
+
+    // Build checkout session config (Price ID flow)
     const sessionConfig = {
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -144,12 +147,9 @@ export async function POST(request) {
       cancel_url: `${siteUrl}/welcome`,
     }
 
-        // Add authenticated user's email and ID
     sessionConfig.customer_email = user.email
     sessionConfig.client_reference_id = user.id
 
-
-    // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
     return NextResponse.json({ url: session.url })

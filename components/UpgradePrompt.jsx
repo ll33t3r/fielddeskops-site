@@ -32,21 +32,29 @@ export default function UpgradePrompt({
 
       const data = await response.json();
 
+      if (!response.ok) {
+        const msg = data.error || `Server error (${response.status})`;
+        setError(msg);
+        logError('Upgrade checkout failed', data.error || response.status);
+        return;
+      }
+
       if (data.error) {
-        setError('Unable to start checkout. Please try again.');
+        setError(data.error);
         logError('Upgrade checkout failed', data.error);
         return;
       }
 
       if (data.url) {
         window.location.href = data.url;
-      } else {
-        setError('Checkout link missing. Please try again.');
-        logError('Upgrade checkout missing url');
+        return;
       }
-    } catch (error) {
+
+      setError('Checkout link missing. Please try again.');
+      logError('Upgrade checkout missing url');
+    } catch (err) {
       setError('Unable to start checkout. Check your connection and try again.');
-      logError('Upgrade checkout failed', error);
+      logError('Upgrade checkout failed', err);
     } finally {
       setIsLoading(false);
     }
