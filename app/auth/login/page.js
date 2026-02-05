@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Bug } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '../../utils/supabase/client'
 import { logError } from '../../../utils/logger'
