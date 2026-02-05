@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Truck, Trash2 } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function FleetTab({ supabase, onResourcesUpdated }) {
   const { fleet, addRig, deleteRig } = useResourcesManagement(supabase, {

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FolderOpen, ChevronDown, Plus, Pencil, X } from 'lucide-react';
 import { useJobSelector } from '../hooks/useJobSelector';
-import UpgradePrompt from './UpgradePrompt';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function JobSelector() {
   const { activeJob, setActiveJob, recentJobs, createQuickJob } = useJobSelector();

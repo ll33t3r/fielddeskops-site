@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, CheckCircle2, Edit2, MoreVertical, Archive, RotateCcw, Trash2, Users, UserCircle, Truck, Plus, X } from "lucide-react";
 import useJobOperations from "../../../hooks/useJobOperations";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], onSelectJob, onAssignResources, onJobsUpdated }) {
   const { jobs, createJob, updateJob, deleteJob } = useJobOperations(supabase);

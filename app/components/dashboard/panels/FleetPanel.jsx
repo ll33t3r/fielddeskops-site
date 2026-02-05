@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Truck, Trash2 } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import PanelContainer from "./PanelContainer";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function FleetPanel({ isOpen, onClose, supabase, onResourcesUpdated }) {
   const { fleet, addRig, deleteRig } = useResourcesManagement(supabase, {

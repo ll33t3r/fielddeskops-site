@@ -6,7 +6,7 @@ import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import { logError } from "../../../../utils/logger";
 import FormField from "../../shared/FormField";
 import { buildFieldErrors, isEmail, isPhone, isRequired } from "../../../utils/validation";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const { customers, addCustomer, deleteCustomer, updateCustomer } = useResourcesManagement(supabase, {

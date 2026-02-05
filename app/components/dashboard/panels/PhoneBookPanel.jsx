@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, UserCircle, Plus, Upload, Phone } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
 import PanelContainer from "./PanelContainer";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function PhoneBookPanel({
   isOpen,

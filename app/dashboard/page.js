@@ -24,7 +24,7 @@ import QuickInventoryModal from "../components/dashboard/quickadd/QuickInventory
 import QuickToolModal from "../components/dashboard/quickadd/QuickToolModal";
 import QuickPhotoModal from "../components/dashboard/quickadd/QuickPhotoModal";
 import JobHistory from "../components/JobHistory";
-import UpgradePrompt from "../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function Dashboard() {
   const supabase = createClient();

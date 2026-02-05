@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import JobSelector from "../../components/shared/JobSelector";
-import UpgradePrompt from '../../../components/UpgradePrompt';
+import UpgradePrompt from '@/components/UpgradePrompt';
 import Toast from "../../components/shared/Toast";
 import FormField from "../../components/shared/FormField";
 import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from "../../utils/validation";

@@ -17,7 +17,7 @@ import FormField from "../../components/shared/FormField";
 import { buildFieldErrors, inRange, isEmail, isPhone, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function SignOff() {
   const supabase = createClient();

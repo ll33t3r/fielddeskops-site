@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Users, Trash2 } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function WorkersTab({ supabase, onResourcesUpdated }) {
   const { workers, addWorker, deleteWorker } = useResourcesManagement(supabase, {

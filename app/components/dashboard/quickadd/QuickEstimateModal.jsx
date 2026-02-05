@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, DollarSign } from "lucide-react";
 import { createClient } from "../../../utils/supabase/client";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved }) {
   const supabase = createClient();

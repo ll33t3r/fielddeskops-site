@@ -6,7 +6,7 @@ import { createClient } from "../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import { buildFieldErrors, isRequired } from "../../utils/validation";
 import { logError } from "../../../utils/logger";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function JobSelector() {
   const supabase = useMemo(() => createClient(), []);

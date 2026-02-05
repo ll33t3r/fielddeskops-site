@@ -20,7 +20,7 @@ import {
   ReactCompareSlider,
   ReactCompareSliderImage
 } from 'react-compare-slider';
-import UpgradePrompt from '../../../components/UpgradePrompt';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function SiteSnap() {
   const supabase = createClient();

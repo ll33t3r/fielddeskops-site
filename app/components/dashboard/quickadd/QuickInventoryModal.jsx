@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, Loader2 } from "lucide-react";
 import { createClient } from "../../../utils/supabase/client";
-import UpgradePrompt from "../../../components/UpgradePrompt";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function QuickInventoryModal({ isOpen, onClose, activeJob, onSaved }) {
   const supabase = createClient();
