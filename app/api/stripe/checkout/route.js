@@ -7,8 +7,22 @@ import { logError } from '../../../../utils/logger'
 // Prevent static generation
 export const dynamic = 'force-dynamic'
 
+const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9]+$/
+
 export async function POST(request) {
   try {
+    // Fallback: client can send payment link (from NEXT_PUBLIC_ inlined at build time) when server env is missing
+    let bodyPaymentLink = null
+    try {
+      const body = await request.json().catch(() => ({}))
+      const raw = body?.paymentLink
+      if (typeof raw === 'string' && VALID_PAYMENT_LINK_REGEX.test(raw.trim())) {
+        bodyPaymentLink = raw.trim()
+      }
+    } catch {
+      // ignore
+    }
+
     // Validate environment variables with better error logging
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY
     if (!stripeSecretKey) {
@@ -34,10 +48,11 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    // Support both: server-only STRIPE_PAYMENT_LINK (recommended for API) and NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+    // Support: server env, or fallback from client (inlined at build time)
     const paymentLink = (
       process.env.STRIPE_PAYMENT_LINK ||
-      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ||
+      bodyPaymentLink
     )?.trim()
     if (!priceId && !paymentLink) {
       const rawPublic = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
