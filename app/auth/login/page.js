@@ -1,55 +1,81 @@
-﻿'use client'
+'use client'
 
-import { useState } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Bug } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '../../utils/supabase/client'
+import { logError } from '../../../utils/logger'
+import FormField from '../../components/shared/FormField'
+import { buildFieldErrors, isEmail, isRequired } from '../../utils/validation'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
-  const [debugLog, setDebugLog] = useState([])
+  const [errorMessage, setErrorMessage] = useState('')
+  const [formValues, setFormValues] = useState({ email: '', password: '' })
+  const [touched, setTouched] = useState({})
+  const [fieldErrors, setFieldErrors] = useState({})
   const router = useRouter()
 
-  // HARDCODED CLIENT
-  const supabase = createBrowserClient(
-    'https://itfjpyzywllsjipjtfrk.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZmpweXp5d2xsc2ppcGp0ZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MjQ4OTgsImV4cCI6MjA4NDEwMDg5OH0.1K8LEPwpQnXPd1AIsshvada-vg37SoHOxfw5DIkYcA8'
+  const supabase = createClient()
+
+  const validate = useMemo(
+    () => (values) =>
+      buildFieldErrors({
+        email: [
+          { isValid: isRequired(values.email), message: 'Email is required.' },
+          { isValid: isEmail(values.email), message: 'Enter a valid email address.' },
+        ],
+        password: [{ isValid: isRequired(values.password), message: 'Password is required.' }],
+      }),
+    []
   )
 
-  const addLog = (msg) => {
-    console.log(msg)
-    setDebugLog(prev => [...prev, msg])
+  const handleChange = (field) => (event) => {
+    const { value } = event.target
+    setFormValues((prev) => {
+      const next = { ...prev, [field]: value }
+      if (touched[field]) {
+        setFieldErrors(validate(next))
+      }
+      return next
+    })
+  }
+
+  const handleBlur = (field) => () => {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+    setFieldErrors(validate({ ...formValues, [field]: formValues[field] }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
-    setDebugLog(['Starting Login Process...'])
-    
-    const formData = new FormData(e.currentTarget)
-    const email = formData.get('email')
-    const password = formData.get('password')
+    const nextErrors = validate(formValues)
+    setFieldErrors(nextErrors)
+    setTouched({ email: true, password: true })
+    if (Object.keys(nextErrors).length > 0) return
 
-    addLog(`Target: ${email}`)
+    setLoading(true)
+    setErrorMessage('')
 
     try {
-      addLog('Sending request to Supabase...')
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: formValues.email,
+        password: formValues.password,
       })
 
       if (error) {
-        addLog(`❌ ERROR: ${error.message}`)
-        setLoading(false)
+        setErrorMessage(error.message || 'Unable to log in. Please try again.')
+        logError('Login failed', error)
       } else {
-        addLog('✅ SUCCESS! Session created.')
-        addLog('Redirecting to Dashboard...')
-        window.location.href = '/'
+        setFormValues({ email: '', password: '' })
+        setTouched({})
+        setFieldErrors({})
+        router.push('/dashboard')
       }
     } catch (err) {
-      addLog(`❌ CRASH: ${err.message}`)
+      setErrorMessage('Unable to log in. Please try again.')
+      logError('Login failed', err)
+    } finally {
       setLoading(false)
     }
   }
@@ -60,7 +86,7 @@ export default function LoginPage() {
         <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
           FIELD<span className="text-[#FF6700]">DESK</span>OPS
         </h1>
-        <p className="text-gray-500 text-sm mt-2">DEBUG LOGIN MODE</p>
+        <p className="text-gray-500 text-sm mt-2">Sign in to your account</p>
       </div>
 
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
@@ -70,41 +96,57 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email Address</label>
-            <input 
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <FormField
+            id="login-email"
+            label="Email Address"
+            required
+            error={touched.email ? fieldErrors.email : null}
+          >
+            <input
+              id="login-email"
               name="email"
-              type="email" 
-              required
+              type="email"
+              value={formValues.email}
+              onChange={handleChange('email')}
+              onBlur={handleBlur('email')}
               placeholder="user@example.com"
               className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              aria-invalid={touched.email && fieldErrors.email ? 'true' : 'false'}
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Password</label>
-            <input 
+          <FormField
+            id="login-password"
+            label="Password"
+            required
+            error={touched.password ? fieldErrors.password : null}
+          >
+            <input
+              id="login-password"
               name="password"
-              type="password" 
-              required
+              type="password"
+              value={formValues.password}
+              onChange={handleChange('password')}
+              onBlur={handleBlur('password')}
               placeholder="••••••••"
               className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              aria-invalid={touched.password && fieldErrors.password ? 'true' : 'false'}
             />
-          </div>
+          </FormField>
 
-          <div className="bg-black/50 p-3 rounded text-xs font-mono text-green-400 min-h-[60px] border border-gray-800">
-            {debugLog.length === 0 ? 'Waiting for input...' : debugLog.map((log, i) => (
-              <div key={i}>{log}</div>
-            ))}
-          </div>
+          {errorMessage ? (
+            <div className="bg-red-900/30 p-3 rounded text-xs text-red-200 border border-red-500/40">
+              {errorMessage}
+            </div>
+          ) : null}
 
           <button 
             type="submit" 
             disabled={loading}
             className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
           >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : 'TRY LOGIN'}
+            {loading ? <Loader2 className="animate-spin" size={20} /> : 'Log In'}
           </button>
         </form>
 

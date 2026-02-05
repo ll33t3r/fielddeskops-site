@@ -5,15 +5,21 @@ import { createClient } from "../../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
   Trash2, Save, FileText, Menu, X, ArrowLeft, Plus, Loader2, 
-  Briefcase, Lock, Unlock, ChevronDown, CheckCircle2, Box, Clock, 
-  AlertTriangle, Eye, EyeOff, DollarSign, Percent, Search, Info
+  Lock, ChevronDown, Box, Clock, 
+  Eye, EyeOff, Search
 } from "lucide-react";
 import Link from "next/link";
 import JobSelector from "../../components/shared/JobSelector";
+import Toast from "../../components/shared/Toast";
+import FormField from "../../components/shared/FormField";
+import { buildFieldErrors, inRange, isNumber, isRequired } from "../../utils/validation";
+import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
+import { logError } from "../../../utils/logger";
 
 export default function ProfitLock() {
   const supabase = createClient();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const isOnline = useOnlineStatus();
   
   const [allJobs, setAllJobs] = useState([]);
   const [estimateHistory, setEstimateHistory] = useState([]); 
@@ -57,8 +63,10 @@ export default function ProfitLock() {
   const [showProfitDetails, setShowProfitDetails] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountAmount, setDiscountAmount] = useState("");
-  const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+  const [savingEstimate, setSavingEstimate] = useState(false);
+  const [savingJob, setSavingJob] = useState(false);
   const [menuTab, setMenuTab] = useState("PROFIT");
   
   const [showJobSelect, setShowJobSelect] = useState(false);
@@ -132,47 +140,110 @@ export default function ProfitLock() {
   }, [hourlyRate, targetValue, profitMethod, taxRate, includeTax, paymentTerms, quoteValidDays]);
 
   const loadCustomer = async (customerId) => {
-    const { data } = await supabase.from("customers").select("*").eq("id", customerId).single();
-    setCustomer(data);
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, address, notes")
+        .eq("id", customerId)
+        .single();
+      if (error) {
+        showToast("Unable to load customer details.", "error");
+        logError("ProfitLock customer fetch failed", error, { customerId });
+        return;
+      }
+      setCustomer(data);
+    } catch (error) {
+      showToast("Unable to load customer details.", "error");
+      logError("ProfitLock customer fetch failed", error, { customerId });
+    }
   };
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        if (userError) logError("ProfitLock auth check failed", userError);
+        return;
+      }
 
-    const { data: jobs } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setAllJobs(jobs || []);
+      const { data: jobs, error: jobsError } = await supabase
+        .from("jobs")
+        .select("id, title, status, customer_id, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (jobsError) {
+        showToast("Failed to load jobs. Please try again.", "error");
+        logError("ProfitLock jobs fetch failed", jobsError);
+      } else {
+        setAllJobs(jobs || []);
+      }
 
-    const { data: est } = await supabase.from("estimates").select("*, jobs(title)").order("created_at", { ascending: false });
-    setEstimateHistory(est || []);
+      const { data: est, error: estError } = await supabase
+        .from("estimates")
+        .select("id, total_price, created_at, jobs(title)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (estError) {
+        showToast("Failed to load estimates. Please try again.", "error");
+        logError("ProfitLock estimates fetch failed", estError);
+      } else {
+        setEstimateHistory(est || []);
+      }
+    } catch (error) {
+      showToast("Failed to load ProfitLock data. Please try again.", "error");
+      logError("ProfitLock data fetch failed", error);
+    }
   };
 
   const handleCreateJob = async () => {
-    if (!newJobTitle.trim()) { showToast("Job title required", "error"); return; }
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    const { data: job, error } = await supabase.from("jobs").insert({
-      user_id: user.id,
-      title: newJobTitle,
-      status: "ACTIVE"
-    }).select().single();
+    const errors = buildFieldErrors({
+      title: [{ isValid: isRequired(newJobTitle), message: "Please enter a job title." }],
+    });
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, newJob: errors }));
+      showToast("Please enter a job title.", "error");
+      return;
+    }
 
-    if (error) {
-      showToast("Error creating job", "error");
-    } else {
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to create a job.", "error");
+      return;
+    }
+
+    setSavingJob(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast("Please log in to create a job.", "error");
+        if (authError) logError("ProfitLock auth failed", authError);
+        return;
+      }
+      
+      const { data: job, error } = await supabase.from("jobs").insert({
+        user_id: user.id,
+        title: newJobTitle.trim(),
+        status: "ACTIVE"
+      }).select("id, title, status, customer_id, created_at").single();
+
+      if (error) {
+        showToast("Failed to create job. Please try again.", "error");
+        logError("ProfitLock job create failed", error);
+        return;
+      }
+
       setActiveJob(job);
       setAllJobs([job, ...allJobs]);
       setNewJobTitle("");
       setShowCreateJob(false);
       setShowJobSelect(false);
-      showToast("Job created!", "success");
+      setFormErrors((prev) => ({ ...prev, newJob: {} }));
+      showToast("Job created successfully!", "success");
+    } catch (error) {
+      showToast("Failed to create job. Please try again.", "error");
+      logError("ProfitLock job create failed", error);
+    } finally {
+      setSavingJob(false);
     }
-    setLoading(false);
   };
 
 
@@ -232,13 +303,68 @@ export default function ProfitLock() {
   const addLineItem = () => setLineItems([...lineItems, { id: Date.now(), description: "", quantity: "", unit_cost: "" }]);
   const updateLineItem = (id, field, value) => {
       setLineItems(lineItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+      if (formErrors?.lineItems?.[id]?.[field]) {
+        setFormErrors((prev) => ({
+          ...prev,
+          lineItems: { ...(prev.lineItems || {}), [id]: { ...(prev.lineItems?.[id] || {}), [field]: "" } }
+        }));
+      }
   };
   const removeLineItem = (id) => setLineItems(lineItems.filter(item => item.id !== id));
 
   const handleSave = async () => {
-    if (!activeJob) { showToast("Select a Job first!", "error"); return; }
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const errors = buildFieldErrors({
+      job: [{ isValid: !!activeJob, message: "Select a job before saving." }],
+      simpleMaterials: [
+        { isValid: mode !== "SIMPLE" || isNumber(simpleMaterials), message: "Enter a materials cost." },
+      ],
+      simpleHours: [
+        { isValid: mode !== "SIMPLE" || isNumber(simpleHours), message: "Enter the labor hours." },
+      ],
+    });
+
+    if (mode === "ADVANCED") {
+      const lineItemErrors = {};
+      lineItems.forEach((item) => {
+        const itemErrors = {};
+        if (!isRequired(item.description)) itemErrors.description = "Add a description.";
+        if (!inRange(item.quantity, 0, 100000)) itemErrors.quantity = "Enter a quantity.";
+        if (!inRange(item.unit_cost, 0, 1000000)) itemErrors.unit_cost = "Enter a unit cost.";
+        if (Object.keys(itemErrors).length > 0) {
+          lineItemErrors[item.id] = itemErrors;
+        }
+      });
+      if (Object.keys(lineItemErrors).length > 0) {
+        setFormErrors((prev) => ({ ...prev, lineItems: lineItemErrors }));
+        showToast("Fix the highlighted line items before saving.", "error");
+        return;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({
+        ...prev,
+        simpleMaterials: errors.simpleMaterials ? errors.simpleMaterials[0]?.message : prev.simpleMaterials,
+        simpleHours: errors.simpleHours ? errors.simpleHours[0]?.message : prev.simpleHours,
+        estimate: errors.job ? { job: errors.job[0]?.message } : prev.estimate,
+      }));
+      showToast(errors.job ? errors.job[0]?.message : "Fix the highlighted fields before saving.", "error");
+      return;
+    }
+
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to save.", "error");
+      return;
+    }
+
+    setSavingEstimate(true);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      showToast("Please log in to save estimates.", "error");
+      if (authError) logError("ProfitLock auth failed", authError);
+      setSavingEstimate(false);
+      return;
+    }
 
     const estimateData = {
         user_id: user.id,
@@ -252,25 +378,37 @@ export default function ProfitLock() {
         notes: `${profitMethod}: ${targetValue}% | Payment: ${paymentTerms}`
     };
 
-    const { data: estimate, error } = await supabase.from("estimates").insert(estimateData).select().single();
+    try {
+      const { data: estimate, error } = await supabase
+        .from("estimates")
+        .insert(estimateData)
+        .select("id")
+        .single();
 
-    if (error) { 
-        console.error("Save error:", error);
-        showToast("Error: " + error.message, "error"); 
-        setLoading(false);
+      if (error) { 
+        showToast("Failed to save estimate. Please try again.", "error");
+        logError("ProfitLock estimate save failed", error);
         return;
-    }
+      }
 
-    if (mode === "ADVANCED") {
-        const items = lineItems.filter(item => item.description && (item.quantity || item.unit_cost)).map(item => ({
+      if (mode === "ADVANCED") {
+        const items = lineItems
+          .filter(item => item.description && (item.quantity || item.unit_cost))
+          .map(item => ({
             estimate_id: estimate.id,
             description: item.description,
             quantity: parseFloat(item.quantity) || 0,
             unit_price: parseFloat(item.unit_cost) || 0,
             total: (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_cost) || 0)
-        }));
-        if (items.length > 0) await supabase.from("line_items").insert(items);
-    } else {
+          }));
+        if (items.length > 0) {
+          const { error: lineError } = await supabase.from("line_items").insert(items);
+          if (lineError) {
+            showToast("Estimate saved, but line items failed to save.", "error");
+            logError("ProfitLock line items save failed", lineError);
+          }
+        }
+      } else {
         const items = [];
         if (parseFloat(simpleMaterials) > 0) {
           items.push({ estimate_id: estimate.id, description: "Materials", quantity: 1, unit_price: parseFloat(simpleMaterials), total: parseFloat(simpleMaterials) });
@@ -278,36 +416,69 @@ export default function ProfitLock() {
         if (parseFloat(simpleHours) > 0) {
           items.push({ estimate_id: estimate.id, description: "Labor", quantity: parseFloat(simpleHours), unit_price: hourlyRate, total: parseFloat(simpleHours) * hourlyRate });
         }
-        if (items.length > 0) await supabase.from("line_items").insert(items);
-    }
+        if (items.length > 0) {
+          const { error: lineError } = await supabase.from("line_items").insert(items);
+          if (lineError) {
+            showToast("Estimate saved, but line items failed to save.", "error");
+            logError("ProfitLock line items save failed", lineError);
+          }
+        }
+      }
 
-    showToast("Estimate Saved!", "success");
-    await loadData();
-    setLoading(false);
+      showToast("Estimate saved successfully!", "success");
+      await loadData();
+      setFormErrors((prev) => ({ ...prev, estimate: {} }));
+    } catch (error) {
+      showToast("Failed to save estimate. Please try again.", "error");
+      logError("ProfitLock estimate save failed", error);
+    } finally {
+      setSavingEstimate(false);
+    }
   };
 
   const loadEstimate = async (estId) => {
-    const { data: est } = await supabase.from("estimates").select("*, line_items(*)").eq("id", estId).single();
-    if (!est) return;
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast("Please log in to load estimates.", "error");
+        if (authError) logError("ProfitLock auth failed", authError);
+        return;
+      }
+      const { data: est, error } = await supabase
+        .from("estimates")
+        .select("id, line_items(id, description, quantity, unit_price)")
+        .eq("id", estId)
+        .eq("user_id", user.id)
+        .single();
+      if (error) {
+        showToast("Unable to load estimate details.", "error");
+        logError("ProfitLock estimate fetch failed", error, { estId });
+        return;
+      }
+      if (!est) return;
     
-    const items = est.line_items || [];
-    if (mode === "SIMPLE") {
-      const matItem = items.find(i => i.description === "Materials");
-      const laborItem = items.find(i => i.description === "Labor");
-      setSimpleMaterials(matItem ? matItem.unit_price.toString() : "");
-      setSimpleHours(laborItem ? laborItem.quantity.toString() : "");
-    } else {
-      setLineItems(items.length > 0 ? items.map(i => ({
-        id: i.id,
-        description: i.description,
-        quantity: i.quantity.toString(),
-        unit_cost: i.unit_price.toString()
-      })) : [
-        { id: 1, description: "Materials", quantity: "", unit_cost: "" },
-        { id: 2, description: "Labor", quantity: "", unit_cost: "" }
-      ]);
+      const items = est.line_items || [];
+      if (mode === "SIMPLE") {
+        const matItem = items.find(i => i.description === "Materials");
+        const laborItem = items.find(i => i.description === "Labor");
+        setSimpleMaterials(matItem ? matItem.unit_price.toString() : "");
+        setSimpleHours(laborItem ? laborItem.quantity.toString() : "");
+      } else {
+        setLineItems(items.length > 0 ? items.map(i => ({
+          id: i.id,
+          description: i.description,
+          quantity: i.quantity.toString(),
+          unit_cost: i.unit_price.toString()
+        })) : [
+          { id: 1, description: "Materials", quantity: "", unit_cost: "" },
+          { id: 2, description: "Labor", quantity: "", unit_cost: "" }
+        ]);
+      }
+      setShowMenu(false);
+    } catch (error) {
+      showToast("Unable to load estimate details.", "error");
+      logError("ProfitLock estimate fetch failed", error, { estId });
     }
-    setShowMenu(false);
   };
 
   const handleModeChange = (newMode) => {
@@ -316,8 +487,8 @@ export default function ProfitLock() {
     setDiscountAmount("");
   };
 
-  const showToast = (msg, type) => {
-      setToast({ msg, type });
+  const showToast = (message, type = "info") => {
+      setToast({ message, type });
       setTimeout(() => setToast(null), 3000);
   };
 
@@ -331,7 +502,7 @@ export default function ProfitLock() {
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-                <Link href="/dashboard" className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] hover:text-[#FF6700] transition">
+                <Link href="/dashboard" className="p-2 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[#FF6700] hover:text-[#FF6700] transition" aria-label="Back to dashboard">
                     <ArrowLeft size={20} />
                 </Link>
                 <div>
@@ -339,7 +510,11 @@ export default function ProfitLock() {
                     <p className="text-2xl font-oswald font-bold text-[#FF6700] tracking-wide uppercase drop-shadow-[0_0_8px_rgba(255,103,0,0.5)]">PROFITLOCK</p>
                 </div>
             </div>
-            <button onClick={() => setShowMenu(true)} className="p-2 rounded-lg bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95">
+            <button
+              onClick={() => setShowMenu(true)}
+              className="p-2 rounded-lg bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:scale-105 transition active:scale-95"
+              aria-label="Open settings menu"
+            >
                 <Menu size={20} strokeWidth={3} />
             </button>
           </div>
@@ -349,6 +524,14 @@ export default function ProfitLock() {
       <div className="mx-4 my-3">
         <JobSelector />
       </div>
+
+      {!isOnline ? (
+        <div className="mx-4 mb-3">
+          <div className="bg-red-900/30 border border-red-500/40 text-red-200 text-xs rounded-lg px-3 py-2">
+            You are offline. Calculations still work, but saves are disabled.
+          </div>
+        </div>
+      ) : null}
 
       {isInvoiceMode ? (
           <div className="flex-1 p-4 bg-white text-black m-3 rounded-lg shadow-2xl relative flex flex-col overflow-hidden">
@@ -449,12 +632,27 @@ export default function ProfitLock() {
                               type="number" 
                               inputMode="decimal"
                               value={simpleMaterials} 
-                              onChange={e => setSimpleMaterials(e.target.value)} 
+                              onChange={e => {
+                                setSimpleMaterials(e.target.value);
+                                if (formErrors?.simpleMaterials) {
+                                  setFormErrors((prev) => ({ ...prev, simpleMaterials: "" }));
+                                }
+                              }} 
+                              onBlur={() => {
+                                if (!inRange(simpleMaterials, 0, 1000000)) {
+                                  setFormErrors((prev) => ({ ...prev, simpleMaterials: "Please enter a valid materials cost." }));
+                                }
+                              }}
                               placeholder="0"
-                              className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg p-3 pl-7 text-center font-mono font-bold outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20" 
+                              className={`w-full bg-[var(--input-bg)] border rounded-lg p-3 pl-7 text-center font-mono font-bold outline-none transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20 ${
+                                formErrors?.simpleMaterials ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                              }`} 
                               style={{ fontSize: '16px' }}
                             />
                         </div>
+                        {formErrors?.simpleMaterials ? (
+                          <p className="text-xs text-red-500">{formErrors.simpleMaterials}</p>
+                        ) : null}
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-xs font-black text-[var(--text-sub)] uppercase"><Clock size={10} className="inline mr-1"/>Labor (Hrs)</label>
@@ -462,11 +660,26 @@ export default function ProfitLock() {
                           type="number" 
                           inputMode="decimal"
                           value={simpleHours} 
-                          onChange={e => setSimpleHours(e.target.value)} 
+                          onChange={e => {
+                            setSimpleHours(e.target.value);
+                            if (formErrors?.simpleHours) {
+                              setFormErrors((prev) => ({ ...prev, simpleHours: "" }));
+                            }
+                          }} 
+                          onBlur={() => {
+                            if (!inRange(simpleHours, 0, 100000)) {
+                              setFormErrors((prev) => ({ ...prev, simpleHours: "Please enter valid labor hours." }));
+                            }
+                          }}
                           placeholder="0"
-                          className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg p-3 text-center font-mono font-bold outline-none focus:border-[#FF6700] transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20" 
+                          className={`w-full bg-[var(--input-bg)] border rounded-lg p-3 text-center font-mono font-bold outline-none transition text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20 ${
+                            formErrors?.simpleHours ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                          }`} 
                           style={{ fontSize: '16px' }}
                         />
+                        {formErrors?.simpleHours ? (
+                          <p className="text-xs text-red-500">{formErrors.simpleHours}</p>
+                        ) : null}
                     </div>
                 </div>
             ) : (
@@ -478,7 +691,17 @@ export default function ProfitLock() {
                                   placeholder="Item" 
                                   value={item.description} 
                                   onChange={(e) => updateLineItem(item.id, "description", e.target.value)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs font-bold outline-none focus:border-[#FF6700] text-[var(--input-text)]" 
+                                  onBlur={() => {
+                                    if (!item.description.trim()) {
+                                      setFormErrors((prev) => ({
+                                        ...prev,
+                                        lineItems: { ...(prev.lineItems || {}), [item.id]: { ...(prev.lineItems?.[item.id] || {}), description: "Add a description." } }
+                                      }));
+                                    }
+                                  }}
+                                  className={`w-full bg-[var(--input-bg)] border rounded p-2 text-xs font-bold outline-none text-[var(--input-text)] ${
+                                    formErrors?.lineItems?.[item.id]?.description ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                                  }`} 
                                   style={{ fontSize: '16px' }}
                                 />
                             </div>
@@ -489,7 +712,17 @@ export default function ProfitLock() {
                                   inputMode="decimal"
                                   value={item.quantity} 
                                   onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20" 
+                                  onBlur={() => {
+                                    if (!inRange(item.quantity, 0, 100000)) {
+                                      setFormErrors((prev) => ({
+                                        ...prev,
+                                        lineItems: { ...(prev.lineItems || {}), [item.id]: { ...(prev.lineItems?.[item.id] || {}), quantity: "Enter a quantity." } }
+                                      }));
+                                    }
+                                  }}
+                                  className={`w-full bg-[var(--input-bg)] border rounded p-2 text-xs text-center outline-none text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20 ${
+                                    formErrors?.lineItems?.[item.id]?.quantity ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                                  }`} 
                                   style={{ fontSize: '16px' }}
                                 />
                             </div>
@@ -500,13 +733,28 @@ export default function ProfitLock() {
                                   inputMode="decimal"
                                   value={item.unit_cost} 
                                   onChange={(e) => updateLineItem(item.id, "unit_cost", e.target.value)} 
-                                  className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-center outline-none focus:border-[#FF6700] text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20" 
+                                  onBlur={() => {
+                                    if (!inRange(item.unit_cost, 0, 1000000)) {
+                                      setFormErrors((prev) => ({
+                                        ...prev,
+                                        lineItems: { ...(prev.lineItems || {}), [item.id]: { ...(prev.lineItems?.[item.id] || {}), unit_cost: "Enter a unit cost." } }
+                                      }));
+                                    }
+                                  }}
+                                  className={`w-full bg-[var(--input-bg)] border rounded p-2 text-xs text-center outline-none text-[var(--input-text)] placeholder:text-[var(--text-sub)] placeholder:opacity-20 ${
+                                    formErrors?.lineItems?.[item.id]?.unit_cost ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                                  }`} 
                                   style={{ fontSize: '16px' }}
                                 />
                             </div>
                             <div className="col-span-2 text-center">
                                 <button onClick={() => removeLineItem(item.id)} className="text-[var(--text-sub)] hover:text-red-500 transition"><Trash2 size={14}/></button>
                             </div>
+                            {(formErrors?.lineItems?.[item.id]?.description || formErrors?.lineItems?.[item.id]?.quantity || formErrors?.lineItems?.[item.id]?.unit_cost) ? (
+                              <div className="col-span-12 text-xs text-red-500">
+                                {formErrors?.lineItems?.[item.id]?.description || formErrors?.lineItems?.[item.id]?.quantity || formErrors?.lineItems?.[item.id]?.unit_cost}
+                              </div>
+                            ) : null}
                         </div>
                     ))}
                     <button onClick={addLineItem} className="w-full py-2 border border-dashed border-[var(--border-color)] text-[var(--text-sub)] rounded text-xs font-bold hover:text-[#FF6700] hover:border-[#FF6700] transition uppercase">+ Add</button>
@@ -540,14 +788,35 @@ export default function ProfitLock() {
                             type="number" 
                             inputMode="decimal"
                             value={discountAmount} 
-                            onChange={(e) => setDiscountAmount(e.target.value)} 
-                            className="w-full bg-black/20 border border-red-500/30 rounded p-2 text-xs text-center outline-none focus:border-red-500 text-red-500 placeholder:text-red-500 placeholder:opacity-30" 
+                            onChange={(e) => {
+                              setDiscountAmount(e.target.value);
+                              if (formErrors?.discountAmount) {
+                                setFormErrors((prev) => ({ ...prev, discountAmount: "" }));
+                              }
+                            }} 
+                            onBlur={() => {
+                              const max = discountType === "PERCENT" ? 100 : 1000000;
+                              if (!inRange(discountAmount, 0, max)) {
+                                setFormErrors((prev) => ({
+                                  ...prev,
+                                  discountAmount: discountType === "PERCENT"
+                                    ? "Enter a discount between 0 and 100%."
+                                    : "Enter a valid discount amount.",
+                                }));
+                              }
+                            }}
+                            className={`w-full bg-black/20 border rounded p-2 text-xs text-center outline-none text-red-500 placeholder:text-red-500 placeholder:opacity-30 ${
+                              formErrors?.discountAmount ? "border-red-500 focus:border-red-500" : "border-red-500/30 focus:border-red-500"
+                            }`} 
                             style={{ fontSize: '16px' }}
                           />
                         </div>
                         <div className="col-span-2 text-center">
                           <button onClick={() => { setShowDiscount(false); setDiscountAmount(""); }} className="text-[var(--text-sub)] hover:text-red-500 transition"><X size={14}/></button>
                         </div>
+                        {formErrors?.discountAmount ? (
+                          <div className="col-span-12 text-xs text-red-500">{formErrors.discountAmount}</div>
+                        ) : null}
                       </div>
                     )}
                 </div>
@@ -562,8 +831,8 @@ export default function ProfitLock() {
                 <button onClick={() => setIsInvoiceMode(true)} className="flex-1 py-3 bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] font-bold text-xs uppercase rounded-lg hover:bg-[var(--bg-card)] transition flex items-center justify-center gap-2">
                     <FileText size={16}/> Preview
                 </button>
-                <button onClick={handleSave} disabled={loading || !activeJob} className="flex-[2] py-3 bg-[#FF6700] text-black font-bold text-xs uppercase rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.6)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                    {loading ? <Loader2 size={14} className="animate-spin"/> : <Save size={14} />} SAVE
+                <button onClick={handleSave} disabled={savingEstimate || !activeJob} className="flex-[2] py-3 bg-[#FF6700] text-black font-bold text-xs uppercase rounded-lg shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.6)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                    {savingEstimate ? <Loader2 size={14} className="animate-spin"/> : <Save size={14} />} {savingEstimate ? "SAVING..." : "SAVE"}
                 </button>
             </div>
 
@@ -589,6 +858,7 @@ export default function ProfitLock() {
                   value={jobSearch}
                   onChange={(e) => setJobSearch(e.target.value)}
                   className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded pl-8 pr-2 py-2 text-xs text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+                  aria-label="Search jobs"
                   style={{ fontSize: '16px' }}
                 />
               </div>
@@ -602,7 +872,9 @@ export default function ProfitLock() {
                 <Plus size={14}/> NEW JOB
               </button>
               
-              {filteredJobs.map(job => (
+              {filteredJobs.length === 0 ? (
+                <p className="text-xs text-[var(--text-sub)] text-center py-4">No jobs found. Create a new job to get started.</p>
+              ) : filteredJobs.map(job => (
                 <button
                   key={job.id}
                   onClick={() => { setActiveJob(job); setShowJobSelect(false); }}
@@ -622,20 +894,35 @@ export default function ProfitLock() {
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={() => setShowCreateJob(false)} />
           <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-sm mx-auto z-[51] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-2xl p-4">
             <h2 className="font-oswald text-lg font-bold text-[#FF6700] mb-3">CREATE JOB</h2>
-            <input 
-              autoFocus
-              placeholder="Job title..." 
-              value={newJobTitle}
-              onChange={(e) => setNewJobTitle(e.target.value)}
-              className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-3 text-sm text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none mb-3"
-              style={{ fontSize: '16px' }}
-            />
+            <FormField label="Job Title" required error={formErrors?.newJob?.title}>
+              <input 
+                autoFocus
+                placeholder="Kitchen remodel" 
+                value={newJobTitle}
+                onChange={(e) => {
+                  setNewJobTitle(e.target.value);
+                  if (formErrors?.newJob?.title) {
+                    setFormErrors((prev) => ({ ...prev, newJob: { ...prev.newJob, title: "" } }));
+                  }
+                }}
+                onBlur={() => {
+                  if (!newJobTitle.trim()) {
+                    setFormErrors((prev) => ({ ...prev, newJob: { title: "Please enter a job title." } }));
+                  }
+                }}
+                autoComplete="off"
+                className={`w-full bg-[var(--input-bg)] border rounded p-3 text-sm text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] outline-none ${
+                  formErrors?.newJob?.title ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                }`}
+                style={{ fontSize: '16px' }}
+              />
+            </FormField>
             <button 
               onClick={handleCreateJob}
-              disabled={loading}
+              disabled={savingJob}
               className="w-full py-3 bg-[#FF6700] text-black font-bold text-xs uppercase rounded hover:bg-[#ff8533] transition disabled:opacity-50"
             >
-              {loading ? <Loader2 className="animate-spin inline mr-2" size={14}/> : ""} Create
+              {savingJob ? <Loader2 className="animate-spin inline mr-2" size={14}/> : ""} {savingJob ? "Creating..." : "Create"}
             </button>
           </div>
         </>
@@ -712,10 +999,25 @@ export default function ProfitLock() {
                             type="number" 
                             inputMode="decimal"
                             value={targetValue} 
-                            onChange={e => setTargetValue(parseFloat(e.target.value) || 0)} 
-                            className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-sm text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                            onChange={e => {
+                              setTargetValue(parseFloat(e.target.value) || 0);
+                              if (formErrors?.targetValue) {
+                                setFormErrors((prev) => ({ ...prev, targetValue: "" }));
+                              }
+                            }} 
+                            onBlur={() => {
+                              if (!inRange(targetValue, 0, 100)) {
+                                setFormErrors((prev) => ({ ...prev, targetValue: "Enter a target between 0 and 100." }));
+                              }
+                            }}
+                            className={`w-full bg-[var(--input-bg)] border rounded p-2 text-sm text-[var(--input-text)] font-bold outline-none ${
+                              formErrors?.targetValue ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                            }`} 
                             style={{ fontSize: '16px' }}
                           />
+                          {formErrors?.targetValue ? (
+                            <p className="text-xs text-red-500 mt-1">{formErrors.targetValue}</p>
+                          ) : null}
                           <p className="text-[10px] text-[var(--text-sub)] mt-2">
                             {profitMethod === "MARKUP" ? (
                               <>Cost <span className="text-[var(--text-sub)]">×</span> (1 <span className="text-[var(--text-sub)]">+</span> {targetValue}) <span className="text-[var(--text-sub)]">=</span> Price</>
@@ -763,11 +1065,26 @@ export default function ProfitLock() {
                               type="number" 
                               inputMode="decimal"
                               value={hourlyRate} 
-                              onChange={e => setHourlyRate(parseFloat(e.target.value) || 0)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 pl-6 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                              onChange={e => {
+                                setHourlyRate(parseFloat(e.target.value) || 0);
+                                if (formErrors?.settings?.hourlyRate) {
+                                  setFormErrors((prev) => ({ ...prev, settings: { ...prev.settings, hourlyRate: "" } }));
+                                }
+                              }} 
+                              onBlur={() => {
+                                if (!inRange(hourlyRate, 0, 10000)) {
+                                  setFormErrors((prev) => ({ ...prev, settings: { ...(prev.settings || {}), hourlyRate: "Enter a valid hourly rate." } }));
+                                }
+                              }}
+                              className={`w-full bg-[var(--input-bg)] border rounded p-2 pl-6 text-xs text-[var(--input-text)] font-bold outline-none ${
+                                formErrors?.settings?.hourlyRate ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                              }`} 
                               style={{ fontSize: '16px' }}
                             />
                         </div>
+                        {formErrors?.settings?.hourlyRate ? (
+                          <p className="text-xs text-red-500 mt-1">{formErrors.settings.hourlyRate}</p>
+                        ) : null}
                     </div>
 
                     <div>
@@ -796,10 +1113,25 @@ export default function ProfitLock() {
                               type="number" 
                               inputMode="decimal"
                               value={taxRate} 
-                              onChange={e => setTaxRate(parseFloat(e.target.value) || 0)} 
-                              className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                              onChange={e => {
+                                setTaxRate(parseFloat(e.target.value) || 0);
+                                if (formErrors?.settings?.taxRate) {
+                                  setFormErrors((prev) => ({ ...prev, settings: { ...prev.settings, taxRate: "" } }));
+                                }
+                              }} 
+                              onBlur={() => {
+                                if (!inRange(taxRate, 0, 25)) {
+                                  setFormErrors((prev) => ({ ...prev, settings: { ...(prev.settings || {}), taxRate: "Enter a tax rate between 0 and 25%." } }));
+                                }
+                              }}
+                              className={`w-full bg-[var(--input-bg)] border rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none ${
+                                formErrors?.settings?.taxRate ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                              }`} 
                               style={{ fontSize: '16px' }}
                             />
+                            {formErrors?.settings?.taxRate ? (
+                              <p className="text-xs text-red-500 mt-1">{formErrors.settings.taxRate}</p>
+                            ) : null}
                           </div>
                         )}
                     </div>
@@ -826,12 +1158,27 @@ export default function ProfitLock() {
                             type="number" 
                             inputMode="numeric"
                             value={quoteValidDays} 
-                            onChange={e => setQuoteValidDays(parseInt(e.target.value) || 30)} 
-                            className="flex-1 bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none focus:border-[#FF6700]" 
+                          onChange={e => {
+                            setQuoteValidDays(parseInt(e.target.value) || 30);
+                            if (formErrors?.settings?.quoteValidDays) {
+                              setFormErrors((prev) => ({ ...prev, settings: { ...prev.settings, quoteValidDays: "" } }));
+                            }
+                          }} 
+                          onBlur={() => {
+                            if (!inRange(quoteValidDays, 1, 365)) {
+                              setFormErrors((prev) => ({ ...prev, settings: { ...(prev.settings || {}), quoteValidDays: "Enter 1-365 days." } }));
+                            }
+                          }}
+                          className={`flex-1 bg-[var(--input-bg)] border rounded p-2 text-xs text-[var(--input-text)] font-bold outline-none ${
+                            formErrors?.settings?.quoteValidDays ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                          }`} 
                             style={{ fontSize: '16px' }}
                           />
                           <span className="text-xs text-[var(--text-sub)]">days</span>
                         </div>
+                      {formErrors?.settings?.quoteValidDays ? (
+                        <p className="text-xs text-red-500 mt-1">{formErrors.settings.quoteValidDays}</p>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -863,12 +1210,7 @@ export default function ProfitLock() {
         POWEREDBY<span className="text-[#FF6700]">FIELDDESKOPS</span>
       </div>
 
-      {toast && (
-          <div className={`fixed bottom-6 right-4 px-4 py-2 rounded-lg shadow-2xl text-white font-bold text-xs z-[60] flex items-center gap-2 border ${toast.type === "error" ? "bg-red-900/90 border-red-500" : "bg-green-900/90 border-green-500"}`}>
-              {toast.type === "error" ? <AlertTriangle size={14}/> : <CheckCircle2 size={14}/>}
-              {toast.msg}
-          </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
     </div>
   );

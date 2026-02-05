@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Edit2, Check, Phone, Mail, MapPin, FileText, DollarSign } from "lucide-react";
 import { createClient } from "../../utils/supabase/client";
+import { logError } from "../../../../utils/logger";
+import FormField from "../../shared/FormField";
+import { buildFieldErrors, isEmail, isPhone, isRequired } from "../../../utils/validation";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
@@ -29,6 +32,7 @@ export default function CustomerDetailModal({
   const [totalBilled, setTotalBilled] = useState(0);
   const [totalPaid, setTotalPaid] = useState(0);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -44,6 +48,7 @@ export default function CustomerDetailModal({
     if (!isOpen) return;
     setLocalCustomer(customer || null);
     setIsEditing(false);
+    setFieldErrors({});
   }, [customer, isOpen]);
 
   useEffect(() => {
@@ -55,6 +60,7 @@ export default function CustomerDetailModal({
       address: localCustomer.address || "",
       notes: localCustomer.notes || "",
     });
+    setFieldErrors({});
   }, [localCustomer]);
 
   useEffect(() => {
@@ -88,7 +94,7 @@ export default function CustomerDetailModal({
           .in("job_id", jobIds);
 
         if (estimatesError) {
-          console.log("CustomerDetailModal estimates query failed", estimatesError);
+          logError("Customer detail estimates query failed", estimatesError);
         }
 
         const estimateMap = {};
@@ -107,7 +113,7 @@ export default function CustomerDetailModal({
             .in("job_id", jobIds);
 
           if (paymentsError) {
-            console.log("CustomerDetailModal payments query failed", paymentsError);
+            logError("Customer detail payments query failed", paymentsError);
           } else {
             paidTotal = (paymentRows || []).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
           }
@@ -120,7 +126,7 @@ export default function CustomerDetailModal({
         }
       } catch (err) {
         if (!cancelled) {
-          console.log("CustomerDetailModal load error", err);
+          logError("Customer detail load failed", err);
         }
       } finally {
         if (!cancelled) {
@@ -137,9 +143,24 @@ export default function CustomerDetailModal({
 
   const outstandingBalance = useMemo(() => totalBilled - totalPaid, [totalBilled, totalPaid]);
 
+  const validateEditFields = (values) =>
+    buildFieldErrors({
+      name: [
+        { isValid: isRequired(values.name), message: "Name is required." },
+      ],
+      email: values.email
+        ? [{ isValid: isEmail(values.email), message: "Enter a valid email." }]
+        : [],
+      phone: values.phone
+        ? [{ isValid: isPhone(values.phone), message: "Enter a valid phone number." }]
+        : [],
+    });
+
   const handleSave = async () => {
     const trimmedName = editFields.name.trim();
-    if (!trimmedName || !localCustomer?.id) return;
+    const errors = validateEditFields({ ...editFields, name: trimmedName });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0 || !localCustomer?.id) return;
 
     const payload = {
       name: trimmedName,
@@ -151,7 +172,7 @@ export default function CustomerDetailModal({
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError) {
-      console.log("CustomerDetailModal user fetch failed", userError);
+      logError("Customer detail user fetch failed", userError);
       return;
     }
 
@@ -162,12 +183,13 @@ export default function CustomerDetailModal({
 
     const { data, error } = await query.select().single();
     if (error) {
-      console.log("CustomerDetailModal update failed", error);
+      logError("Customer detail update failed", error);
       return;
     }
 
     setLocalCustomer(data);
     setIsEditing(false);
+    setFieldErrors({});
     if (onUpdate) await onUpdate();
   };
 
@@ -202,40 +224,60 @@ export default function CustomerDetailModal({
             <div className="space-y-3">
               {isEditing ? (
                 <div className="grid gap-2">
-                  <input
-                    value={editFields.name}
-                    onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
-                    placeholder="Name"
-                  />
-                  <input
-                    value={editFields.phone}
-                    onChange={(e) => setEditFields({ ...editFields, phone: e.target.value.replace(/[^0-9]/g, "") })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
-                    placeholder="Phone"
-                    type="tel"
-                    inputMode="numeric"
-                  />
-                  <input
-                    value={editFields.email}
-                    onChange={(e) => setEditFields({ ...editFields, email: e.target.value })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
-                    placeholder="Email"
-                    type="email"
-                  />
-                  <input
-                    value={editFields.address}
-                    onChange={(e) => setEditFields({ ...editFields, address: e.target.value })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
-                    placeholder="Address"
-                  />
-                  <textarea
-                    value={editFields.notes}
-                    onChange={(e) => setEditFields({ ...editFields, notes: e.target.value })}
-                    rows={3}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] resize-none"
-                    placeholder="Notes"
-                  />
+                  <FormField id="customer-name" label="Name" required error={fieldErrors.name}>
+                    <input
+                      id="customer-name"
+                      value={editFields.name}
+                      onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                      onBlur={() => setFieldErrors(validateEditFields(editFields))}
+                      className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
+                      placeholder="Name"
+                    />
+                  </FormField>
+                  <FormField id="customer-phone" label="Phone" error={fieldErrors.phone}>
+                    <input
+                      id="customer-phone"
+                      value={editFields.phone}
+                      onChange={(e) => setEditFields({ ...editFields, phone: e.target.value.replace(/[^0-9]/g, "") })}
+                      onBlur={() => setFieldErrors(validateEditFields(editFields))}
+                      className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
+                      placeholder="Phone"
+                      type="tel"
+                      inputMode="numeric"
+                    />
+                  </FormField>
+                  <FormField id="customer-email" label="Email" error={fieldErrors.email}>
+                    <input
+                      id="customer-email"
+                      value={editFields.email}
+                      onChange={(e) => setEditFields({ ...editFields, email: e.target.value })}
+                      onBlur={() => setFieldErrors(validateEditFields(editFields))}
+                      className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
+                      placeholder="Email"
+                      type="email"
+                    />
+                  </FormField>
+                  <FormField id="customer-address" label="Address">
+                    <input
+                      id="customer-address"
+                      value={editFields.address}
+                      onChange={(e) => setEditFields({ ...editFields, address: e.target.value })}
+                      onBlur={() => setFieldErrors(validateEditFields(editFields))}
+                      className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)]"
+                      placeholder="Address"
+                    />
+                  </FormField>
+                  <FormField id="customer-notes" label="Notes">
+                    <textarea
+                      id="customer-notes"
+                      value={editFields.notes}
+                      onChange={(e) => setEditFields({ ...editFields, notes: e.target.value })}
+                      onBlur={() => setFieldErrors(validateEditFields(editFields))}
+                      rows={3}
+                      className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] resize-none"
+                      placeholder="Notes"
+                    />
+                  </FormField>
                   <div className="flex gap-2">
                     <button
                       onClick={handleSave}

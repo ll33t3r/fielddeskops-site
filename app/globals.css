@@ -1,4 +1,4 @@
-﻿@import "tailwindcss/base";
+@import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
@@ -8,22 +8,30 @@
   /* --- DARK THEME (Default / Stealth) --- */
   --bg-main: #121212;
   --bg-card: rgba(30, 30, 30, 0.6);
+  --bg-surface: rgba(22, 22, 22, 0.7);
   --text-main: #ffffff;
   --text-sub: #9ca3af; /* Gray 400 */
   --border-color: rgba(255, 255, 255, 0.08);
   --shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
   
   --color-primary: #FF6700;
+  --input-bg: rgba(18, 18, 18, 0.8);
+  --input-text: #ffffff;
+  --input-placeholder: #6b7280;
 }
 
 [data-theme='light'] {
   /* --- ROOFER MODE (High Contrast / Anti-Glare) --- */
   --bg-main: #d4d4d4;       /* Concrete Gray (Not white, cuts glare) */
   --bg-card: #ffffff;       /* Pure White Cards */
+  --bg-surface: #f3f4f6;    /* Light surface */
   --text-main: #000000;     /* Pitch Black Text */
   --text-sub: #171717;      /* Dark Gray Subtext (High Viz) */
   --border-color: #000000;  /* SOLID BLACK BORDERS */
   --shadow: 4px 4px 0px #000000; /* Hard Drop Shadow */
+  --input-bg: #ffffff;
+  --input-text: #111827;
+  --input-placeholder: #6b7280;
 }
 
 /* BASE STYLES */
@@ -36,6 +44,45 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 { font-family: 'Oswald', sans-serif; }
+
+/* ACCESSIBILITY + INPUT CONSISTENCY */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #FF6700;
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+  min-height: 44px;
+  color: var(--input-text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+.input-field,
+.select-field,
+.textarea-field {
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--input-text);
+}
+
+.input-field:disabled,
+.select-field:disabled,
+.textarea-field:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* REUSABLE CLASSES */
 
@@ -59,4 +106,13 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Oswald', sans-serif; }
 [data-theme='light'] .text-gray-500 {
     color: var(--text-sub) !important;
     font-weight: 600;
+}
+
+/* Hide scrollbar while keeping scroll (use with overflow-y-auto / overflow-x-auto) */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }

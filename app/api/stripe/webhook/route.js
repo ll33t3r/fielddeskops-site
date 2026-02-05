@@ -2,17 +2,32 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { logError } from '../../../../utils/logger';
 
 export async function POST(req) {
   try {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!stripeSecretKey || !webhookSecret || !supabaseUrl || !serviceRoleKey) {
+      logError('Webhook missing env vars', null, {
+        hasStripeSecret: !!stripeSecretKey,
+        hasWebhookSecret: !!webhookSecret,
+        hasSupabaseUrl: !!supabaseUrl,
+        hasServiceRoleKey: !!serviceRoleKey,
+      });
+      return NextResponse.json(
+        { error: 'Webhook not configured. Check environment variables.' },
+        { status: 500 }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey);
+    // Service role key bypasses RLS; webhook should be the only caller.
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
     const body = await req.text();
     const signature = headers().get('stripe-signature');
 
@@ -20,37 +35,37 @@ export async function POST(req) {
     try {
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
-      console.error('Webhook signature verification failed:', err.message);
+      logError('Webhook signature verification failed', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
     // Handle the event
     switch (event.type) {
       case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object);
+        await handleCheckoutCompleted(event.data.object, supabase);
         break;
       
       case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object);
+        await handleSubscriptionUpdated(event.data.object, supabase);
         break;
       
       case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object);
+        await handleSubscriptionDeleted(event.data.object, supabase);
         break;
       
       case 'invoice.payment_failed':
-        await handlePaymentFailed(event.data.object);
+        await handlePaymentFailed(event.data.object, supabase);
         break;
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    logError('Webhook handler failed', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-async function handleCheckoutCompleted(session) {
+async function handleCheckoutCompleted(session, supabase) {
   const userId = session.metadata?.userId;
   if (!userId) return;
 
@@ -64,10 +79,10 @@ async function handleCheckoutCompleted(session) {
     })
     .eq('id', userId);
 
-  if (error) console.error('Error updating profile:', error);
+  if (error) logError('Webhook profile update failed', error);
 }
 
-async function handleSubscriptionUpdated(subscription) {
+async function handleSubscriptionUpdated(subscription, supabase) {
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -76,10 +91,10 @@ async function handleSubscriptionUpdated(subscription) {
     })
     .eq('stripe_subscription_id', subscription.id);
 
-  if (error) console.error('Error updating subscription:', error);
+  if (error) logError('Webhook subscription update failed', error);
 }
 
-async function handleSubscriptionDeleted(subscription) {
+async function handleSubscriptionDeleted(subscription, supabase) {
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -89,10 +104,10 @@ async function handleSubscriptionDeleted(subscription) {
     })
     .eq('stripe_subscription_id', subscription.id);
 
-  if (error) console.error('Error handling cancellation:', error);
+  if (error) logError('Webhook cancellation handling failed', error);
 }
 
-async function handlePaymentFailed(invoice) {
+async function handlePaymentFailed(invoice, supabase) {
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -100,5 +115,5 @@ async function handlePaymentFailed(invoice) {
     })
     .eq('stripe_customer_id', invoice.customer);
 
-  if (error) console.error('Error handling failed payment:', error);
+  if (error) logError('Webhook failed payment handling failed', error);
 }

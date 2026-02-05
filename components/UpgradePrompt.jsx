@@ -1,38 +1,42 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { logError } from '../utils/logger';
 
 export default function UpgradePrompt({ resourceType, currentCount, limit, tier }) {
   const router = useRouter();
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleUpgrade = async () => {
-    console.log('handleUpgrade called');
+    setError('');
+    setIsLoading(true);
     try {
-      console.log('Fetching checkout URL...');
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
-      console.log('Response received:', response);
       const data = await response.json();
-      console.log('Response data:', data);
 
       if (data.error) {
-        console.error('Checkout error:', data.error);
-        alert('Unable to start checkout. Please try again.');
+        setError('Unable to start checkout. Please try again.');
+        logError('Upgrade checkout failed', data.error);
         return;
       }
 
       if (data.url) {
-        console.log('Redirecting to:', data.url);
         window.location.href = data.url;
       } else {
-        console.log('No URL in response');
+        setError('Checkout link missing. Please try again.');
+        logError('Upgrade checkout missing url');
       }
     } catch (error) {
-      console.error('Catch block error:', error);
-      alert('Something went wrong. Please try again.');
+      setError('Unable to start checkout. Check your connection and try again.');
+      logError('Upgrade checkout failed', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -63,6 +67,10 @@ export default function UpgradePrompt({ resourceType, currentCount, limit, tier 
           </ul>
         </div>
 
+        {error ? (
+          <p className="text-sm text-red-600 dark:text-red-400 mb-4">{error}</p>
+        ) : null}
+
         <div className="flex gap-3">
           <button
             onClick={() => router.back()}
@@ -72,9 +80,10 @@ export default function UpgradePrompt({ resourceType, currentCount, limit, tier 
           </button>
           <button
             onClick={handleUpgrade}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            disabled={isLoading}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Upgrade Now
+            {isLoading ? 'Opening Checkout...' : 'Upgrade Now'}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, FileText, Plus, Pin, PinOff, Trash2, Pencil, Eye, Check, Save, RotateCcw, Loader2, Share, Send } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
+import { logError } from "../../../utils/logger";
 
 function SiteSnapImage({ photo, onSelect, selected, supabase }) {
   const [imageUrl, setImageUrl] = useState("/placeholder.png");
@@ -41,7 +42,7 @@ export default function SignOffModals({ modal }) {
     setShowAddVarModal, templates, togglePin, setContractBody, vibrate, setShowTemplateBuilder, contracts,
     restoreContract, showTemplateBuilder, newTemplateName, setNewTemplateName,
     newTemplateBody, setNewTemplateBody, newTemplateCategory, setNewTemplateCategory, insertVariable,
-    removeVariableFromTemplate, saveTemplate, toast, showDocPreview, setShowDocPreview, signedAt, savedSignature,
+    removeVariableFromTemplate, saveTemplate, showDocPreview, setShowDocPreview, signedAt, savedSignature,
     getDisplayedContractBody, attachedPhotos, getPhotoDisplayUrl, docReadOnly, sigPad, handleSignatureEnd,
     clearSignature, saveContract, saving, contractBody, hasSigned, setClientName, setContractorName,
     setAttachedPhotos, setSignedAt, setSavedSignature, setHasSigned, setDocReadOnly, selectedJob,
@@ -50,7 +51,7 @@ export default function SignOffModals({ modal }) {
     setNewVarName, newVarValue, setNewVarValue, showSiteSnapModal, setShowSiteSnapModal, siteSnapPhotos,
     selectedSiteSnap, setSelectedSiteSnap, showPhotoViewer,
     activePhoto, setShowPhotoViewer, setActivePhoto, handleSiteSnapImport, deleteContract, editDraft,
-    editTemplate, deleteTemplate, setEditingTemplateId, onGenerateShareLink, onShareSigned,
+    editTemplate, deleteTemplate, isOnline, setEditingTemplateId, onGenerateShareLink, onShareSigned,
   } = modal;
 
   const [historySearch, setHistorySearch] = useState("");
@@ -439,7 +440,6 @@ export default function SignOffModals({ modal }) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log("SAVE CLICKED");
                     saveTemplate(e);
                   }}
                   className="w-full p-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all relative z-10 pointer-events-auto cursor-pointer"
@@ -451,10 +451,6 @@ export default function SignOffModals({ modal }) {
             </div>
           </div>
         </>
-      )}
-
-      {toast && (
-        <div className={`fixed bottom-24 right-6 px-6 py-3 rounded-xl font-black shadow-lg ${toast.type === "error" ? "bg-red-500 text-white" : "bg-[#FF6700] text-black"}`}>{toast.msg}</div>
       )}
 
       {showDocPreview && (
@@ -498,10 +494,13 @@ export default function SignOffModals({ modal }) {
                     </div>
                     <div className="mt-3 flex items-center justify-between">
                       <button type="button" onClick={clearSignature} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"><RotateCcw size={14} /> Clear</button>
-                      <button type="button" onClick={saveContract} disabled={saving || !contractBody.trim() || !clientName.trim() || !hasSigned} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition-shadow">
+                      <button type="button" onClick={saveContract} disabled={saving || !contractBody.trim() || !clientName.trim() || !hasSigned || !isOnline} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#FF6700] text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition-shadow">
                         {saving ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : <><Save size={16} /> Sign &amp; Save</>}
                       </button>
                     </div>
+                    {!isOnline ? (
+                      <p className="text-xs text-red-500 mt-2">Reconnect to save signatures.</p>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -539,9 +538,9 @@ export default function SignOffModals({ modal }) {
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) { showToast("You must be logged in", "error"); return; }
                     const { data, error } = await supabase.from("jobs").insert({ user_id: user.id, title, customer_name: newJobCustomer.trim() || null, status: "ACTIVE" }).select().single();
-                    if (error) { console.error("Create job error:", error); showToast(`Failed to create job: ${error.message}`, "error"); return; }
+                    if (error) { logError("SignOff job create failed", error, { title }); showToast(`Failed to create job: ${error.message}`, "error"); return; }
                     setRecentJobs((prev) => [data, ...prev]); setSelectedJob(data); showToast("Job created", "success"); setShowNewJobModal(false); setNewJobTitle(""); setNewJobCustomer("");
-                  } catch (err) { console.error("Create job unexpected error:", err); showToast("Failed to create job", "error"); }
+                  } catch (err) { logError("SignOff job create unexpected error", err, { title }); showToast("Failed to create job", "error"); }
                 }} className="px-3 py-2 rounded-lg text-xs bg-[#FF6700] text-black font-bold hover:shadow-[0_0_10px_rgba(255,103,0,0.4)]">Create</button>
               </div>
             </div>

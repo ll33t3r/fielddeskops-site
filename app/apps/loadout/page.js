@@ -6,12 +6,17 @@ import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
   Plus, Minus, Search, Trash2, X, Loader2, Truck, 
   ClipboardList, ChevronDown, AlertTriangle, Settings, 
-  RefreshCw, Edit3, CheckCircle2, Eye, EyeOff, Wrench, 
-  Camera, User, LayoutGrid, Users, ListPlus, Save, Box, GripVertical, ArrowLeft, ArrowRightLeft, Pencil, List, Check
+  RefreshCw, CheckCircle2, Eye, EyeOff, Wrench, 
+  Camera, User, LayoutGrid, Users, ListPlus, ArrowLeft, ArrowRightLeft, Pencil, List, Check
 } from "lucide-react";
 import Link from "next/link";
 import JobSelector from "../../components/shared/JobSelector";
 import UpgradePrompt from '../../../components/UpgradePrompt';
+import Toast from "../../components/shared/Toast";
+import FormField from "../../components/shared/FormField";
+import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from "../../utils/validation";
+import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
+import { logError } from "../../../utils/logger";
 
 
 const THEME_ORANGE = "#FF6700";
@@ -32,6 +37,7 @@ const colors = [
 export default function LoadOut() {
   const supabase = createClient();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const isOnline = useOnlineStatus();
   
   // --- GLOBAL STATE ---
   const [activeTab, setActiveTab] = useState("STOCK");
@@ -39,6 +45,11 @@ export default function LoadOut() {
   const [currentRig, setCurrentRig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+  const [savingBatch, setSavingBatch] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [savingMember, setSavingMember] = useState(false);
+  const [savingRig, setSavingRig] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [renameRigName, setRenameRigName] = useState("");
 
@@ -92,74 +103,126 @@ export default function LoadOut() {
     if (saved) setViewMode(saved);
   }, []);
 
+  const showToast = (message, type = "info") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+
   // 1. INIT
   const initFleet = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      showToast("Not authenticated", "error");
-      setLoading(false);
-      return;
-    }
-    if (!user) return;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        showToast("Unable to verify your session. Please log in again.", "error");
+        logError("LoadOut auth check failed", userError);
+        setLoading(false);
+        return;
+      }
+      if (!user) {
+        showToast("Please log in to access LoadOut.", "error");
+        setLoading(false);
+        return;
+      }
 
-    let { data: userRigs } = await supabase
-      .from("fleet")
-      .select("*")
-      .order("created_at");
-
-    if (!userRigs || userRigs.length === 0) {
-      const { data: newRig } = await supabase
+      let { data: userRigs, error: rigsError } = await supabase
         .from("fleet")
-        .insert({
-          user_id: user.id,
-          name: "Rig 1",
-        })
-        .select()
-        .single();
-      userRigs = [newRig];
+        .select("id, name, user_id, created_at")
+        .order("created_at");
+
+      if (rigsError) {
+        showToast("Failed to load rigs. Please try again.", "error");
+        logError("LoadOut rig fetch failed", rigsError);
+        setLoading(false);
+        return;
+      }
+
+      if (!userRigs || userRigs.length === 0) {
+        const { data: newRig, error: newRigError } = await supabase
+          .from("fleet")
+          .insert({
+            user_id: user.id,
+            name: "Rig 1",
+          })
+          .select("id, name, user_id, created_at")
+          .single();
+
+        if (newRigError) {
+          showToast("Unable to create a default rig. Please try again.", "error");
+          logError("LoadOut rig create failed", newRigError);
+          setLoading(false);
+          return;
+        }
+
+        userRigs = [newRig];
+      }
+
+      setRigs(userRigs);
+      setCurrentRig(userRigs[0]);
+      setRenameRigName(userRigs[0].name);
+
+      const { data: team, error: teamError } = await supabase
+        .from("team_members")
+        .select("id, name, user_id, created_at")
+        .order("name");
+      if (teamError) {
+        showToast("Failed to load team members.", "error");
+        logError("LoadOut team fetch failed", teamError);
+      }
+      if (team) setTeamMembers(team);
+
+      fetchRigData(userRigs[0].id);
+    } catch (error) {
+      showToast("Unable to load LoadOut data. Please try again.", "error");
+      logError("LoadOut init failed", error);
+      setLoading(false);
     }
-
-    setRigs(userRigs);
-    setCurrentRig(userRigs[0]);
-    setRenameRigName(userRigs[0].name);
-
-    const { data: team } = await supabase
-      .from("team_members")
-      .select("*")
-      .order("name");
-    if (team) setTeamMembers(team);
-
-    fetchRigData(userRigs[0].id);
   };
 
   const fetchRigData = async (rigId) => {
-    console.log("Fetching data for rig:", rigId);
     setLoading(true);
 
-    const { data: stock, error: stockError } = await supabase
-      .from("inventory")
-      .select("*")
-      .eq("rig_id", rigId)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: stock, error: stockError } = await supabase
+        .from("inventory")
+        .select("id, rig_id, name, quantity, min_quantity, color, created_at")
+        .eq("rig_id", rigId)
+        .order("created_at", { ascending: false });
 
-    console.log("Stock data:", stock, "Error:", stockError);
-    if (stock) setItems(stock);
+      if (stockError) {
+        showToast("Failed to load inventory items.", "error");
+        logError("LoadOut inventory fetch failed", stockError, { rigId });
+      } else if (stock) {
+        setItems(stock);
+      }
 
-    const { data: tools, error: toolsError } = await supabase
-      .from("tools")
-      .select("*")
-      .eq("rig_id", rigId)
-      .order("created_at", { ascending: false });
+      const { data: toolsData, error: toolsError } = await supabase
+        .from("tools")
+        .select("id, rig_id, name, brand, serial_number, status, assigned_to, photo_url, created_at")
+        .eq("rig_id", rigId)
+        .order("created_at", { ascending: false });
 
-    console.log("Tools data:", tools, "Error:", toolsError);
-    if (tools) setTools(tools);
-
-    setLoading(false);
+      if (toolsError) {
+        showToast("Failed to load tools.", "error");
+        logError("LoadOut tools fetch failed", toolsError, { rigId });
+      } else if (toolsData) {
+        setTools(toolsData);
+      }
+    } catch (error) {
+      showToast("Unable to load rig data. Please try again.", "error");
+      logError("LoadOut rig data failed", error, { rigId });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const switchRig = (rigId) => {
     vibrate();
     const selected = rigs.find((v) => v.id === rigId);
+    if (!selected) {
+      showToast("Selected rig not found.", "error");
+      return;
+    }
     setCurrentRig(selected);
     setRenameRigName(selected.name);
     fetchRigData(rigId);
@@ -168,23 +231,47 @@ export default function LoadOut() {
 
   const createRig = async () => {
     const name = prompt("Enter Name for new Rig");
-    if (!name) return;
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      showToast("Please enter a rig name.", "error");
+      return;
+    }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: newRig } = await supabase
-      .from("fleet")
-      .insert({
-        user_id: user.id,
-        name: name,
-      })
-      .select()
-      .single();
+    setSavingRig(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        showToast("Please log in to create a rig.", "error");
+        if (userError) logError("LoadOut rig auth failed", userError);
+        return;
+      }
 
-    if (newRig) {
-      setRigs([...rigs, newRig]);
-      setCurrentRig(newRig);
-      fetchRigData(newRig.id);
-      setShowSettings(false);
+      const { data: newRig, error } = await supabase
+        .from("fleet")
+        .insert({
+          user_id: user.id,
+          name: trimmed,
+        })
+        .select("id, name, user_id, created_at")
+        .single();
+
+      if (error) {
+        showToast("Failed to create rig. Please try again.", "error");
+        logError("LoadOut rig create failed", error);
+        return;
+      }
+
+      if (newRig) {
+        setRigs([...rigs, newRig]);
+        setCurrentRig(newRig);
+        fetchRigData(newRig.id);
+        setShowSettings(false);
+      }
+    } catch (error) {
+      showToast("Failed to create rig. Please try again.", "error");
+      logError("LoadOut rig create failed", error);
+    } finally {
+      setSavingRig(false);
     }
   };
 
@@ -216,7 +303,7 @@ export default function LoadOut() {
   };
 
   const handleDeleteSelected = async () => {
-      if (!confirm(`Delete ${selectedIndices.length} items?`)) return;
+      if (!confirm(`Delete ${selectedIndices.length} items? This cannot be undone.`)) return;
       vibrate(50);
       
       // Get IDs to delete from DB
@@ -228,8 +315,18 @@ export default function LoadOut() {
       setSelectedIndices([]);
       
       // DB Delete
-      await supabase.from("inventory").delete().in("id", idsToDelete);
-      showToast("Deleted", "success");
+      try {
+        const { error } = await supabase.from("inventory").delete().in("id", idsToDelete);
+        if (error) {
+          showToast("Failed to delete selected items. Please try again.", "error");
+          logError("LoadOut inventory bulk delete failed", error);
+          return;
+        }
+        showToast("Inventory items deleted.", "success");
+      } catch (error) {
+        showToast("Failed to delete selected items. Please try again.", "error");
+        logError("LoadOut inventory bulk delete failed", error);
+      }
   };
 
   const handleEditSelected = () => {
@@ -258,23 +355,33 @@ export default function LoadOut() {
   const deleteMassSelected = async () => {
     if (selectedItems.size === 0) return;
     
-    if (!confirm(`Delete ${selectedItems.size} items?`)) return;
+    if (!confirm(`Delete ${selectedItems.size} items? This cannot be undone.`)) return;
 
     vibrate(50);
 
     // Delete all selected items
     const idsToDelete = Array.from(selectedItems);
     
-    for (const id of idsToDelete) {
-      await supabase.from("inventory").delete().eq("id", id);
-    }
+    try {
+      for (const id of idsToDelete) {
+        const { error } = await supabase.from("inventory").delete().eq("id", id);
+        if (error) {
+          showToast("Failed to delete selected items.", "error");
+          logError("LoadOut inventory delete failed", error, { id });
+          return;
+        }
+      }
 
-    // Refresh data
-    await fetchRigData(currentRig.id);
-    
-    setSelectedItems(new Set());
-    setMassSelectMode(false);
-    showToast(`${idsToDelete.length} items deleted`, "success");
+      // Refresh data
+      await fetchRigData(currentRig.id);
+      
+      setSelectedItems(new Set());
+      setMassSelectMode(false);
+      showToast(`${idsToDelete.length} items deleted.`, "success");
+    } catch (error) {
+      showToast("Failed to delete selected items.", "error");
+      logError("LoadOut inventory delete failed", error);
+    }
   };
 
   // --- UNIFIED BATCH ADD LOGIC ---
@@ -282,6 +389,14 @@ export default function LoadOut() {
       const newRows = [...batchRows];
       newRows[index][field] = value;
       setBatchRows(newRows);
+      setFormErrors((prev) => {
+        if (!prev?.batchRows) return prev;
+        const rows = [...prev.batchRows];
+        if (rows[index]) {
+          rows[index] = { ...rows[index], [field]: "" };
+        }
+        return { ...prev, batchRows: rows };
+      });
   };
 
   const addBatchRow = () => {
@@ -297,79 +412,97 @@ export default function LoadOut() {
   };
 
   const saveBatch = async () => {
-  vibrate(20);
-  const validRows = batchRows.filter((r) => r.name.trim() !== "");
-  if (validRows.length === 0) return;
-
-  // Get user correctly
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  console.log("Auth result:", { user, authError });
-
-  if (!user || !user.id) {
-    alert("Not authenticated. Please log in again.");
-    return;
-  }
-
-  if (!currentRig || !currentRig.id) {
-    alert("No rig selected");
-    return;
-  }
-
-  // Import helpers
-  const { canCreateResource, incrementResourceUsage } = await import('../../../lib/subscription/subscriptionHelpers');
-  
-  let successCount = 0;
-
-  for (const row of validRows) {
-    // ✅ Check limit BEFORE each insert
-    const limitCheck = await canCreateResource('items');
-    
-    if (!limitCheck.allowed) {
-      setShowUpgradePrompt(true);
-      
-      if (successCount > 0) {
-        await fetchRigData(currentRig.id);
-        showToast(`Added ${successCount} items. Upgrade to add more!`, "success");
-      }
-      
-      return; // Stop adding
-    }
-
-    const payload = {
-      user_id: user.id,
-      rig_id: currentRig.id,
-      name: row.name,
-      quantity: 1,
-      min_quantity: parseInt(row.qty) || 3,
-      color: THEME_ORANGE,
-    };
-
-    console.log("Inserting payload:", payload);
-
-    const { data, error } = await supabase
-      .from("inventory")
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Insert error:", error);
-      alert(`Error: ${error.message}`);
+    vibrate(20);
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to add items.", "error");
       return;
     }
 
-    console.log("Success:", data);
-    
-    // ✅ Increment usage after successful insert
-    await incrementResourceUsage('items');
-    successCount++;
-  }
+    const rowErrors = batchRows.map((row) => ({
+      name: !isRequired(row.name) ? "Please enter an item name." : "",
+      qty: !inRange(row.qty, 1, 100000) ? "Quantity must be 1 or more." : "",
+    }));
 
-  await fetchRigData(currentRig.id);
-  showToast(`${validRows.length} Items Added`, "success");
-  setBatchRows([{ name: "", qty: "3" }]);
-  setShowAddModal(false);
+    const hasErrors = rowErrors.some((row) => row.name || row.qty);
+    if (hasErrors) {
+      setFormErrors((prev) => ({ ...prev, batchRows: rowErrors }));
+      showToast("Fix the highlighted fields before saving.", "error");
+      return;
+    }
+
+    setSavingBatch(true);
+    try {
+      // Get user correctly
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user?.id) {
+        showToast("Please log in to add inventory items.", "error");
+        if (authError) logError("LoadOut auth failed", authError);
+        return;
+      }
+
+      if (!currentRig?.id) {
+        showToast("Select a rig before adding items.", "error");
+        return;
+      }
+
+      // Import helpers
+      const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
+      
+      let successCount = 0;
+
+      for (const row of batchRows) {
+        // ✅ Check limit BEFORE each insert
+        const limitCheck = await canCreateResource('items');
+        
+        if (!limitCheck.allowed) {
+          setShowUpgradePrompt(true);
+          
+          if (successCount > 0) {
+            await fetchRigData(currentRig.id);
+            showToast(`Added ${successCount} items. Upgrade to add more.`, "success");
+          }
+          
+          return; // Stop adding
+        }
+
+        const payload = {
+          user_id: user.id,
+          rig_id: currentRig.id,
+          name: row.name.trim(),
+          quantity: 1,
+          min_quantity: Number(row.qty) || 3,
+          color: THEME_ORANGE,
+        };
+
+        const { error } = await supabase
+          .from("inventory")
+          .insert(payload)
+          .select("id")
+          .single();
+
+        if (error) {
+          showToast("Failed to save an inventory item. Please try again.", "error");
+          logError("LoadOut inventory insert failed", error);
+          return;
+        }
+
+        // ✅ Increment usage after successful insert
+        await incrementResourceUsage('items');
+        successCount++;
+      }
+
+      await fetchRigData(currentRig.id);
+      showToast(`${batchRows.length} inventory items added.`, "success");
+      setBatchRows([{ name: "", qty: "3" }]);
+      setShowAddModal(false);
+      setFormErrors((prev) => ({ ...prev, batchRows: [] }));
+    } catch (error) {
+      showToast("Failed to add inventory items. Please try again.", "error");
+      logError("LoadOut batch save failed", error);
+    } finally {
+      setSavingBatch(false);
+    }
 };
 
 
@@ -377,7 +510,16 @@ export default function LoadOut() {
     vibrate(5); 
     const newQty = Math.max(0, Number(currentQty) + change);
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
-    await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
+    try {
+      const { error } = await supabase.from("inventory").update({ quantity: newQty }).eq("id", id);
+      if (error) {
+        showToast("Failed to update inventory quantity.", "error");
+        logError("LoadOut inventory update failed", error, { id });
+      }
+    } catch (error) {
+      showToast("Failed to update inventory quantity.", "error");
+      logError("LoadOut inventory update failed", error, { id });
+    }
   };
 
   const openStockEdit = (e, item) => {
@@ -390,25 +532,74 @@ export default function LoadOut() {
   const saveStockEdit = async () => {
     if (!editingItem) return;
     vibrate();
-    const newMin = parseInt(targetQtyInput) || 0;
-    const updatedItem = { ...editingItem, min_quantity: newMin };
-    setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
-    await supabase.from("inventory").update({ name: updatedItem.name, color: updatedItem.color, min_quantity: updatedItem.min_quantity, quantity: updatedItem.quantity }).eq("id", updatedItem.id);
-    setEditingItem(null);
+    const editErrors = buildFieldErrors({
+      name: [{ isValid: isRequired(editingItem.name), message: "Please enter an item name." }],
+      minQty: [{ isValid: inRange(targetQtyInput, 0, 100000), message: "Target quantity must be 0 or more." }],
+    });
+
+    if (Object.keys(editErrors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, editItem: editErrors }));
+      showToast("Fix the highlighted fields before saving.", "error");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const newMin = Number(targetQtyInput) || 0;
+      const updatedItem = { ...editingItem, min_quantity: newMin };
+      setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
+      const { error } = await supabase.from("inventory").update({ name: updatedItem.name, color: updatedItem.color, min_quantity: updatedItem.min_quantity, quantity: updatedItem.quantity }).eq("id", updatedItem.id);
+      if (error) {
+        showToast("Failed to update inventory item.", "error");
+        logError("LoadOut inventory update failed", error, { id: updatedItem.id });
+        return;
+      }
+      setEditingItem(null);
+      setFormErrors((prev) => ({ ...prev, editItem: {} }));
+      showToast("Inventory item updated.", "success");
+    } catch (error) {
+      showToast("Failed to update inventory item.", "error");
+      logError("LoadOut inventory update failed", error, { id: editingItem.id });
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const deleteStockItem = async (id) => {
-    if(!confirm("Delete this item?")) return;
+    const item = items.find((entry) => entry.id === id);
+    if (!confirm(`Delete ${item?.name || "this item"}? This cannot be undone.`)) return;
     vibrate();
     setItems(prev => prev.filter(i => i.id !== id));
-    await supabase.from("inventory").delete().eq("id", id);
-    setEditingItem(null);
+    try {
+      const { error } = await supabase.from("inventory").delete().eq("id", id);
+      if (error) {
+        showToast("Failed to delete inventory item.", "error");
+        logError("LoadOut inventory delete failed", error, { id });
+      } else {
+        showToast("Inventory item deleted.", "success");
+      }
+    } catch (error) {
+      showToast("Failed to delete inventory item.", "error");
+      logError("LoadOut inventory delete failed", error, { id });
+    } finally {
+      setEditingItem(null);
+    }
   };
 
   // 3. TOOL ACTIONS
   const handlePhotoSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    const maxBytes = 8 * 1024 * 1024;
+    if (!isFileTypeAllowed(file, allowedTypes)) {
+      showToast("Unsupported image type. Use JPG, PNG, or WebP.", "error");
+      return;
+    }
+    if (!isFileSizeAllowed(file, maxBytes)) {
+      showToast("Photo too large. Max size is 8MB.", "error");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => setPhotoPreview(ev.target?.result);
     reader.readAsDataURL(file);
@@ -416,17 +607,27 @@ export default function LoadOut() {
   };
 
   const addTool = async () => {
-    if (!newTool.name) {
-      showToast("Name required", "error");
+    const toolErrors = buildFieldErrors({
+      name: [{ isValid: isRequired(newTool.name), message: "Please enter a tool name." }],
+    });
+    if (Object.keys(toolErrors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, tool: toolErrors }));
+      showToast("Fix the highlighted fields before saving.", "error");
+      return;
+    }
+
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to add tools.", "error");
       return;
     }
 
     vibrate();
     setUploading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      showToast("Not authenticated", "error");
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      showToast("Please log in to add tools.", "error");
+      if (authError) logError("LoadOut auth failed", authError);
       setUploading(false);
       return;
     }
@@ -436,66 +637,81 @@ export default function LoadOut() {
       return;
     }
 
-    let finalPhotoUrl = null;
+    try {
+      let finalPhotoUrl = null;
 
-    if (newPhoto) {
-      const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("tool-photos")
-        .upload(fileName, newPhoto);
+      if (newPhoto) {
+        const fileName = `${user.id}/${Date.now()}-${newPhoto.name}`;
+        let uploadError = null;
 
-      if (!uploadError) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { error } = await supabase.storage
+            .from("tool-photos")
+            .upload(fileName, newPhoto);
+          if (!error) {
+            uploadError = null;
+            break;
+          }
+          uploadError = error;
+          await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+        }
+
+        if (uploadError) {
+          showToast("Unable to upload tool photo. Please try again.", "error");
+          logError("LoadOut tool photo upload failed", uploadError);
+          return;
+        }
+
         const { data } = supabase.storage
           .from("tool-photos")
           .getPublicUrl(fileName);
         finalPhotoUrl = data.publicUrl;
       }
+
+      const { data, error } = await supabase
+        .from("tools")
+        .insert({
+          user_id: user.id,
+          rig_id: currentRig.id,
+          name: newTool.name.trim(),
+          brand: newTool.brand?.trim() || null,
+          serial_number: newTool.serial?.trim() || null,
+          photo_url: finalPhotoUrl,
+          status: "IN_RIG",
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        showToast("Failed to save tool. Please try again.", "error");
+        logError("LoadOut tool save failed", error);
+        return;
+      }
+
+      if (data) {
+        // Don't manually update state - fetch fresh from database
+        await fetchRigData(currentRig.id);
+
+        setShowAddTool(false);
+        setNewTool({ name: "", brand: "", serial: "" });
+        setNewPhoto(null);
+        setPhotoPreview(null);
+        setFormErrors((prev) => ({ ...prev, tool: {} }));
+        showToast("Tool added successfully!", "success");
+      }
+    } catch (error) {
+      showToast("Failed to save tool. Please try again.", "error");
+      logError("LoadOut tool save failed", error);
+    } finally {
+      setUploading(false);
     }
-
-    const { data, error } = await supabase
-      .from("tools")
-      .insert({
-        user_id: user.id,
-        rig_id: currentRig.id,
-        name: newTool.name,
-        brand: newTool.brand || null,
-        serial_number: newTool.serial || null,
-        photo_url: finalPhotoUrl,
-        status: "IN_RIG",
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Tool save error:", error);
-      showToast(`Error: ${error.message}`, "error");
-    } else if (data) {
-      console.log("Tool saved successfully:", data);
-
-      // Don't manually update state - fetch fresh from database
-      await fetchRigData(currentRig.id);
-
-      setShowAddTool(false);
-      setNewTool({ name: "", brand: "", serial: "" });
-      setNewPhoto(null);
-      setPhotoPreview(null);
-      showToast("Tool Added", "success");
-    }
-
-    setUploading(false);
   };
 
   const updateToolStatus = async (id, status, memberId = null) => {
     vibrate();
     
     const currentTool = tools.find((t) => t.id === id);
-    
-    console.log("=== UPDATE TOOL STATUS ===");
-    console.log("Tool ID:", id);
-    console.log("New status:", status);
-    console.log("memberId passed:", memberId);
-    console.log("Current tool assigned_to:", currentTool?.assigned_to);
-    
+
     let finalAssignedTo = memberId;
     
     if (status === "BROKEN" && memberId !== null) {
@@ -506,8 +722,7 @@ export default function LoadOut() {
       finalAssignedTo = null;
     }
     
-    console.log("Final assigned_to value:", finalAssignedTo);
-
+    const previousTools = tools;
     setTools(
       tools.map((t) =>
         t.id === id ? { ...t, status, assigned_to: finalAssignedTo } : t
@@ -515,25 +730,36 @@ export default function LoadOut() {
     );
     setSelectedAsset(null);
 
-    const { data, error } = await supabase
-      .from("tools")
-      .update({ status, assigned_to: finalAssignedTo })
-      .eq("id", id);
-    
-    if (!error && status === "CHECKED_OUT" && activeJob?.id && currentRig?.id) {
-      const { error: jobError } = await supabase
-        .from("jobs")
-        .update({ rig_id: currentRig.id })
-        .eq("id", activeJob.id);
-      if (!jobError) {
-        setActiveJob({ ...activeJob, rig_id: currentRig.id });
-      } else {
-        showToast("Error assigning rig to job", "error");
-      }
-    }
+    try {
+      const { error } = await supabase
+        .from("tools")
+        .update({ status, assigned_to: finalAssignedTo })
+        .eq("id", id);
 
-    console.log("Database update result:", { data, error });
-    console.log("=== END UPDATE ===");
+      if (error) {
+        setTools(previousTools);
+        showToast("Failed to update tool status.", "error");
+        logError("LoadOut tool status update failed", error, { id, status });
+        return;
+      }
+      
+      if (status === "CHECKED_OUT" && activeJob?.id && currentRig?.id) {
+        const { error: jobError } = await supabase
+          .from("jobs")
+          .update({ rig_id: currentRig.id })
+          .eq("id", activeJob.id);
+        if (!jobError) {
+          setActiveJob({ ...activeJob, rig_id: currentRig.id });
+        } else {
+          showToast("Failed to link this rig to the active job.", "error");
+          logError("LoadOut job rig assignment failed", jobError, { jobId: activeJob.id });
+        }
+      }
+    } catch (error) {
+      setTools(previousTools);
+      showToast("Failed to update tool status.", "error");
+      logError("LoadOut tool status update failed", error, { id, status });
+    }
   };
 
   const deleteTool = async (id) => {
@@ -547,41 +773,117 @@ export default function LoadOut() {
     
     vibrate(50);
     setTools(tools.filter((t) => t.id !== toolToDelete.id));
-    await supabase.from("tools").delete().eq("id", toolToDelete.id);
-    
-    setShowDeleteConfirm(false);
-    setToolToDelete(null);
-    showToast("Tool deleted", "success");
+    try {
+      const { error } = await supabase.from("tools").delete().eq("id", toolToDelete.id);
+      if (error) {
+        showToast("Failed to delete tool. Please try again.", "error");
+        logError("LoadOut tool delete failed", error, { id: toolToDelete.id });
+        return;
+      }
+
+      setShowDeleteConfirm(false);
+      setToolToDelete(null);
+      showToast("Tool deleted.", "success");
+    } catch (error) {
+      showToast("Failed to delete tool. Please try again.", "error");
+      logError("LoadOut tool delete failed", error, { id: toolToDelete.id });
+    }
   };
 
   // 4. TEAM ACTIONS
   const addTeamMember = async () => {
-    if (!newMemberName.trim()) return;
+    const errors = buildFieldErrors({
+      name: [{ isValid: isRequired(newMemberName), message: "Please enter a team member name." }],
+    });
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, teamMember: errors }));
+      showToast("Enter a team member name before saving.", "error");
+      return;
+    }
+
     vibrate();
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from("team_members").insert({ user_id: user.id, name: newMemberName }).select().single();
-    if (data) {
+    setSavingMember(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast("Please log in to manage team members.", "error");
+        if (authError) logError("LoadOut auth failed", authError);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("team_members")
+        .insert({ user_id: user.id, name: newMemberName.trim() })
+        .select("id, name, user_id, created_at")
+        .single();
+      if (error) {
+        showToast("Failed to add team member. Please try again.", "error");
+        logError("LoadOut team add failed", error);
+        return;
+      }
+      if (data) {
         setTeamMembers([...teamMembers, data]);
         setNewMemberName("");
+        setFormErrors((prev) => ({ ...prev, teamMember: {} }));
+        showToast("Team member added.", "success");
+      }
+    } catch (error) {
+      showToast("Failed to add team member. Please try again.", "error");
+      logError("LoadOut team add failed", error);
+    } finally {
+      setSavingMember(false);
     }
   };
 
   const deleteTeamMember = async (id) => {
-    if(!confirm("Remove user?")) return;
+    const member = teamMembers.find((entry) => entry.id === id);
+    if (!confirm(`Remove ${member?.name || "this team member"}? This cannot be undone.`)) return;
     vibrate();
     setTeamMembers(teamMembers.filter(m => m.id !== id));
-    await supabase.from("team_members").delete().eq("id", id);
+    try {
+      const { error } = await supabase.from("team_members").delete().eq("id", id);
+      if (error) {
+        showToast("Failed to remove team member.", "error");
+        logError("LoadOut team delete failed", error, { id });
+      } else {
+        showToast("Team member removed.", "success");
+      }
+    } catch (error) {
+      showToast("Failed to remove team member.", "error");
+      logError("LoadOut team delete failed", error, { id });
+    }
   };
 
   // 5. GLOBAL MENU
   const handleRenameRig = async () => {
-    if(!renameRigName.trim()) return;
+    const errors = buildFieldErrors({
+      name: [{ isValid: isRequired(renameRigName), message: "Please enter a rig name." }],
+    });
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, rigName: errors }));
+      showToast("Enter a rig name before saving.", "error");
+      return;
+    }
+
     vibrate();
-    const updatedRigs = rigs.map(v => v.id === currentRig.id ? {...v, name: renameRigName} : v);
-    setRigs(updatedRigs);
-    setCurrentRig({...currentRig, name: renameRigName});
-    await supabase.from("fleet").update({ name: renameRigName }).eq("id", currentRig.id);
-    showToast("Rig Renamed", "success");
+    setSavingRig(true);
+    try {
+      const updatedRigs = rigs.map(v => v.id === currentRig.id ? {...v, name: renameRigName.trim()} : v);
+      setRigs(updatedRigs);
+      setCurrentRig({...currentRig, name: renameRigName.trim()});
+      const { error } = await supabase.from("fleet").update({ name: renameRigName.trim() }).eq("id", currentRig.id);
+      if (error) {
+        showToast("Failed to rename rig.", "error");
+        logError("LoadOut rig rename failed", error, { id: currentRig.id });
+        return;
+      }
+      setFormErrors((prev) => ({ ...prev, rigName: {} }));
+      showToast("Rig renamed.", "success");
+    } catch (error) {
+      showToast("Failed to rename rig.", "error");
+      logError("LoadOut rig rename failed", error, { id: currentRig?.id });
+    } finally {
+      setSavingRig(false);
+    }
   };
 
   const handleDeleteRig = async () => {
@@ -589,16 +891,39 @@ export default function LoadOut() {
       showToast("Cannot delete only rig", "error");
       return;
     }
-    if (!confirm("Delete this rig and ALL contents?")) return;
+    if (!confirm(`Delete ${currentRig?.name || "this rig"} and ALL contents? This cannot be undone.`)) return;
 
     vibrate();
     setLoading(true);
 
-    await supabase.from("inventory").delete().eq("rig_id", currentRig.id);
-    await supabase.from("tools").delete().eq("rig_id", currentRig.id);
-    await supabase.from("fleet").delete().eq("id", currentRig.id);
-
-    window.location.reload();
+    try {
+      const { error: inventoryError } = await supabase.from("inventory").delete().eq("rig_id", currentRig.id);
+      if (inventoryError) {
+        showToast("Failed to delete rig inventory.", "error");
+        logError("LoadOut rig inventory delete failed", inventoryError, { id: currentRig.id });
+        setLoading(false);
+        return;
+      }
+      const { error: toolsError } = await supabase.from("tools").delete().eq("rig_id", currentRig.id);
+      if (toolsError) {
+        showToast("Failed to delete rig tools.", "error");
+        logError("LoadOut rig tools delete failed", toolsError, { id: currentRig.id });
+        setLoading(false);
+        return;
+      }
+      const { error: rigError } = await supabase.from("fleet").delete().eq("id", currentRig.id);
+      if (rigError) {
+        showToast("Failed to delete rig.", "error");
+        logError("LoadOut rig delete failed", rigError, { id: currentRig.id });
+        setLoading(false);
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      showToast("Failed to delete rig.", "error");
+      logError("LoadOut rig delete failed", error, { id: currentRig?.id });
+      setLoading(false);
+    }
   };
 
   const copyShoppingList = () => {
@@ -607,26 +932,40 @@ export default function LoadOut() {
     if (toBuy.length === 0) { showToast("Nothing to buy!", "success"); return; }
     let text = `🛒 ${currentRig.name.toUpperCase()} SHOPPING LIST:\n`;
     toBuy.forEach(i => text += `- ${i.name} (${i.quantity}/${i.min_quantity})\n`);
-    navigator.clipboard.writeText(text);
-    showToast("Copied!", "success");
-    setShowSettings(false);
+    try {
+      navigator.clipboard.writeText(text);
+      showToast("Shopping list copied.", "success");
+      setShowSettings(false);
+    } catch (error) {
+      showToast("Unable to copy list. Please try again.", "error");
+      logError("LoadOut copy list failed", error);
+    }
   };
 
   const restockAll = async () => {
-    if(!confirm("Auto-Refill low items?")) return;
+    if (!confirm("Auto-refill low items to target quantities?")) return;
     vibrate();
     const updates = items.map(i => i.quantity < i.min_quantity ? { ...i, quantity: i.min_quantity } : i);
     setItems(updates);
-    updates.forEach(async (item) => {
-         if (item.quantity !== items.find(o => o.id === item.id).quantity) {
-             await supabase.from("inventory").update({ quantity: item.quantity }).eq("id", item.id);
-         }
-    });
-    setShowSettings(false);
-    showToast("Restocked", "success");
+    try {
+      await Promise.all(
+        updates.map(async (item) => {
+          const previousItem = items.find((o) => o.id === item.id);
+          if (previousItem && item.quantity !== previousItem.quantity) {
+            const { error } = await supabase.from("inventory").update({ quantity: item.quantity }).eq("id", item.id);
+            if (error) {
+              throw error;
+            }
+          }
+        })
+      );
+      setShowSettings(false);
+      showToast("Inventory restocked.", "success");
+    } catch (error) {
+      showToast("Failed to restock inventory.", "error");
+      logError("LoadOut restock failed", error);
+    }
   };
-
-  const showToast = (msg, type) => { setToast({msg, type}); setTimeout(()=>setToast(null), 3000); };
 
 
   // FILTERS
@@ -652,7 +991,7 @@ export default function LoadOut() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors" aria-label="Back to dashboard">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -685,6 +1024,14 @@ export default function LoadOut() {
         <JobSelector />
       </div>
 
+      {!isOnline ? (
+        <div className="max-w-6xl mx-auto px-6 pt-2">
+          <div className="bg-red-900/30 border border-red-500/40 text-red-200 text-xs rounded-lg px-3 py-2">
+            You are offline. Changes will not sync until you reconnect.
+          </div>
+        </div>
+      ) : null}
+
       <main className="max-w-6xl mx-auto px-6 pt-2">
         
         {/* TOP BAR - RIG SELECTOR (Z-40 to fix stacking) */}
@@ -700,7 +1047,7 @@ export default function LoadOut() {
 
                 {/* SETTINGS MENU (Z-50) */}
                 {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
+                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 max-h-[min(70vh,28rem)] overflow-y-auto hide-scrollbar bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
                         {activeTab === "STOCK" && (
                             <div className="mb-4 pb-4 border-b border-gray-700">
                                 <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
@@ -710,11 +1057,39 @@ export default function LoadOut() {
                             </div>
                         )}
                         <div className="mb-4 pb-4 border-b border-gray-700">
-                                <label className="text-xs text-gray-500 font-bold uppercase mb-1">Rig Name</label>
+                            <label className="text-xs text-gray-500 font-bold uppercase mb-1">Rig Name</label>
                             <div className="flex gap-2">
-                                <input value={renameRigName} onChange={e => setRenameRigName(e.target.value)} className="bg-black/40 border border-gray-700 rounded p-2 text-sm flex-1 text-white outline-none focus:border-[#FF6700]" />
-                                <button onClick={handleRenameRig} className="bg-[#FF6700] text-black rounded p-2"><CheckCircle2/></button>
+                                <input
+                                  value={renameRigName}
+                                  onChange={e => {
+                                    setRenameRigName(e.target.value);
+                                    if (formErrors?.rigName?.name) {
+                                      setFormErrors((prev) => ({ ...prev, rigName: { ...prev.rigName, name: "" } }));
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    if (!renameRigName.trim()) {
+                                      setFormErrors((prev) => ({
+                                        ...prev,
+                                        rigName: { name: "Please enter a rig name." },
+                                      }));
+                                    }
+                                  }}
+                                  className={`bg-black/40 border rounded p-2 text-sm flex-1 text-white outline-none ${
+                                    formErrors?.rigName?.name ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-[#FF6700]"
+                                  }`}
+                                />
+                                <button
+                                  onClick={handleRenameRig}
+                                  disabled={savingRig}
+                                  className="bg-[#FF6700] text-black rounded p-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  <CheckCircle2/>
+                                </button>
                             </div>
+                            {formErrors?.rigName?.name ? (
+                              <p className="text-xs text-red-500 mt-2">{formErrors.rigName.name}</p>
+                            ) : null}
                         </div>
                         <div className="mb-4 pb-4 border-b border-gray-700 space-y-2">
                             <label className="text-xs text-gray-500 font-bold uppercase">Switch Rig</label>
@@ -773,6 +1148,7 @@ export default function LoadOut() {
                       }}
                       className="bg-industrial-card text-foreground h-full px-4 rounded-xl font-bold flex items-center justify-center hover:bg-white/5 transition border border-industrial-border shrink-0"
                       title={viewMode === "buttons" ? "Switch to List View" : "Switch to Button View"}
+                      aria-label={viewMode === "buttons" ? "Switch to list view" : "Switch to button view"}
                     >
                       {viewMode === "buttons" ? <List size={24} /> : <LayoutGrid size={24} />}
                     </button>
@@ -787,10 +1163,15 @@ export default function LoadOut() {
                           : "bg-industrial-card text-foreground border-industrial-border hover:bg-white/5"
                       }`}
                       title={massSelectMode ? "Exit Mass Select" : "Mass Select & Delete"}
+                      aria-label={massSelectMode ? "Exit mass select" : "Enter mass select"}
                     >
                       {massSelectMode ? <X size={24} /> : <Trash2 size={24} />}
                     </button>
-                    <button onClick={() => { vibrate(); setShowAddModal(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
+                    <button
+                      onClick={() => { vibrate(); setShowAddModal(true); }}
+                      className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0"
+                      aria-label="Add inventory item"
+                    >
                         <Plus size={32} />
                     </button>
                 </div>
@@ -798,8 +1179,13 @@ export default function LoadOut() {
                 {/* THE CONTROL DECK GRID */}
                 {viewMode === "buttons" ? (
                   // EXISTING BUTTON GRID - Keep as is
-                  <div className="grid grid-cols-3 gap-3 pb-24 select-none">
-                    {filteredItems.map((item, index) => {
+                  filteredItems.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-[var(--text-sub)]">
+                      No items yet. Click "Add" to start tracking inventory.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-24 select-none">
+                      {filteredItems.map((item, index) => {
                       const isSelected = selectedIndices.includes(index);
                       return (
                         <div
@@ -864,11 +1250,17 @@ export default function LoadOut() {
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )
                 ) : (
                   // NEW LIST VIEW
-                  <div className="space-y-2 pb-24">
-                    {filteredItems.map((item, index) => {
+                  filteredItems.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-[var(--text-sub)]">
+                      No items yet. Click "Add" to start tracking inventory.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pb-24">
+                      {filteredItems.map((item, index) => {
                       const isSelected = selectedIndices.includes(index);
                       const minQuantity = item.min_quantity ?? 3;
                       const isLowStock = item.quantity <= minQuantity - 3;
@@ -955,7 +1347,8 @@ export default function LoadOut() {
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )
                 )}
                 
                 {/* Mass Delete Floating Action Bar */}
@@ -994,13 +1387,17 @@ export default function LoadOut() {
                         <Plus size={32} />
                     </button>
                 </div>
-                <div className="grid grid-cols-3 gap-2 mb-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-6">
                     {[{k:"ALL", l:"All Tools"}, {k:"OUT", l:"Checked Out"}, {k:"BROKEN", l:"Broken"}].map(f => (
                         <button key={f.k} onClick={() => { vibrate(); setToolFilter(f.k); }} className={`p-2 rounded text-xs font-bold border transition ${toolFilter === f.k ? "bg-[#FF6700] text-black border-[#FF6700]" : "border-industrial-border text-industrial-muted"}`}>{f.l}</button>
                     ))}
                 </div>
                 <div className="space-y-3 pb-20">
-                    {filteredTools.length === 0 ? <div className="text-center py-10 text-industrial-muted">No tools found.</div> : filteredTools.map(tool => (
+                    {filteredTools.length === 0 ? (
+                      <div className="text-center py-10 text-industrial-muted">
+                        No tools yet. Click "Register Tool" to add one.
+                      </div>
+                    ) : filteredTools.map(tool => (
                         <div key={tool.id} className={`glass-panel p-4 rounded-xl relative transition-all duration-300 ${tool.status === "BROKEN" ? "border-red-900/50 bg-red-900/5" : ""} ${selectedAsset === tool.id ? "ring-1 ring-[#FF6700]" : ""}`}>
                             <div className="flex gap-4 cursor-pointer" onClick={() => { vibrate(); setSelectedAsset(selectedAsset === tool.id ? null : tool.id); }}>
                                 <div className="w-16 h-16 rounded-lg bg-black/40 flex-shrink-0 border border-white/10 flex items-center justify-center overflow-hidden">
@@ -1042,9 +1439,6 @@ export default function LoadOut() {
                                             {/* Left: Report Broken Button */}
                                             <button
                                               onClick={() => {
-                                                console.log("=== MARKING TOOL AS BROKEN ===");
-                                                console.log("Tool ID:", tool.id);
-                                                console.log("Current assigned_to:", tool.assigned_to);
                                                 updateToolStatus(tool.id, "BROKEN", tool.assigned_to);
                                               }}
                                               className="px-4 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40 transition flex items-center gap-2"
@@ -1126,9 +1520,6 @@ export default function LoadOut() {
                                             {/* Left: Report Broken Button */}
                                             <button
                                               onClick={() => {
-                                                console.log("=== MARKING TOOL AS BROKEN ===");
-                                                console.log("Tool ID:", tool.id);
-                                                console.log("Current assigned_to:", tool.assigned_to);
                                                 updateToolStatus(tool.id, "BROKEN", tool.assigned_to);
                                               }}
                                               className="px-4 py-2 bg-red-900/20 border border-red-900/50 rounded-lg text-red-500 hover:bg-red-900/40 transition flex items-center gap-2"
@@ -1233,14 +1624,40 @@ export default function LoadOut() {
                     placeholder="Item Name (e.g. Wire Nuts)"
                     value={row.name}
                     onChange={(e) => handleBatchRowChange(idx, "name", e.target.value)}
-                    className="flex-1 bg-black/40 border border-gray-700 rounded-lg p-3 text-white outline-none focus:border-[#FF6700]"
+                    onBlur={() => {
+                      if (!row.name.trim()) {
+                        setFormErrors((prev) => {
+                          const next = { ...prev };
+                          const rows = [...(next.batchRows || [])];
+                          rows[idx] = { ...(rows[idx] || {}), name: "Please enter an item name." };
+                          next.batchRows = rows;
+                          return next;
+                        });
+                      }
+                    }}
+                    className={`flex-1 bg-black/40 border rounded-lg p-3 text-white outline-none ${
+                      formErrors?.batchRows?.[idx]?.name ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-[#FF6700]"
+                    }`}
                   />
                   <input
                     type="number"
                     placeholder="Qty"
                     value={row.qty}
                     onChange={(e) => handleBatchRowChange(idx, "qty", e.target.value)}
-                    className="w-16 bg-black/40 border border-gray-700 rounded-lg p-3 text-center text-[#FF6700] outline-none focus:border-[#FF6700]"
+                    onBlur={() => {
+                      if (!inRange(row.qty, 1, 100000)) {
+                        setFormErrors((prev) => {
+                          const next = { ...prev };
+                          const rows = [...(next.batchRows || [])];
+                          rows[idx] = { ...(rows[idx] || {}), qty: "Quantity must be 1 or more." };
+                          next.batchRows = rows;
+                          return next;
+                        });
+                      }
+                    }}
+                    className={`w-16 bg-black/40 border rounded-lg p-3 text-center text-[#FF6700] outline-none ${
+                      formErrors?.batchRows?.[idx]?.qty ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-[#FF6700]"
+                    }`}
                   />
                   {batchRows.length > 1 && (
                     <button onClick={() => removeBatchRow(idx)} className="text-gray-600 hover:text-red-500 p-2">
@@ -1249,6 +1666,9 @@ export default function LoadOut() {
                   )}
                 </div>
               ))}
+              {formErrors?.batchRows?.some?.((row) => row?.name || row?.qty) ? (
+                <p className="text-xs text-red-500">Please fix the highlighted rows.</p>
+              ) : null}
               
               <button
                 onClick={addBatchRow}
@@ -1263,9 +1683,10 @@ export default function LoadOut() {
             <div className="p-6 border-t border-gray-700 shrink-0">
               <button
                 onClick={saveBatch}
-                className="w-full bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl hover:scale-[1.02] transition"
+                disabled={savingBatch}
+                className="w-full bg-[#FF6700] text-black font-bold py-4 rounded-xl text-xl hover:scale-[1.02] transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                SAVE ITEMS
+                {savingBatch ? "SAVING..." : "SAVE ITEMS"}
               </button>
             </div>
           </div>
@@ -1293,10 +1714,46 @@ export default function LoadOut() {
                     )}
                 </div>
                 <div className="space-y-3">
-                    <input placeholder="Tool Name (e.g. Hilti Drill)" value={newTool.name} onChange={e => setNewTool({...newTool, name: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                    <FormField id="tool-name" label="Tool Name" required error={formErrors?.tool?.name}>
+                      <input
+                        id="tool-name"
+                        placeholder="Hilti drill"
+                        value={newTool.name}
+                        onChange={e => {
+                          setNewTool({...newTool, name: e.target.value});
+                          if (formErrors?.tool?.name) {
+                            setFormErrors((prev) => ({ ...prev, tool: { ...prev.tool, name: "" } }));
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newTool.name.trim()) {
+                            setFormErrors((prev) => ({ ...prev, tool: { ...prev.tool, name: "Please enter a tool name." } }));
+                          }
+                        }}
+                        className={`bg-zinc-800 border rounded-lg p-3 w-full text-white outline-none ${
+                          formErrors?.tool?.name ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-[#FF6700]"
+                        }`}
+                      />
+                    </FormField>
                     <div className="flex gap-2">
-                        <input placeholder="Brand" value={newTool.brand} onChange={e => setNewTool({...newTool, brand: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
-                        <input placeholder="Serial #" value={newTool.serial} onChange={e => setNewTool({...newTool, serial: e.target.value})} className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"/>
+                        <FormField id="tool-brand" label="Brand">
+                          <input
+                            id="tool-brand"
+                            placeholder="DeWalt"
+                            value={newTool.brand}
+                            onChange={e => setNewTool({...newTool, brand: e.target.value})}
+                            className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"
+                          />
+                        </FormField>
+                        <FormField id="tool-serial" label="Serial #">
+                          <input
+                            id="tool-serial"
+                            placeholder="SN-00123"
+                            value={newTool.serial}
+                            onChange={e => setNewTool({...newTool, serial: e.target.value})}
+                            className="bg-zinc-800 border border-gray-700 rounded-lg p-3 w-full text-white outline-none focus:border-[#FF6700]"
+                          />
+                        </FormField>
                     </div>
                 </div>
                 <button onClick={addTool} disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
@@ -1313,11 +1770,51 @@ export default function LoadOut() {
             <button onClick={() => setEditingItem(null)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
             <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">EDIT ITEM</h2>
             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Name</label>
-            <input type="text" value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="bg-gray-900 border border-gray-700 rounded-lg mb-4 w-full p-3 font-bold text-lg text-white" />
+            <input
+              type="text"
+              value={editingItem.name}
+              onChange={(e) => {
+                setEditingItem({ ...editingItem, name: e.target.value });
+                if (formErrors?.editItem?.name) {
+                  setFormErrors((prev) => ({ ...prev, editItem: { ...prev.editItem, name: "" } }));
+                }
+              }}
+              onBlur={() => {
+                if (!editingItem.name.trim()) {
+                  setFormErrors((prev) => ({ ...prev, editItem: { ...prev.editItem, name: "Please enter an item name." } }));
+                }
+              }}
+              className={`bg-gray-900 border rounded-lg mb-4 w-full p-3 font-bold text-lg text-white ${
+                formErrors?.editItem?.name ? "border-red-500 focus:border-red-500" : "border-gray-700"
+              }`}
+            />
+            {formErrors?.editItem?.name ? (
+              <p className="text-xs text-red-500 mb-2">{formErrors.editItem.name}</p>
+            ) : null}
             <div className="flex justify-between items-center mb-2">
                 <label className="text-xs font-bold text-gray-500 uppercase">Target Qty</label>
-                <input type="number" value={targetQtyInput} onChange={(e) => setTargetQtyInput(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg w-20 text-center font-oswald text-xl p-2 text-[#FF6700]" />
+                <input
+                  type="number"
+                  value={targetQtyInput}
+                  onChange={(e) => {
+                    setTargetQtyInput(e.target.value);
+                    if (formErrors?.editItem?.minQty) {
+                      setFormErrors((prev) => ({ ...prev, editItem: { ...prev.editItem, minQty: "" } }));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!inRange(targetQtyInput, 0, 100000)) {
+                      setFormErrors((prev) => ({ ...prev, editItem: { ...prev.editItem, minQty: "Target quantity must be 0 or more." } }));
+                    }
+                  }}
+                  className={`bg-gray-900 border rounded-lg w-20 text-center font-oswald text-xl p-2 text-[#FF6700] ${
+                    formErrors?.editItem?.minQty ? "border-red-500 focus:border-red-500" : "border-gray-700"
+                  }`}
+                />
             </div>
+            {formErrors?.editItem?.minQty ? (
+              <p className="text-xs text-red-500 mb-3">{formErrors.editItem.minQty}</p>
+            ) : null}
             <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Color</label>
             <div className="grid grid-cols-5 gap-2 mb-6">
               {colors.map((c) => (
@@ -1326,7 +1823,13 @@ export default function LoadOut() {
             </div>
             <div className="flex gap-2">
               <button onClick={() => deleteStockItem(editingItem.id)} className="flex-1 bg-red-900/20 text-red-500 border border-red-900/50 py-3 rounded-lg font-bold"><Trash2 size={16} /></button>
-              <button onClick={saveStockEdit} className="flex-[3] bg-[#FF6700] text-black py-3 rounded-lg font-bold">SAVE</button>
+              <button
+                onClick={saveStockEdit}
+                disabled={savingEdit}
+                className="flex-[3] bg-[#FF6700] text-black py-3 rounded-lg font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {savingEdit ? "SAVING..." : "SAVE"}
+              </button>
             </div>
           </div>
         </div>
@@ -1338,9 +1841,38 @@ export default function LoadOut() {
                 <button onClick={() => setShowTeamModal(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
                 <h2 className="font-oswald font-bold text-xl mb-6 text-foreground flex items-center gap-2"><Users size={20}/> MANAGE TEAM</h2>
                 <div className="flex gap-2 mb-6">
-                    <input placeholder="Enter Name (e.g. Mike)" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} className="input-field rounded-lg p-2 flex-1"/>
-                    <button onClick={addTeamMember} className="bg-[#FF6700] text-black font-bold px-4 rounded-lg"><Plus/></button>
+                    <input
+                      placeholder="Enter Name (e.g. Mike)"
+                      value={newMemberName}
+                      onChange={e => {
+                        setNewMemberName(e.target.value);
+                        if (formErrors?.teamMember?.name) {
+                          setFormErrors((prev) => ({ ...prev, teamMember: { ...prev.teamMember, name: "" } }));
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!newMemberName.trim()) {
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            teamMember: { name: "Please enter a team member name." },
+                          }));
+                        }
+                      }}
+                      className={`input-field rounded-lg p-2 flex-1 ${
+                        formErrors?.teamMember?.name ? "border-red-500 focus:border-red-500" : ""
+                      }`}
+                    />
+                    <button
+                      onClick={addTeamMember}
+                      disabled={savingMember}
+                      className="bg-[#FF6700] text-black font-bold px-4 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <Plus/>
+                    </button>
                 </div>
+                {formErrors?.teamMember?.name ? (
+                  <p className="text-xs text-red-500 mb-4">{formErrors.teamMember.name}</p>
+                ) : null}
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                     {teamMembers.length === 0 ? <p className="text-industrial-muted text-xs text-center py-4">No team members added yet.</p> : teamMembers.map(m => (
                         <div key={m.id} className="bg-white/5 border border-white/5 p-3 rounded-lg flex justify-between items-center">
@@ -1353,7 +1885,7 @@ export default function LoadOut() {
         </div>
       )}
 
-      {toast && <div className={`fixed bottom-24 right-6 px-6 py-3 rounded shadow-xl font-bold text-white z-[60] animate-in slide-in-from-bottom-5 ${toast.type === "success" ? "bg-green-600" : "bg-blue-600"}`}>{toast.msg}</div>}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* DELETE TOOL CONFIRMATION MODAL */}
       {showDeleteConfirm && toolToDelete && (

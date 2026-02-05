@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { loadStripe } from '@stripe/stripe-js'
 import { createClient } from '../utils/supabase/client'
+import { logError } from '../../utils/logger'
 import {
   DollarSign,
   Camera,
@@ -85,7 +86,7 @@ export default function WelcomePage() {
         throw error
       }
     } catch (error) {
-      console.error('Checkout error:', error)
+      logError('Welcome checkout failed', error)
       alert(error.message || 'Failed to start checkout. Please try again.')
       setLoading(false)
     }

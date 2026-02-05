@@ -142,6 +142,13 @@ export default function SettingsPanel({
           <LogOut size={18} />
           <span className="text-sm">Sign Out</span>
         </button>
+
+        <p className="text-center text-xs text-[var(--text-sub)] pt-4">
+          Contact us at{" "}
+          <a href="mailto:fielddeskops@gmail.com" className="text-[#FF6700] hover:underline">
+            fielddeskops@gmail.com
+          </a>
+        </p>
       </div>
     </PanelContainer>
   );

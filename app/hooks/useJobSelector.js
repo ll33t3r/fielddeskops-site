@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '../utils/supabase/client';
+import { logError } from '../../utils/logger';
 
 export const useJobSelector = () => {
   const supabase = createClient();
@@ -37,7 +38,7 @@ export const useJobSelector = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading jobs:', error);
+      logError('Job selector load failed', error);
     }
     setLoading(false);
   };
@@ -64,7 +65,7 @@ export const useJobSelector = () => {
         return newJob;
       }
     } catch (error) {
-      console.error('Error creating job:', error);
+      logError('Job selector create failed', error);
     }
     return null;
   };

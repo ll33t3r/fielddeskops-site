@@ -23,6 +23,7 @@ import QuickEstimateModal from "../components/dashboard/quickadd/QuickEstimateMo
 import QuickInventoryModal from "../components/dashboard/quickadd/QuickInventoryModal";
 import QuickToolModal from "../components/dashboard/quickadd/QuickToolModal";
 import QuickPhotoModal from "../components/dashboard/quickadd/QuickPhotoModal";
+import JobHistory from "../components/JobHistory";
 
 export default function Dashboard() {
   const supabase = createClient();
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [showPhoneBookPanel, setShowPhoneBookPanel] = useState(false);
   const [showPhoneBookPanelAddMode, setShowPhoneBookPanelAddMode] = useState(false);
   const [showQuickAddMenu, setShowQuickAddMenu] = useState(false);
+  const [showJobHistory, setShowJobHistory] = useState(false);
 
   const {
     loading,
@@ -129,6 +131,7 @@ export default function Dashboard() {
     <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
       <DashboardHeader
         greeting={greeting}
+        onOpenJobHistory={() => setShowJobHistory(true)}
       />
 
       <div className="px-6 mb-3">
@@ -187,7 +190,7 @@ export default function Dashboard() {
             setActiveJob(job);
             setShowActiveJobsModal(false);
           },
-          onMarkComplete: (jobId) => handleUpdateJob(jobId, { status: "COMPLETED" }),
+          onMarkComplete: (jobId) => handleUpdateJob(jobId, { status: "COMPLETED", completed_at: new Date().toISOString() }),
         }}
       />
 
@@ -282,6 +285,14 @@ export default function Dashboard() {
         onClose={() => setShowQuickPhoto(false)}
         activeJob={activeJob}
         onSaved={handleQuickAddSaved}
+      />
+
+      <JobHistory
+        isOpen={showJobHistory}
+        onClose={() => setShowJobHistory(false)}
+        onReopen={(job) => {
+          setActiveJob({ ...job, status: "ACTIVE", completed_at: null });
+        }}
       />
     </div>
   );

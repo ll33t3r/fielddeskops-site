@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { createClient } from "../../utils/supabase/client";
 import SignatureCanvas from "react-signature-canvas";
 import { Loader2, CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
+import { logError } from "../../../utils/logger";
 
 export default function PublicSignPage() {
   const { token } = useParams();
@@ -19,6 +20,7 @@ export default function PublicSignPage() {
   const [hasSigned, setHasSigned] = useState(false);
   const [signing, setSigning] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     loadContract();
@@ -63,7 +65,7 @@ export default function PublicSignPage() {
           .eq("id", share.id);
       }
     } catch (err) {
-      console.error("Load error:", err);
+      logError("Public sign load failed", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -85,11 +87,12 @@ export default function PublicSignPage() {
 
   const handleSubmitSignature = async () => {
     if (!sigPad.current || sigPad.current.isEmpty()) {
-      alert("Please sign before submitting");
+      setSubmitError("Please sign before submitting.");
       return;
     }
 
     setSigning(true);
+    setSubmitError("");
 
     try {
       const signatureData = sigPad.current.toDataURL("image/png");
@@ -122,10 +125,9 @@ export default function PublicSignPage() {
             job_id: contractData.job_id,
             is_read: false,
           });
-          console.log("✓ Notification created");
         }
       } catch (notifError) {
-        console.error("Notification error:", notifError);
+        logError("Public sign notification failed", notifError);
         // Don't fail the signing process if notification fails
       }
 
@@ -141,8 +143,8 @@ export default function PublicSignPage() {
 
       setSuccess(true);
     } catch (err) {
-      console.error("Sign error:", err);
-      alert("Failed to save signature. Please try again.");
+      logError("Public sign save failed", err);
+      setSubmitError("Failed to save signature. Please try again.");
     } finally {
       setSigning(false);
     }
@@ -264,6 +266,9 @@ export default function PublicSignPage() {
               )}
             </button>
           </div>
+          {submitError ? (
+            <p className="text-sm text-red-600 mt-3 text-center">{submitError}</p>
+          ) : null}
 
           <p className="text-xs text-gray-500 mt-4 text-center">
             By signing, you agree to the terms outlined in this contract.

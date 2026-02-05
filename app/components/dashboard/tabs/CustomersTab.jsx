@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { Search, UserCircle, Mail, MapPin, FileText, Trash2, ChevronDown, Edit2, Check, X } from "lucide-react";
 import useResourcesManagement from "../../../hooks/useResourcesManagement";
+import { logError } from "../../../../utils/logger";
+import FormField from "../../shared/FormField";
+import { buildFieldErrors, isEmail, isPhone, isRequired } from "../../../utils/validation";
 
 export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const { customers, addCustomer, deleteCustomer, updateCustomer } = useResourcesManagement(supabase, {
@@ -13,16 +16,34 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [newErrors, setNewErrors] = useState({});
+  const [editErrors, setEditErrors] = useState({});
+
+  const validateCustomer = (values) =>
+    buildFieldErrors({
+      name: [
+        { isValid: isRequired(values.name), message: "Name is required." },
+      ],
+      email: values.email
+        ? [{ isValid: isEmail(values.email), message: "Enter a valid email." }]
+        : [],
+      phone: values.phone
+        ? [{ isValid: isPhone(values.phone), message: "Enter a valid phone number." }]
+        : [],
+    });
 
   const handleAddCustomer = async () => {
     const trimmedName = newCustomer.name.trim();
-    if (!trimmedName) return;
+    const errors = validateCustomer({ ...newCustomer, name: trimmedName });
+    setNewErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     const { error } = await addCustomer({ ...newCustomer, name: trimmedName });
     if (!error) {
       setNewCustomer({ name: "", phone: "", email: "", address: "", notes: "" });
+      setNewErrors({});
       await onResourcesUpdated();
     } else {
-      console.log("Add customer error", error);
+      logError("Add customer failed", error);
     }
   };
 
@@ -36,7 +57,9 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
 
   const handleUpdateCustomer = async (id) => {
     const trimmedName = editingCustomer?.name?.trim();
-    if (!trimmedName) return;
+    const errors = validateCustomer({ ...editingCustomer, name: trimmedName });
+    setEditErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     const { error } = await updateCustomer(id, {
       name: trimmedName,
       phone: editingCustomer.phone || "",
@@ -46,9 +69,10 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
     });
     if (!error) {
       setEditingCustomer(null);
+      setEditErrors({});
       await onResourcesUpdated();
     } else {
-      console.log("Update customer error", error);
+      logError("Update customer failed", error);
     }
   };
 
@@ -63,40 +87,60 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Customer</label>
         <div className="space-y-2">
-          <input
-            placeholder="Name..."
-            value={newCustomer.name}
-            onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-          />
-          <input
-            type="tel"
-            inputMode="numeric"
-            placeholder="Phone..."
-            value={newCustomer.phone}
-            onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value.replace(/[^0-9]/g, "") })}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-          />
-          <input
-            type="email"
-            placeholder="Email..."
-            value={newCustomer.email}
-            onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-          />
-          <input
-            placeholder="Address..."
-            value={newCustomer.address}
-            onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-          />
-          <textarea
-            placeholder="Notes..."
-            value={newCustomer.notes}
-            onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })}
-            rows={3}
-            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none resize-none"
-          />
+          <FormField id="new-customer-name" label="Name" required error={newErrors.name}>
+            <input
+              id="new-customer-name"
+              placeholder="Name..."
+              value={newCustomer.name}
+              onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+              onBlur={() => setNewErrors(validateCustomer(newCustomer))}
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+            />
+          </FormField>
+          <FormField id="new-customer-phone" label="Phone" error={newErrors.phone}>
+            <input
+              id="new-customer-phone"
+              type="tel"
+              inputMode="numeric"
+              placeholder="Phone..."
+              value={newCustomer.phone}
+              onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value.replace(/[^0-9]/g, "") })}
+              onBlur={() => setNewErrors(validateCustomer(newCustomer))}
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+            />
+          </FormField>
+          <FormField id="new-customer-email" label="Email" error={newErrors.email}>
+            <input
+              id="new-customer-email"
+              type="email"
+              placeholder="Email..."
+              value={newCustomer.email}
+              onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+              onBlur={() => setNewErrors(validateCustomer(newCustomer))}
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+            />
+          </FormField>
+          <FormField id="new-customer-address" label="Address">
+            <input
+              id="new-customer-address"
+              placeholder="Address..."
+              value={newCustomer.address}
+              onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+              onBlur={() => setNewErrors(validateCustomer(newCustomer))}
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
+            />
+          </FormField>
+          <FormField id="new-customer-notes" label="Notes">
+            <textarea
+              id="new-customer-notes"
+              placeholder="Notes..."
+              value={newCustomer.notes}
+              onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })}
+              onBlur={() => setNewErrors(validateCustomer(newCustomer))}
+              rows={3}
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-base text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none resize-none"
+            />
+          </FormField>
           <button onClick={handleAddCustomer} className="w-full bg-[#FF6700] text-black py-2 rounded-lg font-bold hover:shadow-[0_0_15px_rgba(255,103,0,0.4)] transition">
             Add Customer
           </button>
@@ -157,40 +201,60 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
                 <div className="px-3 pb-3 space-y-2 border-t border-[var(--border-color)] pt-3">
                   {editingCustomer?.id === customer.id ? (
                     <>
-                      <input
-                        value={editingCustomer.name}
-                        onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
-                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
-                        placeholder="Name"
-                      />
-                      <input
-                        value={editingCustomer.phone}
-                        onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value.replace(/[^0-9]/g, "") })}
-                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
-                        placeholder="Phone"
-                        type="tel"
-                        inputMode="numeric"
-                      />
-                      <input
-                        value={editingCustomer.email}
-                        onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
-                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
-                        placeholder="Email"
-                        type="email"
-                      />
-                      <input
-                        value={editingCustomer.address}
-                        onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
-                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
-                        placeholder="Address"
-                      />
-                      <textarea
-                        value={editingCustomer.notes}
-                        onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
-                        rows={3}
-                        className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)] resize-none"
-                        placeholder="Notes"
-                      />
+                      <FormField id={`edit-name-${customer.id}`} label="Name" required error={editErrors.name}>
+                        <input
+                          id={`edit-name-${customer.id}`}
+                          value={editingCustomer.name}
+                          onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                          onBlur={() => setEditErrors(validateCustomer(editingCustomer))}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
+                          placeholder="Name"
+                        />
+                      </FormField>
+                      <FormField id={`edit-phone-${customer.id}`} label="Phone" error={editErrors.phone}>
+                        <input
+                          id={`edit-phone-${customer.id}`}
+                          value={editingCustomer.phone}
+                          onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value.replace(/[^0-9]/g, "") })}
+                          onBlur={() => setEditErrors(validateCustomer(editingCustomer))}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
+                          placeholder="Phone"
+                          type="tel"
+                          inputMode="numeric"
+                        />
+                      </FormField>
+                      <FormField id={`edit-email-${customer.id}`} label="Email" error={editErrors.email}>
+                        <input
+                          id={`edit-email-${customer.id}`}
+                          value={editingCustomer.email}
+                          onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
+                          onBlur={() => setEditErrors(validateCustomer(editingCustomer))}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
+                          placeholder="Email"
+                          type="email"
+                        />
+                      </FormField>
+                      <FormField id={`edit-address-${customer.id}`} label="Address">
+                        <input
+                          id={`edit-address-${customer.id}`}
+                          value={editingCustomer.address}
+                          onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
+                          onBlur={() => setEditErrors(validateCustomer(editingCustomer))}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)]"
+                          placeholder="Address"
+                        />
+                      </FormField>
+                      <FormField id={`edit-notes-${customer.id}`} label="Notes">
+                        <textarea
+                          id={`edit-notes-${customer.id}`}
+                          value={editingCustomer.notes}
+                          onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
+                          onBlur={() => setEditErrors(validateCustomer(editingCustomer))}
+                          rows={3}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded px-2 py-1 text-base text-[var(--input-text)] resize-none"
+                          placeholder="Notes"
+                        />
+                      </FormField>
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleUpdateCustomer(customer.id)}

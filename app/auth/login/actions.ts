@@ -1,8 +1,9 @@
-﻿'use server'
+'use server'
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { logError } from '../../../utils/logger'
 
 export async function login(formData: FormData) {
   const email = formData.get('email') as string
@@ -40,7 +41,7 @@ export async function login(formData: FormData) {
     })
 
     if (error) {
-      console.error('Login error:', error.message)
+      logError('Login failed', error)
       
       // User-friendly error messages
       if (error.message.includes('Invalid login credentials')) {
@@ -58,7 +59,7 @@ export async function login(formData: FormData) {
     redirect('/dashboard')
     
   } catch (error) {
-    console.error('Unexpected login error:', error)
+    logError('Unexpected login error', error)
     return { error: 'An unexpected error occurred. Please try again.' }
   }
 }
@@ -117,7 +118,7 @@ export async function signup(formData: FormData) {
     })
 
     if (error) {
-      console.error('Signup error:', error.message)
+      logError('Signup failed', error)
       
       if (error.message.includes('already registered')) {
         return { error: 'This email is already registered. Try logging in instead.' }
@@ -145,7 +146,7 @@ export async function signup(formData: FormData) {
     redirect('/dashboard')
     
   } catch (error) {
-    console.error('Unexpected signup error:', error)
+    logError('Unexpected signup error', error)
     return { error: 'An unexpected error occurred. Please try again.' }
   }
 }

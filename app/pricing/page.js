@@ -1,4 +1,18 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
+
+export const metadata = {
+  title: 'Pricing',
+  description: 'Compare FieldDeskOps plans and choose the best fit.',
+  openGraph: {
+    title: 'Pricing',
+    description: 'Compare FieldDeskOps plans and choose the best fit.',
+    url: '/pricing',
+  },
+  twitter: {
+    title: 'Pricing',
+    description: 'Compare FieldDeskOps plans and choose the best fit.',
+  },
+}
 
 export default function PricingPage() {
   const plans = [

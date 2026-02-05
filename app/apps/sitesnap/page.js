@@ -7,10 +7,15 @@ import {
   Camera, Upload, X, ArrowLeft, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Image as ImageIcon,
   Trash2, Edit2, SplitSquareVertical, Grid3x3,
-  Share2, DollarSign, Plus, ChevronDown, Lock, CheckSquare
+  Share2, DollarSign, Lock, CheckSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import JobSelector from '../../components/shared/JobSelector';
+import Toast from '../../components/shared/Toast';
+import FormField from '../../components/shared/FormField';
+import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from '../../utils/validation';
+import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
+import { logError } from '../../../utils/logger';
 import {
   ReactCompareSlider,
   ReactCompareSliderImage
@@ -19,11 +24,13 @@ import {
 export default function SiteSnap() {
   const supabase = createClient();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const isOnline = useOnlineStatus();
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
   const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [preview, setPreview] = useState(null);
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -51,9 +58,38 @@ export default function SiteSnap() {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(pattern);
   };
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const compressImage = async (file) => {
+    const img = new Image();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Unable to read image file.'));
+      reader.readAsDataURL(file);
+    });
+
+    img.src = dataUrl;
+    await new Promise((resolve) => {
+      img.onload = () => resolve();
+    });
+
+    const maxWidth = 1600;
+    const scale = Math.min(1, maxWidth / img.width);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.8);
+    });
+
+    return blob || file;
   };
 
   useEffect(() => {
@@ -82,12 +118,17 @@ export default function SiteSnap() {
   const loadPhotos = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        showToast('Unable to verify your session. Please log in again.', 'error');
+        logError('SiteSnap auth failed', authError);
+        return;
+      }
       if (!user || !activeJob?.id) return;
 
       const { data: photos, error } = await supabase
         .from('photos')
-        .select('*')
+        .select('id, user_id, job_id, storage_path, caption, notes, photo_type, annotations, estimate_id, created_at')
         .eq('user_id', user.id)
         .eq('job_id', activeJob.id)
         .order('created_at', { ascending: false });
@@ -109,8 +150,8 @@ export default function SiteSnap() {
 
       setUploadedPhotos(photosWithUrls);
     } catch (error) {
-      console.error('Error loading photos:', error);
-      showToast('Error loading photos', 'error');
+      logError('SiteSnap photo load failed', error);
+      showToast('Unable to load photos. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -118,54 +159,130 @@ export default function SiteSnap() {
 
   const loadEstimates = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        showToast('Unable to verify your session. Please log in again.', 'error');
+        logError('SiteSnap auth failed', authError);
+        return;
+      }
       if (!user || !activeJob?.id) return;
 
-      const { data: estimates } = await supabase
+      const { data: estimates, error } = await supabase
         .from('estimates')
-        .select('*')
+        .select('id, total_price, created_at')
         .eq('user_id', user.id)
         .eq('job_id', activeJob.id)
         .order('created_at', { ascending: false });
 
+      if (error) {
+        showToast('Unable to load estimates. Please try again.', 'error');
+        logError('SiteSnap estimates load failed', error);
+        return;
+      }
+
       setEstimates(estimates || []);
     } catch (error) {
-      console.error('Error loading estimates:', error);
+      logError('SiteSnap estimates load failed', error);
+      showToast('Unable to load estimates. Please try again.', 'error');
+    }
+  };
+
+  const refreshPhotoUrl = async (photo) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('fielddeskops-photos')
+        .createSignedUrl(photo.storage_path, 3600);
+      if (error) {
+        showToast('Unable to refresh photo. Please try again.', 'error');
+        logError('SiteSnap photo refresh failed', error, { photoId: photo.id });
+        return;
+      }
+      setUploadedPhotos((prev) =>
+        prev.map((p) => (p.id === photo.id ? { ...p, image_url: data?.signedUrl || null } : p))
+      );
+    } catch (error) {
+      showToast('Unable to refresh photo. Please try again.', 'error');
+      logError('SiteSnap photo refresh failed', error, { photoId: photo.id });
     }
   };
 
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      const maxBytes = 10 * 1024 * 1024;
+      if (!isFileTypeAllowed(file, allowedTypes)) {
+        showToast('Unsupported image type. Use JPG, PNG, or WebP.', 'error');
+        setFormErrors((prev) => ({ ...prev, file: 'Unsupported image type.' }));
+        return;
+      }
+      if (!isFileSizeAllowed(file, maxBytes)) {
+        showToast('Photo too large. Max size is 10MB.', 'error');
+        setFormErrors((prev) => ({ ...prev, file: 'Photo too large (10MB max).' }));
+        return;
+      }
       setFileToUpload(file);
       const reader = new FileReader();
       reader.onload = (ev) => setPreview(ev.target.result);
       reader.readAsDataURL(file);
+      setFormErrors((prev) => ({ ...prev, file: '' }));
     }
   };
 
   const savePhoto = async () => {
-    if (!fileToUpload || !activeJob?.id) {
-      showToast('Missing file or job', 'error');
+    const errors = buildFieldErrors({
+      file: [{ isValid: !!fileToUpload, message: 'Please select a photo to upload.' }],
+      caption: [{ isValid: photoCaption.length <= 120, message: 'Caption must be under 120 characters.' }],
+      notes: [{ isValid: photoNotes.length <= 500, message: 'Notes must be under 500 characters.' }],
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({ ...prev, ...errors }));
+      showToast('Fix the highlighted fields before saving.', 'error');
+      return;
+    }
+
+    if (!activeJob?.id) {
+      showToast('Select a job before uploading photos.', 'error');
+      return;
+    }
+
+    if (!isOnline) {
+      showToast('You are offline. Reconnect to upload photos.', 'error');
       return;
     }
 
     try {
       setUploading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        showToast('Not authenticated', 'error');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast('Please log in to upload photos.', 'error');
+        if (authError) logError('SiteSnap auth failed', authError);
         return;
       }
 
+      const optimizedBlob = await compressImage(fileToUpload);
       const timestamp = Date.now();
       const fileName = `${user.id}/${activeJob.id}/${timestamp}.jpg`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('fielddeskops-photos')
-        .upload(fileName, fileToUpload, { upsert: false });
+      let uploadError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase.storage
+          .from('fielddeskops-photos')
+          .upload(fileName, optimizedBlob, { upsert: false, contentType: 'image/jpeg' });
+        if (!error) {
+          uploadError = null;
+          break;
+        }
+        uploadError = error;
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      }
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        showToast('Unable to upload photo. Check your connection and try again.', 'error');
+        logError('SiteSnap photo upload failed', uploadError);
+        return;
+      }
 
       const { data: newPhoto, error: dbError } = await supabase
         .from('photos')
@@ -179,14 +296,22 @@ export default function SiteSnap() {
           annotations: [],
           created_at: new Date().toISOString()
         })
-        .select()
+        .select('id, user_id, job_id, storage_path, caption, notes, photo_type, annotations, estimate_id, created_at')
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        showToast('Failed to save photo details. Please try again.', 'error');
+        logError('SiteSnap photo save failed', dbError);
+        return;
+      }
 
-      const { data: signedData } = await supabase.storage
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('fielddeskops-photos')
         .createSignedUrl(fileName, 3600);
+
+      if (signedError) {
+        logError('SiteSnap signed URL failed', signedError);
+      }
 
       if (newPhoto) {
         setUploadedPhotos([{ ...newPhoto, image_url: signedData?.signedUrl || null }, ...uploadedPhotos]);
@@ -196,11 +321,12 @@ export default function SiteSnap() {
         setPhotoNotes('');
         setPhotoTag('STANDARD');
         setShowUploadPanel(false);
-        showToast('Photo saved!', 'success');
+        setFormErrors((prev) => ({ ...prev, file: '', caption: '', notes: '' }));
+        showToast('Photo uploaded!', 'success');
       }
     } catch (error) {
-      console.error('Error saving photo:', error);
-      showToast('Error: ' + (error.message || 'Unknown error'), 'error');
+      logError('SiteSnap photo save failed', error);
+      showToast('Unable to save photo. Please try again.', 'error');
     } finally {
       setUploading(false);
     }
@@ -208,6 +334,10 @@ export default function SiteSnap() {
 
   const deleteSelectedPhotos = async () => {
     try {
+      if (!isOnline) {
+        showToast('You are offline. Reconnect to delete photos.', 'error');
+        return;
+      }
       await Promise.all(
         selectedPhotos.map(photoId => 
           supabase.from('photos').delete().eq('id', photoId)
@@ -220,13 +350,17 @@ export default function SiteSnap() {
       setShowDeleteConfirm(false);
       showToast(`${selectedPhotos.length} photo${selectedPhotos.length > 1 ? 's' : ''} deleted`, 'success');
     } catch (error) {
-      console.error('Error deleting photos:', error);
-      showToast('Error deleting photos', 'error');
+      logError('SiteSnap photo delete failed', error);
+      showToast('Unable to delete photos. Please try again.', 'error');
     }
   };
 
   const linkToEstimate = async (estimateId) => {
     if (!fullscreenPhoto?.id) return;
+    if (!isOnline) {
+      showToast('You are offline. Reconnect to link estimates.', 'error');
+      return;
+    }
     try {
       await supabase
         .from('photos')
@@ -243,8 +377,8 @@ export default function SiteSnap() {
       setShowEstimateLink(false);
       showToast('Linked to estimate!', 'success');
     } catch (error) {
-      console.error('Error linking estimate:', error);
-      showToast('Error linking estimate', 'error');
+      logError('SiteSnap estimate link failed', error);
+      showToast('Unable to link estimate. Please try again.', 'error');
     }
   };
 
@@ -267,7 +401,21 @@ export default function SiteSnap() {
   };
 
   const saveAnnotation = async (text) => {
-    if (!fullscreenPhoto?.id || !text.trim()) return;
+    if (!fullscreenPhoto?.id) return;
+    if (!text.trim()) {
+      setFormErrors((prev) => ({ ...prev, annotation: 'Please enter an annotation.' }));
+      showToast('Please enter an annotation.', 'error');
+      return;
+    }
+    if (text.length > 200) {
+      setFormErrors((prev) => ({ ...prev, annotation: 'Annotations must be under 200 characters.' }));
+      showToast('Annotation is too long.', 'error');
+      return;
+    }
+    if (!isOnline) {
+      showToast('You are offline. Reconnect to save annotations.', 'error');
+      return;
+    }
     try {
       const updatedAnnotations = [...(fullscreenPhoto.annotations || []), { text, timestamp: new Date().toISOString() }];
       await supabase
@@ -281,11 +429,12 @@ export default function SiteSnap() {
         p.id === fullscreenPhoto.id ? { ...p, annotations: updatedAnnotations } : p
       ));
       setAnnotationText('');
+      setFormErrors((prev) => ({ ...prev, annotation: '' }));
       setIsAnnotating(false);
       showToast('Annotation saved', 'success');
     } catch (error) {
-      console.error('Error saving annotation:', error);
-      showToast('Error saving annotation', 'error');
+      logError('SiteSnap annotation save failed', error);
+      showToast('Unable to save annotation. Please try again.', 'error');
     }
   };
 
@@ -322,8 +471,8 @@ export default function SiteSnap() {
         setSelectedPhotos([]);
       } catch (error) {
         if (error.name !== 'AbortError') {
-          console.error('Error sharing:', error);
-          showToast('Share cancelled', 'error');
+          logError('SiteSnap share failed', error);
+          showToast('Unable to share photos. Please try again.', 'error');
         }
       }
     } else {
@@ -351,7 +500,7 @@ export default function SiteSnap() {
       <div className="sticky top-0 z-40 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors text-[var(--text-main)]" aria-label="Back to dashboard">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -367,6 +516,7 @@ export default function SiteSnap() {
             }}
             disabled={!activeJob}
             className={`bg-[#FF6700] text-black p-3 rounded-xl transition-all shadow-[0_0_30px_rgba(255,103,0,0.6)] active:scale-95 ${activeJob ? "hover:scale-105" : "opacity-50 cursor-not-allowed"}`}
+            aria-label={showUploadPanel ? "Close upload panel" : "Open upload panel"}
           >
             <Camera size={24} />
           </button>
@@ -376,6 +526,14 @@ export default function SiteSnap() {
           <JobSelector />
         </div>
       </div>
+
+      {!isOnline ? (
+        <div className="max-w-6xl mx-auto px-6 mt-3">
+          <div className="bg-red-900/30 border border-red-500/40 text-red-200 text-xs rounded-lg px-3 py-2">
+            You are offline. Uploads and edits are disabled.
+          </div>
+        </div>
+      ) : null}
 
       <main className="max-w-6xl mx-auto px-6">
         {!activeJob ? (
@@ -435,7 +593,7 @@ export default function SiteSnap() {
               </div>
             ) : (
               <div className="relative rounded-xl overflow-hidden border-2 border-[#FF6700] mb-4 h-48 bg-black/10">
-                <img src={preview} className="w-full h-full object-cover" alt="Preview" />
+                <img src={preview} className="w-full h-full object-cover" alt={photoCaption || "Site photo preview"} />
                 <button
                   onClick={() => {
                     setPreview(null);
@@ -447,21 +605,55 @@ export default function SiteSnap() {
                 </button>
               </div>
             )}
+            {formErrors?.file ? (
+              <p className="text-xs text-red-500 mb-3">{formErrors.file}</p>
+            ) : null}
 
-            <input
-              placeholder="Photo Caption (optional)..."
-              value={photoCaption}
-              onChange={e => setPhotoCaption(e.target.value)}
-              className="w-full bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg p-3 mb-3 text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none"
-              style={{ fontSize: '16px' }}
-            />
-            <textarea
-              placeholder="Notes (what is visible, issues found, etc)..."
-              value={photoNotes}
-              onChange={e => setPhotoNotes(e.target.value)}
-              className="w-full bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg p-3 mb-4 text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] focus:border-[#FF6700] outline-none resize-none h-24"
-              style={{ fontSize: '16px' }}
-            />
+            <FormField label="Caption" error={formErrors?.caption} helperText="Optional, 120 characters max.">
+              <input
+                placeholder="Photo caption (optional)"
+                value={photoCaption}
+                onChange={e => {
+                  setPhotoCaption(e.target.value);
+                  if (formErrors?.caption) {
+                    setFormErrors((prev) => ({ ...prev, caption: '' }));
+                  }
+                }}
+                onBlur={() => {
+                  if (photoCaption.length > 120) {
+                    setFormErrors((prev) => ({ ...prev, caption: 'Caption must be under 120 characters.' }));
+                  }
+                }}
+                maxLength={120}
+                autoComplete="off"
+                className={`w-full bg-[var(--bg-main)] border rounded-lg p-3 mb-3 text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] outline-none ${
+                  formErrors?.caption ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                }`}
+                style={{ fontSize: '16px' }}
+              />
+            </FormField>
+            <FormField label="Notes" error={formErrors?.notes} helperText="Optional, 500 characters max.">
+              <textarea
+                placeholder="Notes (what is visible, issues found, etc)"
+                value={photoNotes}
+                onChange={e => {
+                  setPhotoNotes(e.target.value);
+                  if (formErrors?.notes) {
+                    setFormErrors((prev) => ({ ...prev, notes: '' }));
+                  }
+                }}
+                onBlur={() => {
+                  if (photoNotes.length > 500) {
+                    setFormErrors((prev) => ({ ...prev, notes: 'Notes must be under 500 characters.' }));
+                  }
+                }}
+                maxLength={500}
+                className={`w-full bg-[var(--bg-main)] border rounded-lg p-3 mb-4 text-[var(--text-main)] placeholder:text-[var(--input-placeholder)] outline-none resize-none h-24 ${
+                  formErrors?.notes ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                }`}
+                style={{ fontSize: '16px' }}
+              />
+            </FormField>
 
             <button
               onClick={savePhoto}
@@ -521,7 +713,24 @@ export default function SiteSnap() {
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
                     >
-                      {photo.image_url && <img src={photo.image_url} className="w-full h-full object-cover" alt="Before" />}
+                      {photo.image_url ? (
+                        <img
+                          src={photo.image_url}
+                          className="w-full h-full object-cover"
+                          alt={photo.caption || "Before photo"}
+                          loading="lazy"
+                          onError={() => {
+                            setUploadedPhotos((prev) => prev.map((p) => p.id === photo.id ? { ...p, image_url: null } : p));
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-sub)] text-xs">
+                          <ImageIcon size={20} className="mb-2" />
+                          <button onClick={() => refreshPhotoUrl(photo)} className="text-[10px] uppercase font-bold text-[#FF6700]">
+                            Retry
+                          </button>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                       <div className="absolute top-1 left-1">
                         <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-red-500 text-white">
@@ -563,7 +772,24 @@ export default function SiteSnap() {
                       }}
                       className="relative h-32 rounded-lg overflow-hidden cursor-pointer group industrial-card"
                     >
-                      {photo.image_url && <img src={photo.image_url} className="w-full h-full object-cover" alt="After" />}
+                      {photo.image_url ? (
+                        <img
+                          src={photo.image_url}
+                          className="w-full h-full object-cover"
+                          alt={photo.caption || "After photo"}
+                          loading="lazy"
+                          onError={() => {
+                            setUploadedPhotos((prev) => prev.map((p) => p.id === photo.id ? { ...p, image_url: null } : p));
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-sub)] text-xs">
+                          <ImageIcon size={20} className="mb-2" />
+                          <button onClick={() => refreshPhotoUrl(photo)} className="text-[10px] uppercase font-bold text-[#FF6700]">
+                            Retry
+                          </button>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                       <div className="absolute top-1 left-1">
                         <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-green-500 text-white">
@@ -635,10 +861,21 @@ export default function SiteSnap() {
                       className="relative h-32 sm:h-40 rounded-lg overflow-hidden cursor-pointer group industrial-card"
                     >
                       {photo.image_url ? (
-                        <img src={photo.image_url} className="w-full h-full object-cover" alt="Photo" />
+                        <img
+                          src={photo.image_url}
+                          className="w-full h-full object-cover"
+                          alt={photo.caption || "Site photo"}
+                          loading="lazy"
+                          onError={() => {
+                            setUploadedPhotos((prev) => prev.map((p) => p.id === photo.id ? { ...p, image_url: null } : p));
+                          }}
+                        />
                       ) : (
-                        <div className="w-full h-full bg-[var(--bg-surface)] flex items-center justify-center">
-                          <AlertTriangle size={24} className="text-[var(--text-sub)]" />
+                        <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-sub)] text-xs">
+                          <ImageIcon size={20} className="mb-2" />
+                          <button onClick={() => refreshPhotoUrl(photo)} className="text-[10px] uppercase font-bold text-[#FF6700]">
+                            Retry
+                          </button>
                         </div>
                       )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
@@ -763,6 +1000,7 @@ export default function SiteSnap() {
                   setShowBeforeAfter(false);
                 }}
                 className="text-white hover:text-[#FF6700] transition-colors"
+                aria-label="Close photo viewer"
               >
                 <X size={28} />
               </button>
@@ -797,6 +1035,7 @@ export default function SiteSnap() {
                   setSelectedPhotos([fullscreenPhoto.id]);
                 }}
                 className="text-red-400 hover:text-red-300 transition-colors p-2"
+                aria-label="Delete photo"
               >
                 <Trash2 size={24} />
               </button>
@@ -824,16 +1063,27 @@ export default function SiteSnap() {
                   style={{ maxHeight: '70vh' }}
                 />
                 <div className="flex justify-between mt-3 px-4">
-                  <span className="text-xs font-bold uppercase text-red-400">â† BEFORE</span>
-                  <span className="text-xs font-bold uppercase text-green-400">AFTER â†’</span>
+                  <span className="text-xs font-bold uppercase text-red-400">&lt;- BEFORE</span>
+                  <span className="text-xs font-bold uppercase text-green-400">AFTER -&gt;</span>
                 </div>
               </div>
             ) : fullscreenPhoto.image_url ? (
-              <img src={fullscreenPhoto.image_url} className="max-w-full max-h-full object-contain" alt="Full view" />
+              <img
+                src={fullscreenPhoto.image_url}
+                className="max-w-full max-h-full object-contain"
+                alt={fullscreenPhoto.caption || "Full photo view"}
+                onError={() => {
+                  setUploadedPhotos((prev) => prev.map((p) => p.id === fullscreenPhoto.id ? { ...p, image_url: null } : p));
+                  setFullscreenPhoto((prev) => ({ ...prev, image_url: null }));
+                }}
+              />
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <AlertTriangle size={48} className="text-white/50" />
+                <ImageIcon size={32} className="mb-2 text-[var(--text-sub)]" />
                 <p className="text-white/50 text-sm">Unable to load image</p>
+                <button onClick={() => refreshPhotoUrl(fullscreenPhoto)} className="text-xs uppercase font-bold text-[#FF6700]">
+                  Retry Loading
+                </button>
               </div>
             )}
           </div>
@@ -855,7 +1105,7 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-1 flex items-center gap-2">
                   <Lock size={16} /> Linked Estimate
                 </p>
-                <p className="text-white/80 text-sm">${linkedEstimate.total_price?.toFixed(2)} â€¢ {new Date(linkedEstimate.created_at).toLocaleDateString()}</p>
+                <p className="text-white/80 text-sm">${linkedEstimate.total_price?.toFixed(2)} - {new Date(linkedEstimate.created_at).toLocaleDateString()}</p>
               </div>
             )}
 
@@ -864,31 +1114,47 @@ export default function SiteSnap() {
                 <p className="text-[#FF6700] font-bold text-sm mb-2">Annotations:</p>
                 <div className="space-y-1 max-h-24 overflow-y-auto">
                   {annotations.map((ann, idx) => (
-                    <p key={idx} className="text-white/70 text-xs">â€¢ {ann.text}</p>
+                    <p key={idx} className="text-white/70 text-xs">- {ann.text}</p>
                   ))}
                 </div>
               </div>
             )}
 
             {isAnnotating && (
-              <div className="flex gap-2 pb-3 border-b border-white/10">
-                <input
-                  autoFocus
-                  placeholder="Add note or label..."
-                  value={annotationText}
-                  onChange={e => setAnnotationText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && annotationText.trim() && saveAnnotation(annotationText)}
-                  className="flex-1 bg-white/10 text-white rounded px-3 py-2 placeholder:text-white/40 outline-none focus:bg-white/20 text-sm"
-                  style={{ fontSize: '16px' }}
-                />
-                <button
-                  onClick={() => saveAnnotation(annotationText)}
-                  disabled={!annotationText.trim()}
-                  className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(255,103,0,0.4)]"
-                >
-                  Save
-                </button>
-              </div>
+              <>
+                <div className="flex gap-2 pb-3 border-b border-white/10">
+                  <input
+                    autoFocus
+                    placeholder="Add note or label..."
+                    value={annotationText}
+                    onChange={e => {
+                      setAnnotationText(e.target.value);
+                      if (formErrors?.annotation) {
+                        setFormErrors((prev) => ({ ...prev, annotation: '' }));
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveAnnotation(annotationText);
+                      }
+                    }}
+                    maxLength={200}
+                    className="flex-1 bg-white/10 text-white rounded px-3 py-2 placeholder:text-white/40 outline-none focus:bg-white/20 text-sm"
+                    style={{ fontSize: '16px' }}
+                  />
+                  <button
+                    onClick={() => saveAnnotation(annotationText)}
+                    disabled={!annotationText.trim()}
+                    className="bg-[#FF6700] text-black px-3 py-2 rounded font-bold text-sm active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(255,103,0,0.4)]"
+                  >
+                    Save
+                  </button>
+                </div>
+                {formErrors?.annotation ? (
+                  <p className="text-xs text-red-400 pb-3">{formErrors.annotation}</p>
+                ) : null}
+              </>
             )}
 
             {showBeforeAfter ? (
@@ -1019,13 +1285,7 @@ export default function SiteSnap() {
         </div>
       )}
 
-      {toast && (
-        <div className={`fixed bottom-24 right-6 px-4 py-3 rounded-lg font-bold text-sm animate-in slide-in-from-bottom-5 shadow-xl z-50 ${
-          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-        }`}>
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

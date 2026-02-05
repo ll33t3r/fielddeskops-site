@@ -96,7 +96,7 @@ export default function useJobDetails(jobId) {
         if (jobData?.rig_id) {
           const { data: fleetData } = await supabase
             .from("fleet")
-            .select("*")
+            .select("id, user_id, name, created_at")
             .eq("id", jobData.rig_id)
             .single();
           setRig(fleetData || null);

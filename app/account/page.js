@@ -1,6 +1,18 @@
-﻿import Link from 'next/link'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient } from '../../lib/supabase/server'
 
-export default function AccountPage() {
+export default async function AccountPage() {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    const message = encodeURIComponent('Please log in to continue.')
+    redirect(`/auth/login?redirectTo=${encodeURIComponent('/account')}&message=${message}`)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-950 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">

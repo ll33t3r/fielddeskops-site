@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { createClient } from "../app/utils/supabase/client";
+import { logError } from "../utils/logger";
 
 const ACTIVE_JOB_KEY = "fieldDeskOps_activeJob";
 
@@ -24,7 +26,7 @@ export function useActiveJob() {
         setActiveJobState(null);
       }
     } catch (e) {
-      console.error("Failed to sync active job");
+      logError("ActiveJob sync failed", e);
       setActiveJobState(null);
     }
   }, []);
@@ -64,5 +66,29 @@ export function useActiveJob() {
     window.dispatchEvent(new Event("active-job-update"));
   }, []);
 
-  return { activeJob, setActiveJob, clearActiveJob, syncActiveJob };
+  const completeJob = useCallback(async (jobId) => {
+    const supabase = createClient();
+    try {
+      const { error } = await supabase
+        .from("jobs")
+        .update({
+          status: "COMPLETED",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+
+      if (error) {
+        logError("ActiveJob completion failed", error, { jobId });
+        return { error };
+      }
+
+      clearActiveJob();
+      return { error: null };
+    } catch (error) {
+      logError("ActiveJob completion failed", error, { jobId });
+      return { error };
+    }
+  }, [clearActiveJob]);
+
+  return { activeJob, setActiveJob, clearActiveJob, completeJob, syncActiveJob };
 }

@@ -1,16 +1,55 @@
-﻿'use client'
+'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { signup } from './actions'
 import { useRouter } from 'next/navigation'
 import { Loader2, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
+import FormField from '../../components/shared/FormField'
+import { buildFieldErrors, inRange, isEmail, isRequired } from '../../utils/validation'
 
 export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [checkEmail, setCheckEmail] = useState(false)
+  const [formValues, setFormValues] = useState({ email: '', password: '' })
+  const [touched, setTouched] = useState({})
+  const [fieldErrors, setFieldErrors] = useState({})
   const router = useRouter()
+
+  const validate = useMemo(
+    () => (values) =>
+      buildFieldErrors({
+        email: [
+          { isValid: isRequired(values.email), message: 'Email is required.' },
+          { isValid: isEmail(values.email), message: 'Enter a valid email address.' },
+        ],
+        password: [
+          { isValid: isRequired(values.password), message: 'Password is required.' },
+          {
+            isValid: inRange((values.password || '').length, 8),
+            message: 'Password must be at least 8 characters.',
+          },
+        ],
+      }),
+    []
+  )
+
+  const handleChange = (field) => (event) => {
+    const { value } = event.target
+    setFormValues((prev) => {
+      const next = { ...prev, [field]: value }
+      if (touched[field]) {
+        setFieldErrors(validate(next))
+      }
+      return next
+    })
+  }
+
+  const handleBlur = (field) => () => {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+    setFieldErrors(validate({ ...formValues, [field]: formValues[field] }))
+  }
 
   const handleSubmit = async (formData) => {
     setLoading(true)
@@ -22,10 +61,16 @@ export default function SignupPage() {
       setError(result.error)
       setLoading(false)
     } else if (result?.autoConfirmed) {
+      setFormValues({ email: '', password: '' })
+      setTouched({})
+      setFieldErrors({})
       // If account created AND logged in -> Go to Dashboard
       router.refresh()
       router.push('/')
     } else {
+      setFormValues({ email: '', password: '' })
+      setTouched({})
+      setFieldErrors({})
       // If account created but needs email check
       setCheckEmail(true)
       setLoading(false)
@@ -59,28 +104,55 @@ export default function SignupPage() {
       </div>
 
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
-        <form action={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email Address</label>
-            <input 
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            const nextErrors = validate(formValues)
+            setFieldErrors(nextErrors)
+            setTouched({ email: true, password: true })
+            if (Object.keys(nextErrors).length > 0) return
+            handleSubmit(new FormData(event.currentTarget))
+          }}
+          className="space-y-4"
+          noValidate
+        >
+          <FormField
+            id="signup-email"
+            label="Email Address"
+            required
+            error={touched.email ? fieldErrors.email : null}
+          >
+            <input
+              id="signup-email"
               name="email"
-              type="email" 
-              required
+              type="email"
+              value={formValues.email}
+              onChange={handleChange('email')}
+              onBlur={handleBlur('email')}
               placeholder="user@example.com"
               className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              aria-invalid={touched.email && fieldErrors.email ? 'true' : 'false'}
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Password</label>
-            <input 
+          <FormField
+            id="signup-password"
+            label="Password"
+            required
+            error={touched.password ? fieldErrors.password : null}
+          >
+            <input
+              id="signup-password"
               name="password"
-              type="password" 
-              required
+              type="password"
+              value={formValues.password}
+              onChange={handleChange('password')}
+              onBlur={handleBlur('password')}
               placeholder="••••••••"
               className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              aria-invalid={touched.password && fieldErrors.password ? 'true' : 'false'}
             />
-          </div>
+          </FormField>
 
           {error && (
             <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm text-center">

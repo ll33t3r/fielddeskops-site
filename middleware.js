@@ -65,6 +65,7 @@ export async function middleware(request) {
   if (isProtectedRoute && !session) {
     const redirectUrl = new URL('/auth/login', request.url)
     redirectUrl.searchParams.set('redirectTo', pathname)
+    redirectUrl.searchParams.set('message', 'Please log in to continue.')
     return NextResponse.redirect(redirectUrl)
   }
 

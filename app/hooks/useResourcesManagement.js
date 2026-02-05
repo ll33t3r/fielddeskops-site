@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { logError, logWarn } from "../../utils/logger";
 
 export default function useResourcesManagement(supabase, options = {}) {
   const {
@@ -18,51 +19,103 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const loadWorkers = useCallback(async () => {
     if (!includeCrew) return [];
-    const { data } = await supabase.from("crew").select("*").order("name");
-    if (data) {
-      setWorkers(data);
-      return data;
+    try {
+      const { data, error } = await supabase
+        .from("crew")
+        .select("id, user_id, name, role, phone, email, status, created_at, updated_at")
+        .order("name");
+      if (error) {
+        logError("Resources load workers failed", error);
+        return [];
+      }
+      if (data) {
+        setWorkers(data);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      logError("Resources load workers failed", error);
+      return [];
     }
-    return [];
   }, [includeCrew, supabase]);
 
   const loadFleet = useCallback(async () => {
     if (!includeFleet) return [];
-    const { data } = await supabase.from("fleet").select("*").order("name");
-    if (data) {
-      setFleet(data);
-      return data;
+    try {
+      const { data, error } = await supabase
+        .from("fleet")
+        .select("id, user_id, name, created_at")
+        .order("name");
+      if (error) {
+        logError("Resources load fleet failed", error);
+        return [];
+      }
+      if (data) {
+        setFleet(data);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      logError("Resources load fleet failed", error);
+      return [];
     }
-    return [];
   }, [includeFleet, supabase]);
 
   const loadRigs = useCallback(async () => {
     if (!includeRigs) return [];
-    const { data } = await supabase.from("fleet").select("*").order("name");
-    if (data) {
-      setRigs(data);
-      return data;
+    try {
+      const { data, error } = await supabase
+        .from("fleet")
+        .select("id, user_id, name, created_at")
+        .order("name");
+      if (error) {
+        logError("Resources load rigs failed", error);
+        return [];
+      }
+      if (data) {
+        setRigs(data);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      logError("Resources load rigs failed", error);
+      return [];
     }
-    return [];
   }, [includeRigs, supabase]);
 
   const loadCustomers = useCallback(async () => {
     if (!includeCustomers) return [];
-    const { data } = await supabase.from("customers").select("*").order("name");
-    if (data) {
-      setCustomers(data);
-      return data;
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, user_id, name, phone, email, address, notes, created_at, updated_at")
+        .order("name");
+      if (error) {
+        logError("Resources load customers failed", error);
+        return [];
+      }
+      if (data) {
+        setCustomers(data);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      logError("Resources load customers failed", error);
+      return [];
     }
-    return [];
   }, [includeCustomers, supabase]);
 
   const loadResources = useCallback(async () => {
-    const promises = [];
-    if (includeCrew) promises.push(loadWorkers());
-    if (includeFleet) promises.push(loadFleet());
-    if (includeCustomers) promises.push(loadCustomers());
-    if (includeRigs) promises.push(loadRigs());
-    await Promise.all(promises);
+    try {
+      const promises = [];
+      if (includeCrew) promises.push(loadWorkers());
+      if (includeFleet) promises.push(loadFleet());
+      if (includeCustomers) promises.push(loadCustomers());
+      if (includeRigs) promises.push(loadRigs());
+      await Promise.all(promises);
+    } catch (error) {
+      logError("Resources load all failed", error);
+    }
   }, [includeCrew, includeFleet, includeCustomers, includeRigs, loadWorkers, loadFleet, loadCustomers, loadRigs]);
 
   useEffect(() => {
@@ -73,47 +126,72 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const addWorker = useCallback(async (newWorker) => {
     if (!newWorker?.name?.trim()) return { data: null, error: null };
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from("crew").insert({
-      user_id: user.id,
-      name: newWorker.name,
-      role: newWorker.role || "Tech",
-    }).select().single();
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user?.id) {
+        logError("Resources add worker missing user", userError, { userData });
+        return { data: null, error: userError || new Error("Missing authenticated user") };
+      }
+      const { data, error } = await supabase.from("crew").insert({
+        user_id: userData.user.id,
+        name: newWorker.name,
+        role: newWorker.role || "Tech",
+      }).select("id, user_id, name, role, phone, email, status, created_at, updated_at").single();
 
-    if (data && !error) {
-      await loadWorkers();
+      if (data && !error) {
+        await loadWorkers();
+      }
+      return { data, error };
+    } catch (error) {
+      logError("Resources add worker failed", error);
+      return { data: null, error };
     }
-    return { data, error };
   }, [supabase, loadWorkers]);
 
   const deleteWorker = useCallback(async (id) => {
-    const { error } = await supabase.from("crew").delete().eq("id", id);
-    if (!error) {
-      await loadWorkers();
+    try {
+      const { error } = await supabase.from("crew").delete().eq("id", id);
+      if (!error) {
+        await loadWorkers();
+      }
+      return { error };
+    } catch (error) {
+      logError("Resources delete worker failed", error, { id });
+      return { error };
     }
-    return { error };
   }, [supabase, loadWorkers]);
 
   const addRig = useCallback(async (newRig) => {
     if (!newRig?.name?.trim()) return { error: null };
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("fleet").insert({
-      user_id: user.id,
-      name: newRig.name,
-      plate_number: newRig.plate || "",
-    });
-    if (!error) {
-      await loadFleet();
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user?.id) {
+        logError("Resources add rig missing user", userError, { userData });
+        return { error: userError || new Error("Missing authenticated user") };
+      }
+      const payload = { user_id: userData.user.id, name: newRig.name };
+      const { error } = await supabase.from("fleet").insert(payload);
+      if (!error) {
+        await loadFleet();
+      }
+      return { error };
+    } catch (error) {
+      logError("Resources add rig failed", error);
+      return { error };
     }
-    return { error };
   }, [supabase, loadFleet]);
 
   const deleteRig = useCallback(async (id) => {
-    const { error } = await supabase.from("fleet").delete().eq("id", id);
-    if (!error) {
-      await loadFleet();
+    try {
+      const { error } = await supabase.from("fleet").delete().eq("id", id);
+      if (!error) {
+        await loadFleet();
+      }
+      return { error };
+    } catch (error) {
+      logError("Resources delete rig failed", error, { id });
+      return { error };
     }
-    return { error };
   }, [supabase, loadFleet]);
 
   const addCustomer = useCallback(async (newCustomer) => {
@@ -122,7 +200,7 @@ export default function useResourcesManagement(supabase, options = {}) {
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user?.id) {
-      console.log("Add customer failed: missing user", { userError, userData });
+      logError("Resources add customer missing user", userError, { userData });
       return { error: userError || new Error("Missing authenticated user") };
     }
 
@@ -149,7 +227,7 @@ export default function useResourcesManagement(supabase, options = {}) {
       if (!match) break;
       const missingColumn = match[1];
       if (!Object.prototype.hasOwnProperty.call(payload, missingColumn)) break;
-      console.log("Add customer retry: missing column", missingColumn);
+      logWarn("Resources add customer missing column", { missingColumn });
       // Drop missing column and retry insert.
       const { [missingColumn]: _removed, ...rest } = payload;
       payload = rest;
@@ -159,27 +237,31 @@ export default function useResourcesManagement(supabase, options = {}) {
     const { data, error } = result;
 
     if (error) {
-      console.log("Add customer insert failed", { error, payload });
+      logError("Resources add customer failed", error, { payload });
     } else {
-      console.log("Add customer success", data);
       await loadCustomers();
     }
     return { data, error };
   }, [supabase, loadCustomers]);
 
   const deleteCustomer = useCallback(async (id) => {
-    const { error } = await supabase.from("customers").delete().eq("id", id);
-    if (!error) {
-      await loadCustomers();
+    try {
+      const { error } = await supabase.from("customers").delete().eq("id", id);
+      if (!error) {
+        await loadCustomers();
+      }
+      return { error };
+    } catch (error) {
+      logError("Resources delete customer failed", error, { id });
+      return { error };
     }
-    return { error };
   }, [supabase, loadCustomers]);
 
   const updateCustomer = useCallback(async (id, updates) => {
     if (!id) return { error: null };
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user?.id) {
-      console.log("Update customer failed: missing user", { userError, userData });
+      logError("Resources update customer missing user", userError, { userData });
       return { error: userError || new Error("Missing authenticated user") };
     }
 
@@ -207,7 +289,7 @@ export default function useResourcesManagement(supabase, options = {}) {
       if (!match) break;
       const missingColumn = match[1];
       if (!Object.prototype.hasOwnProperty.call(payload, missingColumn)) break;
-      console.log("Update customer retry: missing column", missingColumn);
+      logWarn("Resources update customer missing column", { missingColumn });
       const { [missingColumn]: _removed, ...rest } = payload;
       payload = rest;
       result = await updateCustomerRow(payload);
@@ -216,9 +298,8 @@ export default function useResourcesManagement(supabase, options = {}) {
 
     const { data, error } = result;
     if (error) {
-      console.log("Update customer failed", { error, payload, id });
+      logError("Resources update customer failed", error, { payload, id });
     } else {
-      console.log("Update customer success", data);
       await loadCustomers();
     }
     return { data, error };

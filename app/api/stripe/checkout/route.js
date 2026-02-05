@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { logError } from '../../../../utils/logger'
 
 // Prevent static generation
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,7 @@ export async function POST(request) {
     // Validate environment variables with better error logging
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY
     if (!stripeSecretKey) {
-      console.error('Missing STRIPE_SECRET_KEY')
+      logError('Checkout missing STRIPE_SECRET_KEY')
       return NextResponse.json(
         { error: 'Stripe Secret Key not configured. Check environment variables.' },
         { status: 500 }
@@ -20,7 +21,7 @@ export async function POST(request) {
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
     if (!siteUrl) {
-      console.error('Missing NEXT_PUBLIC_SITE_URL')
+      logError('Checkout missing NEXT_PUBLIC_SITE_URL')
       return NextResponse.json(
         { error: 'Site URL not configured. Check environment variables.' },
         { status: 500 }
@@ -29,7 +30,7 @@ export async function POST(request) {
 
     const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID
     if (!priceId) {
-      console.error('Missing NEXT_PUBLIC_STRIPE_PRICE_ID')
+      logError('Checkout missing NEXT_PUBLIC_STRIPE_PRICE_ID')
       return NextResponse.json(
         { error: 'Stripe Price ID not configured. Check environment variables.' },
         { status: 500 }
@@ -38,7 +39,7 @@ export async function POST(request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     if (!supabaseUrl) {
-      console.error('Missing NEXT_PUBLIC_SUPABASE_URL')
+      logError('Checkout missing NEXT_PUBLIC_SUPABASE_URL')
       return NextResponse.json(
         { error: 'Supabase URL not configured. Check environment variables.' },
         { status: 500 }
@@ -47,7 +48,7 @@ export async function POST(request) {
 
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     if (!supabaseAnonKey) {
-      console.error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
+      logError('Checkout missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
       return NextResponse.json(
         { error: 'Supabase Anon Key not configured. Check environment variables.' },
         { status: 500 }
@@ -101,7 +102,7 @@ export async function POST(request) {
       )
     }
 
-    // Ensure profile exists
+    // Ensure profile exists (RLS should restrict profiles by auth.uid()).
     if (user) {
 
       const { data: profile, error: profileError } = await supabase
@@ -120,7 +121,7 @@ export async function POST(request) {
           })
 
         if (createError) {
-          console.error('Error creating profile:', createError)
+          logError('Checkout profile create failed', createError)
           // Don't fail checkout if profile creation fails
         }
       }
@@ -154,7 +155,7 @@ export async function POST(request) {
     return NextResponse.json({ url: session.url })
 
   } catch (error) {
-    console.error('Checkout session creation error:', error)
+    logError('Checkout session creation failed', error)
     return NextResponse.json(
       { error: error.message || 'Failed to create checkout session' },
       { status: 500 }

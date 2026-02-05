@@ -81,7 +81,7 @@ export default function PanelContainer({ isOpen, onClose, title, children }) {
               <X size={18} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto hide-scrollbar px-5 py-4">
             {children}
           </div>
         </div>

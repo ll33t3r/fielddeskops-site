@@ -4,18 +4,24 @@ import { useState, useRef, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import {
-  PenTool, Save, RotateCcw, FileText, Calendar, User, Trash2, CheckCircle2, Loader2, X,
-  ArrowLeft, Menu, Plus, ChevronDown, Clock, Copy, Eye, Pencil, Pin, PinOff,
-  Camera, Image as ImageIcon, Maximize2, Check, DollarSign, Brain, ChevronRight,
+  PenTool, Save, Loader2, X,
+  ArrowLeft, Menu, Pin,
+  Camera, Image as ImageIcon, ChevronRight,
 } from "lucide-react";
 import { baseVarKeys, formTypes, TEMPLATES } from "../../../src/data/signOffTemplates";
 import Link from "next/link";
 import SignOffModals from "./SignOffModals";
 import JobSelector from "../../components/shared/JobSelector";
+import Toast from "../../components/shared/Toast";
+import FormField from "../../components/shared/FormField";
+import { buildFieldErrors, inRange, isEmail, isPhone, isRequired } from "../../utils/validation";
+import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
+import { logError } from "../../../utils/logger";
 
 export default function SignOff() {
   const supabase = createClient();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const isOnline = useOnlineStatus();
   const sigPad = useRef({});
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
@@ -24,6 +30,7 @@ export default function SignOff() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastState, setToastState] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuTab, setMenuTab] = useState("DATA");
@@ -68,6 +75,7 @@ export default function SignOff() {
   const [linkedEstimate, setLinkedEstimate] = useState(null);
   const [jobLinkedData, setJobLinkedData] = useState(null);
   const [smartVariables, setSmartVariables] = useState({});
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   // Save custom variables to localStorage whenever they change
   useEffect(() => {
@@ -119,11 +127,24 @@ export default function SignOff() {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(p);
   };
 
-  const showToast = (msg, type = "success") => {
-    setToastState({ msg, type });
+  const showToast = (message, type = "success") => {
+    setToastState({ message, type });
     setTimeout(() => setToastState(null), 3000);
   };
 
+  const openConfirmDialog = ({ title, description, confirmLabel = "Delete", onConfirm }) => {
+    setConfirmDialog({ title, description, confirmLabel, onConfirm, loading: false });
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmDialog?.onConfirm) return;
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+    } finally {
+      setConfirmDialog(null);
+    }
+  };
 
   const toast = {
     error: (msg) => showToast(msg, "error"),
@@ -218,12 +239,12 @@ export default function SignOff() {
           ]);
         };
         reader.onerror = (err) => {
-          console.error("Photo read error:", err);
+          logError("SignOff photo read failed", err);
           showToast("Failed to read photo", "error");
         };
         reader.readAsDataURL(file);
       } catch (error) {
-        console.error("Photo processing error:", error);
+        logError("SignOff photo processing failed", error);
         showToast("Photo processing failed", "error");
       }
     });
@@ -253,18 +274,30 @@ export default function SignOff() {
     }
     
     try {
-      const { data: job } = await supabase
+      const { data: job, error: jobError } = await supabase
         .from("jobs")
-        .select("*")
+        .select("id, title, status, customer_name, contractor_name, address")
         .eq("id", jobId)
         .single();
+      if (jobError) {
+        showToast("Unable to load job data.", "error");
+        logError("SignOff job load failed", jobError, { jobId });
+        return;
+      }
       if (job) {
         setJobLinkedData(job);
         
         if (job.customer_name) setClientName(job.customer_name);
         if (job.contractor_name) setContractorName(job.contractor_name);
         
-        const { data: estimate } = await supabase.from("estimates").select("*").eq("job_id", jobId).maybeSingle();
+        const { data: estimate, error: estimateError } = await supabase
+          .from("estimates")
+          .select("id, total_price, service_name, created_at")
+          .eq("job_id", jobId)
+          .maybeSingle();
+        if (estimateError) {
+          logError("SignOff estimate load failed", estimateError, { jobId });
+        }
         if (estimate) setLinkedEstimate(estimate);
 
         const baseVars = {
@@ -289,7 +322,7 @@ export default function SignOff() {
             customVars = JSON.parse(stored) || {};
           }
         } catch (err) {
-          console.error("Load custom vars error:", err);
+          logError("SignOff custom vars load failed", err);
         }
 
         const customVarsKey = `signoff_custom_vars_${jobId}`;
@@ -305,7 +338,7 @@ export default function SignOff() {
         });
       }
     } catch (error) {
-      console.error("Brain load error:", error);
+      logError("SignOff smart variable load failed", error);
     }
   };
 
@@ -350,12 +383,12 @@ export default function SignOff() {
     try {
       const { data: photoRows, error: photoError } = await supabase
         .from("contract_photos")
-        .select("*")
+        .select("id, photo_data, created_at")
         .eq("contract_id", contract.id)
         .order("display_order", { ascending: true });
 
       if (photoError) {
-        console.error("Load contract photos error:", photoError);
+        logError("SignOff contract photo load failed", photoError);
       } else if (photoRows) {
         setAttachedPhotos(
           photoRows.map((p) => ({
@@ -366,7 +399,7 @@ export default function SignOff() {
         );
       }
     } catch (err) {
-      console.error("Unexpected photo load error:", err);
+      logError("SignOff contract photo load failed", err);
     }
     
     // Close menu and scroll to top
@@ -459,7 +492,7 @@ export default function SignOff() {
 
       const { data: refreshedTemplates } = await supabase
         .from("contract_templates")
-        .select("*")
+        .select("id, name, body, category, is_pinned, created_at")
         .eq("user_id", user.id)
         .order("is_pinned", { ascending: false });
       setTemplates(refreshedTemplates || []);
@@ -468,24 +501,33 @@ export default function SignOff() {
       if (savedContractor) setContractorName(savedContractor);
       
     } catch (error) {
-      console.error("Load error:", error);
-      showToast("Failed to load data", "error");
+      logError("SignOff load failed", error);
+      showToast("Failed to load SignOff data. Please try again.", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const saveContract = async () => {
-    if (!contractBody.trim()) {
-      showToast("Add contract text", "error");
+    const errors = buildFieldErrors({
+      contractBody: [{ isValid: isRequired(contractBody), message: "Please enter contract terms." }],
+      clientName: [{ isValid: isRequired(clientName), message: "Please enter the customer name." }],
+      contractorName: [{ isValid: isRequired(contractorName), message: "Please enter the contractor name." }],
+      signature: [{ isValid: hasSigned, message: "Please add a signature before saving." }],
+    });
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({
+        ...prev,
+        contractBody: errors.contractBody?.[0]?.message || prev.contractBody,
+        clientName: errors.clientName?.[0]?.message || prev.clientName,
+        contractorName: errors.contractorName?.[0]?.message || prev.contractorName,
+      }));
+      showToast(errors.signature ? errors.signature[0].message : "Fix the highlighted fields before saving.", "error");
       return;
     }
-    if (!clientName.trim()) {
-      showToast("Add customer name", "error");
-      return;
-    }
-    if (!hasSigned) {
-      showToast("Signature required", "error");
+
+    if (!isOnline) {
+      showToast("You are offline. Reconnect to save contracts.", "error");
       return;
     }
 
@@ -493,8 +535,12 @@ export default function SignOff() {
     vibrate(20);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast("Please log in to save contracts.", "error");
+        if (authError) logError("SignOff auth failed", authError);
+        return;
+      }
       
       // Verify signature canvas exists and capture data with error handling
       if (!sigPad.current || !sigPad.current.toDataURL) {
@@ -508,7 +554,7 @@ export default function SignOff() {
           throw new Error("Signature data capture failed");
         }
       } catch (sigError) {
-        console.error("Signature toDataURL error:", sigError);
+        logError("SignOff signature capture failed", sigError);
         throw new Error("Failed to capture signature. Please try signing again.");
       }
       
@@ -526,10 +572,10 @@ export default function SignOff() {
         contract_body: processedBody,
         signature_data: signatureData,
         signed_at: nowIso
-      }).select().single();
+      }).select("id, signature_data").single();
 
       if (error) {
-        console.error("Supabase error:", error);
+        logError("SignOff contract save failed", error);
         throw error;
       }
 
@@ -554,7 +600,7 @@ export default function SignOff() {
           .from("contract_photos")
           .insert(rows);
         if (photoError) {
-          console.error("Photo save error:", photoError);
+          logError("SignOff contract photo save failed", photoError);
         }
       }
       
@@ -562,28 +608,44 @@ export default function SignOff() {
       clearSignature();
 
     } catch (error) {
-      console.error("Save error:", error);
-      showToast(error.message || "Save failed", "error");
+      logError("SignOff contract save failed", error);
+      showToast(error.message || "Failed to save contract. Please try again.", "error");
     } finally {
       setSaving(false);
     }
   };
 
   const saveDraft = async () => {
-    if (!contractBody.trim()) {
-      showToast("Add contract text first", "error");
+    const errors = buildFieldErrors({
+      contractBody: [{ isValid: isRequired(contractBody), message: "Please enter contract terms." }],
+      clientName: [{ isValid: isRequired(clientName), message: "Please enter the customer name." }],
+      contractorName: [{ isValid: isRequired(contractorName), message: "Please enter the contractor name." }],
+    });
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((prev) => ({
+        ...prev,
+        contractBody: errors.contractBody?.[0]?.message || prev.contractBody,
+        clientName: errors.clientName?.[0]?.message || prev.clientName,
+        contractorName: errors.contractorName?.[0]?.message || prev.contractorName,
+      }));
+      showToast("Fix the highlighted fields before saving.", "error");
       return;
     }
-    if (!clientName.trim()) {
-      showToast("Add customer name", "error");
+
+    if (!isOnline) {
+      showToast("You are offline. Reconnect to save drafts.", "error");
       return;
     }
 
     setSaving(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        showToast("Please log in to save drafts.", "error");
+        if (authError) logError("SignOff auth failed", authError);
+        return;
+      }
 
       const processedBody = applySmartVariables(contractBody);
 
@@ -599,7 +661,7 @@ export default function SignOff() {
           contract_type: formType || "Standard",
           signed_at: null,
         })
-        .select()
+        .select("id")
         .single();
 
       if (error) throw error;
@@ -611,7 +673,10 @@ export default function SignOff() {
           display_order: index,
         }));
 
-        await supabase.from("contract_photos").insert(photoRows);
+        const { error: photoError } = await supabase.from("contract_photos").insert(photoRows);
+        if (photoError) {
+          logError("SignOff draft photo save failed", photoError);
+        }
       }
 
       showToast("Draft saved! Send for signature from History.", "success");
@@ -630,39 +695,42 @@ export default function SignOff() {
 
       await loadAllData();
     } catch (error) {
-      console.error("Draft save error:", error);
-      showToast("Failed to save draft", "error");
+      logError("SignOff draft save failed", error);
+      showToast("Failed to save draft. Please try again.", "error");
     } finally {
       setSaving(false);
     }
   };
 
   const deleteContract = async (contractId) => {
-    if (!window.confirm("Delete this contract? This cannot be undone.")) return;
+    openConfirmDialog({
+      title: "Delete contract?",
+      description: "This action cannot be undone. The contract and its photos will be permanently removed.",
+      confirmLabel: "Delete Contract",
+      onConfirm: async () => {
+        try {
+          const { error: photoError } = await supabase
+            .from("contract_photos")
+            .delete()
+            .eq("contract_id", contractId);
 
-    try {
-      // Delete photos first
-      const { error: photoError } = await supabase
-        .from("contract_photos")
-        .delete()
-        .eq("contract_id", contractId);
+          if (photoError) logError("SignOff contract photo delete failed", photoError);
 
-      if (photoError) console.error("Photo delete error:", photoError);
+          const { error } = await supabase
+            .from("contracts")
+            .delete()
+            .eq("id", contractId);
 
-      // Delete contract
-      const { error } = await supabase
-        .from("contracts")
-        .delete()
-        .eq("id", contractId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      showToast("Contract deleted", "success");
-      await loadAllData();
-    } catch (error) {
-      console.error("Delete error:", error);
-      showToast("Delete failed", "error");
-    }
+          showToast("Contract deleted", "success");
+          await loadAllData();
+        } catch (error) {
+          logError("SignOff contract delete failed", error);
+          showToast("Failed to delete contract. Please try again.", "error");
+        }
+      },
+    });
   };
 
   const editDraft = async (contract) => {
@@ -737,8 +805,8 @@ export default function SignOff() {
         showToast("Signing link copied!", "success");
       }
     } catch (error) {
-      console.error("Share error:", error);
-      showToast("Failed to create link", "error");
+      logError("SignOff share link failed", error);
+      showToast("Failed to create signing link. Please try again.", "error");
     }
   };
 
@@ -796,7 +864,7 @@ export default function SignOff() {
           });
 
       if (error) {
-        console.error("Template insert error:", error);
+        logError("SignOff template insert failed", error);
         toast.error(error.message || "Template save failed");
         throw error;
       }
@@ -809,7 +877,7 @@ export default function SignOff() {
       setEditingTemplateId(null);
       await loadAllData();
     } catch (err) {
-      console.error("Template save error:", err);
+      logError("SignOff template save failed", err);
       toast.error(err?.message || "Template save failed");
     }
   };
@@ -850,20 +918,25 @@ export default function SignOff() {
   };
 
   const deleteTemplate = async (templateId) => {
-    if (!window.confirm("Delete this template? This cannot be undone.")) return;
-
-    try {
-      const { error } = await supabase
-        .from("contract_templates")
-        .delete()
-        .eq("id", templateId);
-      if (error) throw error;
-      showToast("Template deleted", "success");
-      await loadAllData();
-    } catch (err) {
-      console.error("Delete template error:", err);
-      showToast("Template delete failed", "error");
-    }
+    openConfirmDialog({
+      title: "Delete template?",
+      description: "This action cannot be undone. The template will be permanently removed.",
+      confirmLabel: "Delete Template",
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase
+            .from("contract_templates")
+            .delete()
+            .eq("id", templateId);
+          if (error) throw error;
+          showToast("Template deleted", "success");
+          await loadAllData();
+        } catch (err) {
+          logError("SignOff template delete failed", err);
+          showToast("Template delete failed", "error");
+        }
+      },
+    });
   };
 
   const togglePin = async (template) => {
@@ -885,7 +958,7 @@ export default function SignOff() {
       await loadAllData();
       showToast(template.is_pinned ? "Unpinned" : "Pinned", "success");
     } catch (error) {
-      console.error("Pin error:", error);
+      logError("SignOff template pin failed", error);
       showToast("Pin failed", "error");
     }
   };
@@ -919,8 +992,6 @@ export default function SignOff() {
   useEffect(() => {
     if (!user?.id) return;
 
-    console.log("🔔 Setting up contract signature listener...");
-
     const channel = supabase
       .channel("contract-signatures")
       .on(
@@ -932,8 +1003,6 @@ export default function SignOff() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log("📝 Contract update detected:", payload);
-
           if (payload.new.signed_at && !payload.old.signed_at) {
             const contractName = payload.new.job_name || "Contract";
             const customerName = payload.new.client_name || "Customer";
@@ -943,12 +1012,9 @@ export default function SignOff() {
           }
         }
       )
-      .subscribe((status) => {
-        console.log("📡 Contract listener status:", status);
-      });
+      .subscribe();
 
     return () => {
-      console.log("🔌 Cleaning up contract listener");
       supabase.removeChannel(channel);
     };
   }, [user]);
@@ -956,8 +1022,7 @@ export default function SignOff() {
   useEffect(() => {
     const checkBuckets = async () => {
       const { data, error } = await supabase.storage.listBuckets();
-      console.log("🪣 REAL BUCKET LIST:", data);
-      if (error) console.error("Bucket Error:", error);
+      if (error) logError("SignOff storage bucket check failed", error);
     };
     checkBuckets();
   }, []);
@@ -979,7 +1044,7 @@ export default function SignOff() {
           JSON.stringify(customVars)
         );
       } catch (err) {
-        console.error("Persist custom vars error:", err);
+        logError("SignOff custom vars persist failed", err);
       }
     }
 
@@ -1015,7 +1080,7 @@ export default function SignOff() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors">
+            <Link href="/dashboard" className="p-2 hover:text-[#FF6700] transition-colors" aria-label="Back to dashboard">
               <ArrowLeft size={28} />
             </Link>
             <div>
@@ -1037,6 +1102,7 @@ export default function SignOff() {
           <button
             onClick={() => setShowMenu(true)}
             className="p-3 rounded-xl bg-[var(--bg-card)] text-[#FF6700] border border-[#FF6700]"
+            aria-label="Open SignOff menu"
           >
             <Menu size={24} />
           </button>
@@ -1047,6 +1113,14 @@ export default function SignOff() {
       <div className="px-6 py-3 bg-[var(--bg-card)] border-b border-[var(--border-color)]">
         <JobSelector />
       </div>
+
+      {!isOnline ? (
+        <div className="max-w-4xl mx-auto px-6 mt-4">
+          <div className="bg-red-900/30 border border-red-500/40 text-red-200 text-xs rounded-lg px-3 py-2">
+            You are offline. Saving, signing, and sharing are disabled until you reconnect.
+          </div>
+        </div>
+      ) : null}
 
       <main className="max-w-4xl mx-auto px-6 mt-6 space-y-6">
         {isDocumentLocked && (
@@ -1076,13 +1150,29 @@ export default function SignOff() {
           <input
             type="text"
             value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
+            onChange={(e) => {
+              setClientName(e.target.value);
+              if (formErrors?.clientName) {
+                setFormErrors((prev) => ({ ...prev, clientName: "" }));
+              }
+            }}
+            onBlur={() => {
+              if (!clientName.trim()) {
+                setFormErrors((prev) => ({ ...prev, clientName: "Please enter the customer name." }));
+              }
+              setTimeout(() => setShowCustomerDropdown(false), 200);
+            }}
             onFocus={() => setShowCustomerDropdown(true)}
-            onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
             placeholder="Search or enter customer name"
             disabled={isDocumentLocked}
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
+            autoComplete="name"
+            className={`w-full p-4 rounded-xl bg-[var(--bg-card)] border outline-none transition-colors ${
+              formErrors?.clientName ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+            }`}
           />
+          {formErrors?.clientName ? (
+            <p className="text-xs text-red-500">{formErrors.clientName}</p>
+          ) : null}
           {showCustomerDropdown && customers.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] shadow-lg z-20">
               {customers
@@ -1111,11 +1201,27 @@ export default function SignOff() {
           <input
             type="text"
             value={contractorName}
-            onChange={(e) => setContractorName(e.target.value)}
+            onChange={(e) => {
+              setContractorName(e.target.value);
+              if (formErrors?.contractorName) {
+                setFormErrors((prev) => ({ ...prev, contractorName: "" }));
+              }
+            }}
+            onBlur={() => {
+              if (!contractorName.trim()) {
+                setFormErrors((prev) => ({ ...prev, contractorName: "Please enter the contractor name." }));
+              }
+            }}
             placeholder="Your business name"
             disabled={isDocumentLocked}
-            className="w-full p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors"
+            autoComplete="organization"
+            className={`w-full p-4 rounded-xl bg-[var(--bg-card)] border outline-none transition-colors ${
+              formErrors?.contractorName ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+            }`}
           />
+          {formErrors?.contractorName ? (
+            <p className="text-xs text-red-500">{formErrors.contractorName}</p>
+          ) : null}
         </div>
 
         {/* PINNED TEMPLATES ROW - SMALLER */}
@@ -1169,9 +1275,14 @@ export default function SignOff() {
           </div>
           <div
             ref={editorRef}
-            className="w-full min-h-[240px] p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] outline-none focus:border-[#FF6700] transition-colors text-[var(--text-main)] whitespace-pre-wrap"
+            className={`w-full min-h-[240px] p-4 rounded-xl bg-[var(--bg-card)] border outline-none transition-colors text-[var(--text-main)] whitespace-pre-wrap ${
+              formErrors?.contractBody ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+            }`}
             contentEditable={!isDocumentLocked}
             suppressContentEditableWarning
+            role="textbox"
+            aria-label="Contract document editor"
+            aria-multiline="true"
             onFocus={(e) => {
               if (!contractBody.trim() && e.currentTarget.textContent === "Enter contract terms or use a pinned template...") {
                 e.currentTarget.textContent = "";
@@ -1185,12 +1296,20 @@ export default function SignOff() {
             onBlur={(e) => {
               const text = e.currentTarget.innerText || "";
               setContractBody(text);
+              if (!text.trim()) {
+                setFormErrors((prev) => ({ ...prev, contractBody: "Please enter contract terms." }));
+              } else if (formErrors?.contractBody) {
+                setFormErrors((prev) => ({ ...prev, contractBody: "" }));
+              }
             }}
           >
             {contractBody.trim()
               ? getDisplayedContractBody()
               : "Enter contract terms or use a pinned template..."}
           </div>
+          {formErrors?.contractBody ? (
+            <p className="text-xs text-red-500 mt-2">{formErrors.contractBody}</p>
+          ) : null}
           {attachedPhotos.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {attachedPhotos.map((photo) => (
@@ -1207,7 +1326,7 @@ export default function SignOff() {
             <button
               type="button"
               onClick={saveDraft}
-              disabled={saving || isDocumentLocked}
+              disabled={saving || isDocumentLocked || !isOnline}
               className="flex-1 px-6 py-4 rounded-xl border-2 border-[#FF6700] text-[#FF6700] font-bold hover:bg-[#FF6700]/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving ? (
@@ -1229,13 +1348,16 @@ export default function SignOff() {
                 setDocReadOnly(Boolean(signedAt));
                 setShowDocPreview(true);
               }}
-              disabled={isDocumentLocked}
+              disabled={isDocumentLocked || !isOnline}
               className="flex-1 px-6 py-4 rounded-xl bg-[#FF6700] text-black font-bold hover:shadow-[0_0_20px_rgba(255,103,0,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <PenTool size={20} />
               Sign &amp; Finalize
             </button>
           </div>
+          {!isOnline ? (
+            <p className="text-xs text-red-400">Reconnect to save drafts or finalize signatures.</p>
+          ) : null}
 
         {/* ATTACH PHOTOS */}
         <div className="space-y-2">
@@ -1264,20 +1386,16 @@ export default function SignOff() {
                       return;
                     }
                     try {
-                      console.log("Querying photos for job:", selectedJob.id);
-                      
                       // Try main photos table first
                       const { data: photoRecords, error: tableError } = await supabase
                         .from("photos")
-                        .select("*")
+                        .select("id, created_at, storage_path, path, photo_url, photo_data")
                         .eq("job_id", selectedJob.id)
                         .order("created_at", { ascending: false });
                       
-                      console.log("Photo query result:", { photoRecords, tableError });
-                      
                       if (tableError) {
-                        console.error("Table error:", tableError);
-                        showToast(`Database error: ${tableError.message}`, "error");
+                        logError("SignOff SiteSnap query failed", tableError, { jobId: selectedJob.id });
+                        showToast("Unable to load SiteSnap photos.", "error");
                         return;
                       }
                       
@@ -1285,8 +1403,6 @@ export default function SignOff() {
                         showToast("No photos found for this job", "error");
                         return;
                       }
-                      console.log("🕵️ DETECTIVE - RAW PHOTO DATA:", photoRecords[0]);
-
                       // Resolve storage paths to public URLs so thumbnails display (do NOT use raw path for img src)
                       const photosWithUrls = photoRecords.map((photo) => {
                         const path = photo.path || photo.storage_path || photo.photo_url;
@@ -1301,8 +1417,8 @@ export default function SignOff() {
                       setSelectedSiteSnap(new Map());
                       setShowSiteSnapModal(true);
                     } catch (err) {
-                      console.error("SiteSnap error:", err);
-                      showToast("Failed to load photos", "error");
+                      logError("SignOff SiteSnap load failed", err, { jobId: selectedJob?.id });
+                      showToast("Failed to load SiteSnap photos.", "error");
                     }
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border-color)] text-sm font-semibold text-[var(--text-main)] hover:border-[#FF6700] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1377,6 +1493,43 @@ export default function SignOff() {
         </div>
       </div>
 
+      <Toast toast={toastState} onClose={() => setToastState(null)} />
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setConfirmDialog(null)}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl border border-red-500/40 bg-[var(--bg-card)] p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-[var(--text-main)] mb-2">
+              {confirmDialog.title}
+            </h2>
+            <p className="text-sm text-[var(--text-sub)] mb-6">
+              {confirmDialog.description}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                disabled={confirmDialog.loading}
+                className="flex-1 bg-[var(--bg-main)] text-[var(--text-main)] font-bold py-3 rounded-lg border border-[var(--border-color)] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={confirmDialog.loading}
+                className="flex-1 bg-red-500 text-white font-bold py-3 rounded-lg disabled:opacity-60"
+              >
+                {confirmDialog.loading ? "Deleting..." : confirmDialog.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SignOffModals
         modal={{
           showMenu, setShowMenu, menuTab, setMenuTab, jobLinkedData, linkedEstimate, smartVariables, baseVarKeys,
@@ -1384,7 +1537,7 @@ export default function SignOff() {
           setShowAddVarModal, templates, togglePin, setContractBody, vibrate, setShowTemplateBuilder, contracts,
           restoreContract, showTemplateBuilder, setShowTemplateBuilder, newTemplateName, setNewTemplateName,
           newTemplateBody, setNewTemplateBody, newTemplateCategory, setNewTemplateCategory, insertVariable,
-          removeVariableFromTemplate, saveTemplate, toast: toastState, showDocPreview, setShowDocPreview, signedAt, savedSignature,
+          removeVariableFromTemplate, saveTemplate, showDocPreview, setShowDocPreview, signedAt, savedSignature,
           getDisplayedContractBody, attachedPhotos, getPhotoDisplayUrl, docReadOnly, sigPad, handleSignatureEnd,
           clearSignature, saveContract, saving, contractBody, hasSigned, setClientName, setContractorName,
           setAttachedPhotos, setSignedAt, setSavedSignature, setHasSigned, setDocReadOnly, selectedJob,
@@ -1397,6 +1550,7 @@ export default function SignOff() {
           editDraft,
           editTemplate,
           deleteTemplate,
+          isOnline,
           setEditingTemplateId,
           onGenerateShareLink: generateShareLink,
           onShareSigned: shareSignedContract,
