@@ -28,8 +28,13 @@ export async function POST(request) {
       )
     }
 
-    const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID
-    const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
+    // Price ID must start with "price_" — ignore if set to a key (pk_/sk_) by mistake
+    let priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim()
+    if (priceId && !priceId.startsWith('price_')) {
+      logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
+      priceId = null
+    }
+    const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim()
     if (!priceId && !paymentLink) {
       logError('Checkout missing both NEXT_PUBLIC_STRIPE_PRICE_ID and NEXT_PUBLIC_STRIPE_PAYMENT_LINK')
       return NextResponse.json(
