@@ -4,6 +4,10 @@ import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { logError } from '../../../../utils/logger';
 
+function logWebhook(context, details) {
+  console.error(`[FieldDeskOps] Webhook: ${context}`, details);
+}
+
 export async function POST(req) {
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -68,9 +72,22 @@ export async function POST(req) {
 async function handleCheckoutCompleted(session, supabase) {
   // Payment Link checkouts use client_reference_id (we pass it in the URL); API-created sessions use metadata.userId
   const userId = session.metadata?.userId || session.client_reference_id;
-  if (!userId) return;
 
-  const { error } = await supabase
+  logWebhook('checkout.session.completed', {
+    client_reference_id: session.client_reference_id ?? '(none)',
+    metadata_userId: session.metadata?.userId ?? '(none)',
+    resolved_userId: userId ?? '(none)',
+    customer: typeof session.customer === 'string' ? session.customer : '(none)',
+  });
+
+  if (!userId) {
+    logError('Webhook checkout skipped: no userId in session', null, {
+      hint: 'Payment Link must be opened with ?client_reference_id=<user_id>. Check that checkout passes the link with that param.',
+    });
+    return;
+  }
+
+  const { data, error } = await supabase
     .from('profiles')
     .update({
       subscription_status: 'paid',
@@ -78,9 +95,22 @@ async function handleCheckoutCompleted(session, supabase) {
       stripe_customer_id: session.customer,
       stripe_subscription_id: session.subscription,
     })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
 
-  if (error) logError('Webhook profile update failed', error);
+  if (error) {
+    logError('Webhook profile update failed', error, { userId });
+    return;
+  }
+  if (!data) {
+    logError('Webhook profile update: no row updated', null, {
+      userId,
+      hint: 'No profile with this id. Ensure the user has a row in profiles.',
+    });
+    return;
+  }
+  logWebhook('checkout.session.completed profile updated', { userId });
 }
 
 async function handleSubscriptionUpdated(subscription, supabase) {
