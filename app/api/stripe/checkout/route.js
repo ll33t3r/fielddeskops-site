@@ -7,7 +7,8 @@ import { logError } from '../../../../utils/logger'
 // Prevent static generation
 export const dynamic = 'force-dynamic'
 
-const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9]+$/
+// Test links: .../test_xxx; live links: .../xxx (alphanumeric only)
+const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9_]+$/
 
 export async function POST(request) {
   try {
