@@ -1,5 +1,4 @@
 import Stripe from 'stripe';
-import { buffer } from 'micro';
 import { createClient } from '@supabase/supabase-js';
 import { logError } from '../../../utils/logger';
 import {
@@ -10,12 +9,22 @@ import {
   handlePaymentFailed,
 } from '../../../lib/stripeWebhookHandlers';
 
-// Required for Stripe: use raw body so signature verification works on Vercel.
+// Required for Stripe: raw body. Same approach as Stripe's official Next.js Pages example.
 export const config = {
   api: {
     bodyParser: false,
   },
 };
+
+// Read raw body from stream (official Stripe example pattern - avoids any framework parsing).
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
 export default async function webhookHandler(req, res) {
   if (req.method !== 'POST') {
@@ -44,9 +53,8 @@ export default async function webhookHandler(req, res) {
     const stripe = new Stripe(stripeSecretKey);
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Raw body via micro - required for Stripe signature verification on Vercel.
-    const requestBuffer = await buffer(req);
-    const body = requestBuffer.toString('utf8');
+    // Raw body from stream (must be exact bytes Stripe sent - no parsing/re-encoding).
+    const rawBody = await getRawBody(req);
     const signature = req.headers['stripe-signature'] || req.headers['Stripe-Signature'];
 
     if (!signature) {
@@ -56,10 +64,11 @@ export default async function webhookHandler(req, res) {
 
     let event;
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      // Pass Buffer directly (Stripe SDK accepts string or Buffer/Uint8Array).
+      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (err) {
       logError('Webhook signature verification failed', err, {
-        bodyLength: body?.length ?? 0,
+        bodyLength: rawBody?.length ?? 0,
         secretPrefix: webhookSecret?.slice(0, 7) ?? '(none)',
       });
       return res.status(400).json({ error: 'Invalid signature' });
