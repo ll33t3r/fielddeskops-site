@@ -1,37 +1,17 @@
+import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { logError } from '../../../utils/logger';
+import { logError } from '../../../../utils/logger';
 import {
   logWebhook,
   handleCheckoutCompleted,
   handleSubscriptionUpdated,
   handleSubscriptionDeleted,
   handlePaymentFailed,
-} from '../../../lib/stripeWebhookHandlers';
+} from '../../../../lib/stripeWebhookHandlers';
 
-// Required for Stripe: raw body. Same approach as Stripe's official Next.js Pages example.
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-// Read raw body from stream (official Stripe example pattern - avoids any framework parsing).
-function getRawBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-export default async function webhookHandler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).end('Method Not Allowed');
-  }
-
+// Official Stripe App Router pattern: use req.text() for raw body (no Node stream layer).
+export async function POST(req) {
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -45,33 +25,33 @@ export default async function webhookHandler(req, res) {
         hasSupabaseUrl: !!supabaseUrl,
         hasServiceRoleKey: !!serviceRoleKey,
       });
-      return res.status(500).json({
-        error: 'Webhook not configured. Check environment variables.',
-      });
+      return NextResponse.json(
+        { error: 'Webhook not configured. Check environment variables.' },
+        { status: 500 }
+      );
     }
 
     const stripe = new Stripe(stripeSecretKey);
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Raw body from stream (must be exact bytes Stripe sent - no parsing/re-encoding).
-    const rawBody = await getRawBody(req);
-    const signature = req.headers['stripe-signature'] || req.headers['Stripe-Signature'];
+    // Exactly as Stripe's official Next.js App Router example: request.text() for raw body.
+    const body = await req.text();
+    const signature = req.headers.get('stripe-signature');
 
     if (!signature) {
       logError('Webhook missing Stripe-Signature header', null, {});
-      return res.status(400).json({ error: 'Missing Stripe-Signature header' });
+      return NextResponse.json({ error: 'Missing Stripe-Signature header' }, { status: 400 });
     }
 
     let event;
     try {
-      // Pass Buffer directly (Stripe SDK accepts string or Buffer/Uint8Array).
-      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
       logError('Webhook signature verification failed', err, {
-        bodyLength: rawBody?.length ?? 0,
+        bodyLength: body?.length ?? 0,
         secretPrefix: webhookSecret?.slice(0, 7) ?? '(none)',
       });
-      return res.status(400).json({ error: 'Invalid signature' });
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
     switch (event.type) {
@@ -91,9 +71,12 @@ export default async function webhookHandler(req, res) {
         break;
     }
 
-    return res.status(200).json({ received: true });
+    return NextResponse.json({ received: true });
   } catch (error) {
     logError('Webhook handler failed', error);
-    return res.status(500).json({ error: error.message || 'Webhook handler failed' });
+    return NextResponse.json(
+      { error: error.message || 'Webhook handler failed' },
+      { status: 500 }
+    );
   }
 }
