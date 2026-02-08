@@ -9,12 +9,9 @@ export const dynamic = 'force-dynamic'
 
 const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9]+$/
 
-// Fallback when Vercel env vars don't reach the server — remove once STRIPE_PAYMENT_LINK works in Vercel
-const FALLBACK_PAYMENT_LINK = 'https://buy.stripe.com/3cI7sLgF74jEfUHcHKaIM0d'
-
 export async function POST(request) {
   try {
-    // Fallback: client can send payment link (from NEXT_PUBLIC_ inlined at build time) when server env is missing
+    // Client can send payment link (from NEXT_PUBLIC_ inlined at build time) when server env is missing
     let bodyPaymentLink = null
     try {
       const body = await request.json().catch(() => ({}))
@@ -51,12 +48,11 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    // Support: server env, client body, or hardcoded fallback (remove fallback once Vercel env works)
+    // Use server env, then client body. No hardcoded fallback (must be test link for test keys, live for live keys).
     const paymentLink = (
       process.env.STRIPE_PAYMENT_LINK ||
       process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ||
-      bodyPaymentLink ||
-      FALLBACK_PAYMENT_LINK
+      bodyPaymentLink
     )?.trim()
     if (!priceId && !paymentLink) {
       const rawPublic = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
