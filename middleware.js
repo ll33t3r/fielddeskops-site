@@ -41,7 +41,7 @@ export async function middleware(request) {
 
     // Define public routes (no auth required)
   const publicRoutes = ['/', '/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
-  const publicApiRoutes = ['/api/stripe/checkout']
+  const publicApiRoutes = ['/api/stripe/checkout', '/api/stripe/webhook']
   
   // Define protected routes
   const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command', '/account']

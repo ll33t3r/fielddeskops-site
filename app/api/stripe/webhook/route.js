@@ -32,14 +32,26 @@ export async function POST(req) {
     // Service role key bypasses RLS; webhook should be the only caller.
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const body = await req.text();
-    const signature = headers().get('stripe-signature');
+    // Use raw body: Vercel/Next can alter the body when using req.text(), which breaks Stripe's signature.
+    const arrayBuffer = await req.arrayBuffer();
+    const body = Buffer.from(arrayBuffer).toString('utf8');
+
+    const headersList = headers();
+    const signature = headersList.get('stripe-signature') ?? headersList.get('Stripe-Signature');
+
+    if (!signature) {
+      logError('Webhook missing Stripe-Signature header', null, {});
+      return NextResponse.json({ error: 'Missing Stripe-Signature header' }, { status: 400 });
+    }
 
     let event;
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret.trim());
     } catch (err) {
-      logError('Webhook signature verification failed', err);
+      logError('Webhook signature verification failed', err, {
+        bodyLength: body?.length ?? 0,
+        secretPrefix: webhookSecret?.slice(0, 7) ?? '(none)',
+      });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
