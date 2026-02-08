@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { logError } from "../../../utils/logger";
+import { getPaymentLink } from "@/lib/stripePaymentLink";
 
 export default function SubscriptionBanner() {
   const [status, setStatus] = useState({
@@ -43,14 +44,11 @@ export default function SubscriptionBanner() {
     setError("");
     setIsLoadingUpgrade(true);
     try {
-      const paymentLink =
-        typeof process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK === "string"
-          ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK.trim()
-          : undefined;
+      const paymentLink = getPaymentLink() || undefined;
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentLink: paymentLink || undefined }),
+        body: JSON.stringify({ paymentLink }),
       });
       const data = await response.json();
       if (!response.ok || data?.error) {

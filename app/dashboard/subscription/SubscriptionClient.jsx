@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ShieldCheck, Loader2, ArrowLeft, Zap } from 'lucide-react'
 import Link from 'next/link'
+import { getPaymentLink } from '@/lib/stripePaymentLink'
 
 export default function SubscriptionClient() {
   const [loading, setLoading] = useState(false)
@@ -10,14 +11,11 @@ export default function SubscriptionClient() {
   const handleToStripe = async () => {
     setLoading(true)
     try {
-      const paymentLink =
-        typeof process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK === 'string'
-          ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK.trim()
-          : undefined
+      const paymentLink = getPaymentLink() || undefined
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentLink: paymentLink || undefined }),
+        body: JSON.stringify({ paymentLink }),
       })
       const data = await res.json()
       if (!res.ok || data?.error) {
