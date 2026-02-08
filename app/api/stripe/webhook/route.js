@@ -10,8 +10,8 @@ import {
   handlePaymentFailed,
 } from '../../../../lib/stripeWebhookHandlers';
 
-// Official Stripe App Router pattern: use req.text() for raw body (no Node stream layer).
-export async function POST(req) {
+// App Router: request.text() = raw body (do NOT use request.json() or signature breaks).
+export async function POST(request) {
   try {
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
@@ -34,9 +34,8 @@ export async function POST(req) {
     const stripe = new Stripe(stripeSecretKey);
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Exactly as Stripe's official Next.js App Router example: request.text() for raw body.
-    const body = await req.text();
-    const signature = req.headers.get('stripe-signature');
+    const rawBody = await request.text();
+    const signature = request.headers.get('stripe-signature');
 
     if (!signature) {
       logError('Webhook missing Stripe-Signature header', null, {});
@@ -45,10 +44,10 @@ export async function POST(req) {
 
     let event;
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (err) {
       logError('Webhook signature verification failed', err, {
-        bodyLength: body?.length ?? 0,
+        bodyLength: rawBody?.length ?? 0,
         secretPrefix: webhookSecret?.slice(0, 7) ?? '(none)',
       });
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
