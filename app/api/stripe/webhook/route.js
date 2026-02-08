@@ -66,7 +66,8 @@ export async function POST(req) {
 }
 
 async function handleCheckoutCompleted(session, supabase) {
-  const userId = session.metadata?.userId;
+  // Payment Link checkouts use client_reference_id (we pass it in the URL); API-created sessions use metadata.userId
+  const userId = session.metadata?.userId || session.client_reference_id;
   if (!userId) return;
 
   const { error } = await supabase
