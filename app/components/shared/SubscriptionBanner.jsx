@@ -46,11 +46,7 @@ export default function SubscriptionBanner() {
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentLink: typeof process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK === "string"
-            ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK.trim()
-            : undefined,
-        }),
+        body: JSON.stringify({}),
       });
       const data = await response.json();
       if (!response.ok || data?.error) {

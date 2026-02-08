@@ -11,7 +11,7 @@ const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9]+$/
 
 export async function POST(request) {
   try {
-    // Client can send payment link (from NEXT_PUBLIC_ inlined at build time) when server env is missing
+    // Optional: client can send payment link in body (e.g. if you add a client-side env later)
     let bodyPaymentLink = null
     try {
       const body = await request.json().catch(() => ({}))
@@ -48,22 +48,18 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    // Use server env, then client body. No hardcoded fallback (must be test link for test keys, live for live keys).
+    // Server uses STRIPE_PAYMENT_LINK (set in Vercel); optional body from client.
     const paymentLink = (
       process.env.STRIPE_PAYMENT_LINK ||
-      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ||
       bodyPaymentLink
     )?.trim()
     if (!priceId && !paymentLink) {
-      const rawPublic = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
       const rawServer = process.env.STRIPE_PAYMENT_LINK
       const debug =
         typeof rawServer === 'string' && rawServer.trim()
           ? `STRIPE_PAYMENT_LINK is set but invalid (length ${rawServer.trim().length}).`
-          : typeof rawPublic === 'string' && rawPublic.trim()
-            ? `NEXT_PUBLIC_STRIPE_PAYMENT_LINK is set but invalid (length ${rawPublic.trim().length}).`
-            : 'Payment link not set. In Vercel add STRIPE_PAYMENT_LINK (or NEXT_PUBLIC_STRIPE_PAYMENT_LINK) = your https://buy.stripe.com/... URL. Check Production, save, then Clear cache and redeploy.'
-      logError('Checkout missing price ID and payment link', { hasServer: !!rawServer, hasPublic: !!rawPublic })
+          : 'Payment link not set. In Vercel set STRIPE_PAYMENT_LINK to your https://buy.stripe.com/... URL (Production), save, then redeploy.'
+      logError('Checkout missing price ID and payment link', { hasServer: !!rawServer })
       return NextResponse.json(
         { error: debug },
         { status: 500 }

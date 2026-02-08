@@ -1,35 +1,35 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '../../../utils/supabase/client'
 import { ShieldCheck, Loader2, ArrowLeft, Zap } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SubscriptionClient() {
   const [loading, setLoading] = useState(false)
-  const supabase = createClient()
 
   const handleToStripe = async () => {
     setLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      window.location.href = '/auth/login'
-      return
-    }
-
-    const link = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK
-
-    if (!link) {
-      alert('Payment link not configured in .env.local')
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        alert(data?.error || 'Checkout failed')
+        return
+      }
+      if (data?.url) {
+        window.location.href = data.url
+        return
+      }
+      alert('Checkout link missing. Try again.')
+    } catch (e) {
+      alert('Unable to start checkout. Try again.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    const finalUrl = `${link}?client_reference_id=${user.id}&prefilled_email=${user.email}`
-    window.location.href = finalUrl
   }
 
   return (
