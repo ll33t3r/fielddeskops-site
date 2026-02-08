@@ -12,7 +12,7 @@ const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9_]+$/
 
 export async function POST(request) {
   try {
-    // Optional: client can send payment link in body (e.g. if you add a client-side env later)
+    // Prefer link from client body (NEXT_PUBLIC_ inlined at build) — Vercel often doesn't expose server env to this route
     let bodyPaymentLink = null
     try {
       const body = await request.json().catch(() => ({}))
@@ -49,26 +49,23 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    // Server: try STRIPE_PAYMENT_LINK, then STRIPE_CHECKOUT_LINK (Vercel sometimes only exposes one), then body.
+    // Client-sent link first (from NEXT_PUBLIC_STRIPE_PAYMENT_LINK at build time); then server env if Vercel exposes it
     const rawLink =
+      bodyPaymentLink ||
       process.env.STRIPE_PAYMENT_LINK ||
-      process.env.STRIPE_CHECKOUT_LINK ||
-      bodyPaymentLink
+      process.env.STRIPE_CHECKOUT_LINK
     const paymentLink = typeof rawLink === 'string' ? rawLink.trim() : ''
     const validLink = paymentLink && VALID_PAYMENT_LINK_REGEX.test(paymentLink) ? paymentLink : null
 
     if (!priceId && !validLink) {
-      const hasA = !!(process.env.STRIPE_PAYMENT_LINK?.trim())
-      const hasB = !!(process.env.STRIPE_CHECKOUT_LINK?.trim())
       logError('Checkout missing price ID and payment link', {
-        hasStripePaymentLink: hasA,
-        hasStripeCheckoutLink: hasB,
-        linkLength: paymentLink.length,
-        linkValid: !!validLink,
+        gotBodyLink: !!bodyPaymentLink,
+        hasStripePaymentLink: !!(process.env.STRIPE_PAYMENT_LINK?.trim()),
+        hasStripeCheckoutLink: !!(process.env.STRIPE_CHECKOUT_LINK?.trim()),
       })
       const msg = paymentLink && !validLink
         ? `Payment link is set but invalid (must be https://buy.stripe.com/...). Check for typos or extra characters.`
-        : 'Payment link not set. In Vercel set STRIPE_PAYMENT_LINK (or STRIPE_CHECKOUT_LINK) to your https://buy.stripe.com/... URL. Assign to Production, save, then redeploy.'
+        : 'Payment link not set. In Vercel set NEXT_PUBLIC_STRIPE_PAYMENT_LINK to your https://buy.stripe.com/... URL (Production), save, then redeploy with "Clear cache and redeploy". The client sends this link to the server so checkout works even when server env is not available.'
       return NextResponse.json(
         { error: msg },
         { status: 500 }

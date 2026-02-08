@@ -43,10 +43,14 @@ export default function SubscriptionBanner() {
     setError("");
     setIsLoadingUpgrade(true);
     try {
+      const paymentLink =
+        typeof process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK === "string"
+          ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK.trim()
+          : undefined;
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ paymentLink: paymentLink || undefined }),
       });
       const data = await response.json();
       if (!response.ok || data?.error) {
