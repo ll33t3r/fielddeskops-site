@@ -82,8 +82,9 @@ export async function middleware(request) {
 }
 
 export const config = {
+  // Exclude webhook so middleware never touches the request body (Stripe signature verification needs raw body).
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/.*|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
 
