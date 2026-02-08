@@ -1,6 +1,6 @@
-const pageTitle = "Welcome";
+const pageTitle = "FieldDeskOps — Job Management for Contractors | Estimates, Photos, Contracts & Inventory";
 const pageDescription =
-  "Discover FieldDeskOps and start a free trial for your field operations.";
+  "Stop leaving money on the table. One platform for estimates (ProfitLock), photo docs (SiteSnap), digital contracts (SignOff), and inventory (LoadOut). Sign up free or start a 7-day Pro trial.";
 
 export const metadata = {
   title: pageTitle,

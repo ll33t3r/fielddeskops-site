@@ -12,6 +12,7 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
   const [updating, setUpdating] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [accessError, setAccessError] = useState("");
 
   const loadHistoryJobs = useCallback(async () => {
     setLoading(true);
@@ -42,6 +43,12 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
 
   const updateStatus = async (status, setCompletedAt = false) => {
     if (!selectedJob?.id) return;
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      setAccessError(access.reason || "Account locked. Renew to edit.");
+      return;
+    }
     setUpdating(true);
     const updates = { status };
     if (status === "COMPLETED") updates.completed_at = new Date().toISOString();
@@ -72,6 +79,12 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
 
   const handleDelete = async () => {
     if (!selectedJob?.id) return;
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      setAccessError(access.reason || "Account locked. Renew to edit.");
+      return;
+    }
     setDeleting(true);
     const { error } = await supabase.from("jobs").delete().eq("id", selectedJob.id);
     setDeleting(false);
@@ -143,6 +156,11 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto hide-scrollbar">
+          {accessError && (
+            <div className="px-4 pt-4">
+              <p className="text-xs text-red-400">{accessError}</p>
+            </div>
+          )}
           {selectedJob ? (
             /* Detail view (read-only) */
             <div className="p-4 space-y-4">

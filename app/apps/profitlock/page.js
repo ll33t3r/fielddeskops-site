@@ -12,7 +12,8 @@ import Link from "next/link";
 import JobSelector from "../../components/shared/JobSelector";
 import Toast from "../../components/shared/Toast";
 import FormField from "../../components/shared/FormField";
-import { buildFieldErrors, inRange, isNumber, isRequired } from "../../utils/validation";
+import SubscriptionBanner from "../../components/shared/SubscriptionBanner";
+import { buildFieldErrors, inRange, isNumber, isRequired, roundCurrency } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
 import UpgradePrompt from "@/components/UpgradePrompt";
@@ -224,6 +225,10 @@ export default function ProfitLock() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const jobLimitCheck = await canCreateResource('jobs');
       if (!jobLimitCheck.allowed) {
+        if (jobLimitCheck.readOnly) {
+          showToast(jobLimitCheck.reason || "Account locked. Renew to edit.", "error");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'jobs', currentCount: jobLimitCheck.currentCount, limit: jobLimitCheck.limit, tier: jobLimitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -261,6 +266,16 @@ export default function ProfitLock() {
     (j.status === "ACTIVE" || j.status === "PENDING")
   );
 
+  /**
+   * ProfitLock totals (all currency rounded to 2 decimals).
+   * - Subtotal: SIMPLE = materials + (hours × hourlyRate); ADVANCED = sum of (qty × unit_cost) per line.
+   * - Discount: dollar or % of subtotal, capped at subtotal so cost ≥ 0.
+   * - Cost: subtotal − discount.
+   * - Markup: price = cost × (1 + target% / 100).
+   * - Margin: price = cost / (1 − target%/100), with target% capped at 99.99% to avoid division by zero.
+   * - Profit = price − cost. Display margin = (profit / price) × 100 when price > 0.
+   * - Tax = price × (taxRate/100) when includeTax; total = price + tax.
+   */
   const calculateTotals = () => {
     let subtotal = 0;
 
@@ -274,6 +289,7 @@ export default function ProfitLock() {
             subtotal += itemCost;
         });
     }
+    subtotal = roundCurrency(subtotal);
 
     let discount = 0;
     if (showDiscount && parseFloat(discountAmount)) {
@@ -282,26 +298,23 @@ export default function ProfitLock() {
       } else {
         discount = subtotal * (parseFloat(discountAmount) / 100);
       }
+      discount = roundCurrency(Math.min(discount, subtotal));
     }
-    
-    const cost = subtotal - discount;
+    const cost = roundCurrency(subtotal - discount);
 
     let price = 0;
     if (profitMethod === "MARKUP") {
-      price = cost * (1 + (targetValue / 100));
+      price = cost * (1 + targetValue / 100);
     } else {
-      const marginDecimal = targetValue / 100;
-      if (marginDecimal >= 1) {
-        price = cost * 2;
-      } else {
-        price = cost / (1 - marginDecimal);
-      }
+      const marginDecimal = Math.min(targetValue / 100, 0.9999);
+      price = cost / (1 - marginDecimal);
     }
+    price = roundCurrency(price);
 
-    const profit = price - cost;
-    const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
-    const tax = includeTax ? price * (taxRate / 100) : 0;
-    const total = price + tax;
+    const profit = roundCurrency(price - cost);
+    const margin = price > 0 ? roundCurrency(((price - cost) / price) * 100) : 0;
+    const tax = includeTax ? roundCurrency(price * (taxRate / 100)) : 0;
+    const total = roundCurrency(price + tax);
 
     return { subtotal, discount, cost, price, profit, margin, tax, total };
   };
@@ -378,6 +391,11 @@ export default function ProfitLock() {
     const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
     const estimateLimitCheck = await canCreateResource('estimates');
     if (!estimateLimitCheck.allowed) {
+      if (estimateLimitCheck.readOnly) {
+        showToast(estimateLimitCheck.reason || "Account locked. Renew to edit.", "error");
+        setSavingEstimate(false);
+        return;
+      }
       setSavingEstimate(false);
       setUpgradePromptData({ resourceType: 'estimates', currentCount: estimateLimitCheck.currentCount, limit: estimateLimitCheck.limit, tier: estimateLimitCheck.tier });
       setShowUpgradePrompt(true);
@@ -389,9 +407,9 @@ export default function ProfitLock() {
         job_id: activeJob.id,
         customer_id: activeJob.customer_id || null,
         estimate_number: `EST-${Date.now().toString().slice(-6)}`,
-        subtotal: price,
-        tax: tax,
-        total_price: total,
+        subtotal: roundCurrency(price),
+        tax: roundCurrency(tax),
+        total_price: roundCurrency(total),
         status: "DRAFT",
         notes: `${profitMethod}: ${targetValue}% | Payment: ${paymentTerms}`
     };
@@ -413,13 +431,17 @@ export default function ProfitLock() {
       if (mode === "ADVANCED") {
         const items = lineItems
           .filter(item => item.description && (item.quantity || item.unit_cost))
-          .map(item => ({
-            estimate_id: estimate.id,
-            description: item.description,
-            quantity: parseFloat(item.quantity) || 0,
-            unit_price: parseFloat(item.unit_cost) || 0,
-            total: (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_cost) || 0)
-          }));
+          .map(item => {
+            const qty = parseFloat(item.quantity) || 0;
+            const unit = parseFloat(item.unit_cost) || 0;
+            return {
+              estimate_id: estimate.id,
+              description: item.description,
+              quantity: roundCurrency(qty),
+              unit_price: roundCurrency(unit),
+              total: roundCurrency(qty * unit)
+            };
+          });
         if (items.length > 0) {
           const { error: lineError } = await supabase.from("line_items").insert(items);
           if (lineError) {
@@ -429,11 +451,13 @@ export default function ProfitLock() {
         }
       } else {
         const items = [];
-        if (parseFloat(simpleMaterials) > 0) {
-          items.push({ estimate_id: estimate.id, description: "Materials", quantity: 1, unit_price: parseFloat(simpleMaterials), total: parseFloat(simpleMaterials) });
+        const mat = parseFloat(simpleMaterials) || 0;
+        const hrs = parseFloat(simpleHours) || 0;
+        if (mat > 0) {
+          items.push({ estimate_id: estimate.id, description: "Materials", quantity: 1, unit_price: roundCurrency(mat), total: roundCurrency(mat) });
         }
-        if (parseFloat(simpleHours) > 0) {
-          items.push({ estimate_id: estimate.id, description: "Labor", quantity: parseFloat(simpleHours), unit_price: hourlyRate, total: parseFloat(simpleHours) * hourlyRate });
+        if (hrs > 0) {
+          items.push({ estimate_id: estimate.id, description: "Labor", quantity: roundCurrency(hrs), unit_price: roundCurrency(hourlyRate), total: roundCurrency(hrs * hourlyRate) });
         }
         if (items.length > 0) {
           const { error: lineError } = await supabase.from("line_items").insert(items);
@@ -516,6 +540,7 @@ export default function ProfitLock() {
 
   return (
     <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
+      <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt
           isOpen={showUpgradePrompt}
@@ -614,7 +639,7 @@ export default function ProfitLock() {
                             <tr className="border-b border-gray-100">
                               <td className="py-2 font-bold text-red-600">Discount</td>
                               <td></td>
-                              <td className="py-2 text-right text-red-600">-${(discountType === "DOLLAR" ? parseFloat(discountAmount) : (subtotal * parseFloat(discountAmount) / 100)).toFixed(2)}</td>
+                              <td className="py-2 text-right text-red-600">-${discount.toFixed(2)}</td>
                             </tr>
                           )}
                       </tbody>

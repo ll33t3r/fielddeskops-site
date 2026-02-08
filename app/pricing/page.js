@@ -21,42 +21,35 @@ export default function PricingPage() {
       price: '$0',
       period: 'forever',
       features: [
-        '10 credits/month',
-        '1 active project',
-        'Basic tools access',
+        '1 active job',
+        '1 rig + 1 worker',
+        '1 customer',
+        '3 estimates total',
+        '3 photos total',
+        '3 contracts total',
+        '3 inventory items total',
         'Community support',
       ],
       cta: 'Current Plan',
       current: true,
+      href: '/dashboard',
     },
     {
       name: 'Pro',
-      price: '$9.99',
+      price: '$19.99',
       period: 'per month',
       features: [
-        'Unlimited credits',
-        '10 active projects',
-        'All premium features',
-        'Priority support',
+        'All 4 apps: ProfitLock, SiteSnap, SignOff, LoadOut',
+        'Unlimited jobs & estimates',
+        'Unlimited photos & documentation',
+        'Unlimited inventory, rigs & workers',
+        'Professional contract templates',
+        'Email support · Cancel anytime',
         '7-day free trial',
       ],
       cta: 'Upgrade Now',
       highlighted: true,
-    },
-    {
-      name: 'Crews',
-      price: '$29.99',
-      period: 'per month',
-      features: [
-        'Everything in Pro',
-        'Team management',
-        'Clock-in/out tracking',
-        'Job task assignment',
-        'Multiple user accounts',
-        'Advanced analytics',
-      ],
-      cta: 'Coming Soon',
-      disabled: true,
+      href: '/welcome?upgrade=true#pricing',
     },
   ]
 
@@ -80,7 +73,7 @@ export default function PricingPage() {
         </div>
 
         {/* Plans */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {plans.map((plan) => (
             <div 
               key={plan.name}
@@ -116,7 +109,7 @@ export default function PricingPage() {
               </ul>
               
               <Link
-                href={plan.disabled ? '#' : '/dashboard'}
+                href={plan.disabled ? '#' : (plan.href || '/dashboard')}
                 className={`block w-full text-center py-4 rounded-lg font-bold transition-colors ${
                   plan.current
                     ? 'bg-gray-700 text-gray-300 cursor-default'

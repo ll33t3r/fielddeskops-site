@@ -58,6 +58,12 @@ export default function QuickToolModal({ isOpen, onClose, activeJob, onSaved }) 
         setError("Not authenticated.");
         return;
       }
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        setError(access.reason || "Account locked. Renew to edit.");
+        return;
+      }
 
       const { error: insertError } = await supabase
         .from("tools")

@@ -18,6 +18,12 @@ export const isNumber = (value) => {
   return !Number.isNaN(Number(value));
 };
 
+/** Round to 2 decimal places for currency. Avoids floating-point drift. */
+export const roundCurrency = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return 0;
+  return Math.round(Number(value) * 100) / 100;
+};
+
 export const inRange = (value, min, max) => {
   if (!isNumber(value)) return false;
   const num = Number(value);

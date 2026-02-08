@@ -14,6 +14,7 @@ import JobSelector from "../../components/shared/JobSelector";
 import UpgradePrompt from '@/components/UpgradePrompt';
 import Toast from "../../components/shared/Toast";
 import FormField from "../../components/shared/FormField";
+import SubscriptionBanner from "../../components/shared/SubscriptionBanner";
 import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
@@ -109,6 +110,16 @@ export default function LoadOut() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const ensureWriteAccess = async () => {
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      showToast(access.reason || "Account locked. Renew to edit.", "error");
+      return false;
+    }
+    return true;
+  };
+
 
   // 1. INIT
   const initFleet = async () => {
@@ -139,6 +150,10 @@ export default function LoadOut() {
       }
 
       if (!userRigs || userRigs.length === 0) {
+        if (!(await ensureWriteAccess())) {
+          setLoading(false);
+          return;
+        }
         const { data: newRig, error: newRigError } = await supabase
           .from("fleet")
           .insert({
@@ -250,6 +265,10 @@ export default function LoadOut() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('rigs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          showToast(limitCheck.reason || "Account locked. Renew to edit.", "error");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'rigs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -313,6 +332,7 @@ export default function LoadOut() {
   };
 
   const handleDeleteSelected = async () => {
+      if (!(await ensureWriteAccess())) return;
       if (!confirm(`Delete ${selectedIndices.length} items? This cannot be undone.`)) return;
       vibrate(50);
       
@@ -363,6 +383,7 @@ export default function LoadOut() {
   };
 
   const deleteMassSelected = async () => {
+    if (!(await ensureWriteAccess())) return;
     if (selectedItems.size === 0) return;
     
     if (!confirm(`Delete ${selectedItems.size} items? This cannot be undone.`)) return;
@@ -423,6 +444,7 @@ export default function LoadOut() {
 
   const saveBatch = async () => {
     vibrate(20);
+    if (!(await ensureWriteAccess())) return;
     if (!isOnline) {
       showToast("You're offline. Reconnect to add items.", "error");
       return;
@@ -519,6 +541,7 @@ export default function LoadOut() {
 
   const updateStockQty = async (id, currentQty, change) => {
     vibrate(5); 
+    if (!(await ensureWriteAccess())) return;
     const newQty = Math.max(0, Number(currentQty) + change);
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: newQty } : i));
     try {
@@ -543,6 +566,7 @@ export default function LoadOut() {
   const saveStockEdit = async () => {
     if (!editingItem) return;
     vibrate();
+    if (!(await ensureWriteAccess())) return;
     const editErrors = buildFieldErrors({
       name: [{ isValid: isRequired(editingItem.name), message: "Please enter an item name." }],
       minQty: [{ isValid: inRange(targetQtyInput, 0, 100000), message: "Target quantity must be 0 or more." }],
@@ -577,6 +601,7 @@ export default function LoadOut() {
   };
 
   const deleteStockItem = async (id) => {
+    if (!(await ensureWriteAccess())) return;
     const item = items.find((entry) => entry.id === id);
     if (!confirm(`Delete ${item?.name || "this item"}? This cannot be undone.`)) return;
     vibrate();
@@ -618,6 +643,7 @@ export default function LoadOut() {
   };
 
   const addTool = async () => {
+    if (!(await ensureWriteAccess())) return;
     const toolErrors = buildFieldErrors({
       name: [{ isValid: isRequired(newTool.name), message: "Please enter a tool name." }],
     });
@@ -720,6 +746,7 @@ export default function LoadOut() {
 
   const updateToolStatus = async (id, status, memberId = null) => {
     vibrate();
+    if (!(await ensureWriteAccess())) return;
     
     const currentTool = tools.find((t) => t.id === id);
 
@@ -781,6 +808,7 @@ export default function LoadOut() {
 
   const confirmDeleteTool = async () => {
     if (!toolToDelete) return;
+    if (!(await ensureWriteAccess())) return;
     
     vibrate(50);
     setTools(tools.filter((t) => t.id !== toolToDelete.id));
@@ -803,6 +831,7 @@ export default function LoadOut() {
 
   // 4. TEAM ACTIONS
   const addTeamMember = async () => {
+    if (!(await ensureWriteAccess())) return;
     const errors = buildFieldErrors({
       name: [{ isValid: isRequired(newMemberName), message: "Please enter a team member name." }],
     });
@@ -824,6 +853,10 @@ export default function LoadOut() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('workers');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          showToast(limitCheck.reason || "Account locked. Renew to edit.", "error");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'workers', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -854,6 +887,7 @@ export default function LoadOut() {
   };
 
   const deleteTeamMember = async (id) => {
+    if (!(await ensureWriteAccess())) return;
     const member = teamMembers.find((entry) => entry.id === id);
     if (!confirm(`Remove ${member?.name || "this team member"}? This cannot be undone.`)) return;
     vibrate();
@@ -874,6 +908,7 @@ export default function LoadOut() {
 
   // 5. GLOBAL MENU
   const handleRenameRig = async () => {
+    if (!(await ensureWriteAccess())) return;
     const errors = buildFieldErrors({
       name: [{ isValid: isRequired(renameRigName), message: "Please enter a rig name." }],
     });
@@ -906,6 +941,7 @@ export default function LoadOut() {
   };
 
   const handleDeleteRig = async () => {
+    if (!(await ensureWriteAccess())) return;
     if (rigs.length === 1) {
       showToast("Cannot delete only rig", "error");
       return;
@@ -962,6 +998,7 @@ export default function LoadOut() {
   };
 
   const restockAll = async () => {
+    if (!(await ensureWriteAccess())) return;
     if (!confirm("Auto-refill low items to target quantities?")) return;
     vibrate();
     const updates = items.map(i => i.quantity < i.min_quantity ? { ...i, quantity: i.min_quantity } : i);
@@ -1004,6 +1041,7 @@ export default function LoadOut() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-inter pb-32">
+      <SubscriptionBanner />
       
       {/* HEADER */}
       <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-md">
@@ -1148,8 +1186,8 @@ export default function LoadOut() {
                 
                 {/* ACTION BAR (STICKY Z-30 - Lower than Menu) */}
                 <div className="sticky top-0 z-30 bg-[var(--bg-main)] pt-2 pb-4 flex gap-2 h-16 border-b border-[var(--border-color)]">
-                    <div className="relative flex-1 h-full">
-                        <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
+                    <div className="relative flex-1 h-full flex items-center">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-industrial-muted pointer-events-none" size={20} />
                         <input 
                             type="text" 
                             placeholder="Filter stock..." 
@@ -1398,8 +1436,8 @@ export default function LoadOut() {
         {activeTab === "TOOLS" && (
             <div className="animate-in fade-in slide-in-from-right-4">
                 <div className="sticky top-0 z-30 bg-background pt-2 pb-4 flex gap-2 h-16">
-                    <div className="relative flex-1 h-full">
-                        <Search className="absolute left-3 top-4 text-industrial-muted" size={20} />
+                    <div className="relative flex-1 h-full flex items-center">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-industrial-muted pointer-events-none" size={20} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
                     <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
@@ -1716,8 +1754,15 @@ export default function LoadOut() {
       {showAddTool && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
             <div className="glass-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl relative border border-industrial-border bg-industrial-bg">
-                <button onClick={() => setShowAddTool(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
+                <button type="button" onClick={() => setShowAddTool(false)} className="absolute top-4 right-4 text-industrial-muted hover:text-foreground"><X size={20}/></button>
                 <h2 className="font-oswald font-bold text-xl mb-6 text-[#FF6700]">REGISTER TOOL</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addTool();
+                  }}
+                  className="contents"
+                >
                 <div className="mb-4">
                     {photoPreview ? (
                         <div className="relative w-full h-40 bg-black/40 rounded-xl overflow-hidden border border-white/10">
@@ -1775,9 +1820,10 @@ export default function LoadOut() {
                         </FormField>
                     </div>
                 </div>
-                <button onClick={addTool} disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
+                <button type="submit" disabled={uploading} className="w-full mt-6 bg-[#FF6700] text-black font-bold py-3 rounded-xl hover:scale-105 transition shadow-[0_0_20px_rgba(255,103,0,0.4)] flex items-center justify-center gap-2">
                     {uploading ? <Loader2 className="animate-spin"/> : <CheckCircle2 size={18}/>} SAVE TO RIG
                 </button>
+                </form>
             </div>
         </div>
       )}

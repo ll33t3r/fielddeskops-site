@@ -14,6 +14,7 @@ import SignOffModals from "./SignOffModals";
 import JobSelector from "../../components/shared/JobSelector";
 import Toast from "../../components/shared/Toast";
 import FormField from "../../components/shared/FormField";
+import SubscriptionBanner from "../../components/shared/SubscriptionBanner";
 import { buildFieldErrors, inRange, isEmail, isPhone, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
@@ -133,6 +134,16 @@ export default function SignOff() {
   const showToast = (message, type = "success") => {
     setToastState({ message, type });
     setTimeout(() => setToastState(null), 3000);
+  };
+
+  const ensureWriteAccess = async () => {
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      showToast(access.reason || "Account locked. Renew to edit.", "error");
+      return false;
+    }
+    return true;
   };
 
   const openConfirmDialog = ({ title, description, confirmLabel = "Delete", onConfirm }) => {
@@ -512,6 +523,7 @@ export default function SignOff() {
   };
 
   const saveContract = async () => {
+    if (!(await ensureWriteAccess())) return;
     const errors = buildFieldErrors({
       contractBody: [{ isValid: isRequired(contractBody), message: "Please enter contract terms." }],
       clientName: [{ isValid: isRequired(clientName), message: "Please enter the customer name." }],
@@ -564,6 +576,10 @@ export default function SignOff() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('signoff_docs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          showToast(limitCheck.reason || "Account locked. Renew to edit.", "error");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'signoff_docs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -628,6 +644,7 @@ export default function SignOff() {
   };
 
   const saveDraft = async () => {
+    if (!(await ensureWriteAccess())) return;
     const errors = buildFieldErrors({
       contractBody: [{ isValid: isRequired(contractBody), message: "Please enter contract terms." }],
       clientName: [{ isValid: isRequired(clientName), message: "Please enter the customer name." }],
@@ -661,6 +678,10 @@ export default function SignOff() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('signoff_docs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          showToast(limitCheck.reason || "Account locked. Renew to edit.", "error");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'signoff_docs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -723,6 +744,7 @@ export default function SignOff() {
   };
 
   const deleteContract = async (contractId) => {
+    if (!(await ensureWriteAccess())) return;
     openConfirmDialog({
       title: "Delete contract?",
       description: "This action cannot be undone. The contract and its photos will be permanently removed.",
@@ -849,6 +871,7 @@ export default function SignOff() {
   };
 
   const saveTemplate = async (e) => {
+    if (!(await ensureWriteAccess())) return;
     if (e && typeof e.preventDefault === "function") e.preventDefault();
     try {
       if (!newTemplateName.trim()) {
@@ -938,6 +961,7 @@ export default function SignOff() {
   };
 
   const deleteTemplate = async (templateId) => {
+    if (!(await ensureWriteAccess())) return;
     openConfirmDialog({
       title: "Delete template?",
       description: "This action cannot be undone. The template will be permanently removed.",
@@ -960,6 +984,7 @@ export default function SignOff() {
   };
 
   const togglePin = async (template) => {
+    if (!(await ensureWriteAccess())) return;
     const pinnedTemplates = templates.filter(t => t.is_pinned);
     
     // Check 5-pin limit
@@ -1095,6 +1120,7 @@ export default function SignOff() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
+      <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt
           isOpen={showUpgradePrompt}

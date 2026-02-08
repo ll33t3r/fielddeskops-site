@@ -104,6 +104,10 @@ export default function JobSelector() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('jobs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          setError(limitCheck.reason || "Account locked. Renew to edit.");
+          return;
+        }
         setUpgradePromptData({ resourceType: 'jobs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;

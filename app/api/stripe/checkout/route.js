@@ -181,6 +181,7 @@ export async function POST(request) {
       },
       success_url: `${siteUrl}/dashboard?success=true`,
       cancel_url: `${siteUrl}/welcome`,
+      metadata: { userId: user.id },
     }
 
     sessionConfig.customer_email = user.email

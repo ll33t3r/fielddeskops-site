@@ -40,7 +40,7 @@ export async function middleware(request) {
   const pathname = request.nextUrl.pathname
 
     // Define public routes (no auth required)
-  const publicRoutes = ['/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
+  const publicRoutes = ['/', '/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
   const publicApiRoutes = ['/api/stripe/checkout']
   
   // Define protected routes
@@ -50,6 +50,14 @@ export async function middleware(request) {
   // Check if route is public
   const isPublicRoute = publicRoutes.some((route) => pathname === route || pathname.startsWith(route))
   const isPublicApiRoute = publicApiRoutes.some((route) => pathname.startsWith(route))
+
+  // Root: send new users to Welcome, logged-in to Dashboard
+  if (pathname === '/') {
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return NextResponse.redirect(new URL('/welcome', request.url))
+  }
 
   // Allow public routes and API routes
   if (isPublicRoute || isPublicApiRoute) {

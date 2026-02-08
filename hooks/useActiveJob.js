@@ -69,6 +69,11 @@ export function useActiveJob() {
   const completeJob = useCallback(async (jobId) => {
     const supabase = createClient();
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase
         .from("jobs")
         .update({

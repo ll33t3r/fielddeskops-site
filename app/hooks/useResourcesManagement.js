@@ -135,6 +135,14 @@ export default function useResourcesManagement(supabase, options = {}) {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('workers');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          return {
+            data: null,
+            error: Object.assign(new Error(limitCheck.reason || 'Account locked. Renew to edit.'), {
+              readOnly: true,
+            }),
+          };
+        }
         return {
           data: null,
           error: Object.assign(new Error('Limit reached'), {
@@ -164,6 +172,11 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const deleteWorker = useCallback(async (id) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("crew").delete().eq("id", id);
       if (!error) {
         await loadWorkers();
@@ -186,6 +199,14 @@ export default function useResourcesManagement(supabase, options = {}) {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('rigs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          return {
+            data: null,
+            error: Object.assign(new Error(limitCheck.reason || 'Account locked. Renew to edit.'), {
+              readOnly: true,
+            }),
+          };
+        }
         return {
           data: null,
           error: Object.assign(new Error('Limit reached'), {
@@ -211,6 +232,11 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const deleteRig = useCallback(async (id) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("fleet").delete().eq("id", id);
       if (!error) {
         await loadFleet();
@@ -235,6 +261,14 @@ export default function useResourcesManagement(supabase, options = {}) {
     const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
     const limitCheck = await canCreateResource('customers');
     if (!limitCheck.allowed) {
+      if (limitCheck.readOnly) {
+        return {
+          data: null,
+          error: Object.assign(new Error(limitCheck.reason || 'Account locked. Renew to edit.'), {
+            readOnly: true,
+          }),
+        };
+      }
       return {
         data: null,
         error: Object.assign(new Error('Limit reached'), {
@@ -290,6 +324,11 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const deleteCustomer = useCallback(async (id) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("customers").delete().eq("id", id);
       if (!error) {
         await loadCustomers();
@@ -303,6 +342,11 @@ export default function useResourcesManagement(supabase, options = {}) {
 
   const updateCustomer = useCallback(async (id, updates) => {
     if (!id) return { error: null };
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+    }
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user?.id) {
       logError("Resources update customer missing user", userError, { userData });

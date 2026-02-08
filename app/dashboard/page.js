@@ -5,7 +5,7 @@ import { createClient } from "../utils/supabase/client";
 import { useActiveJob } from "../../hooks/useActiveJob";
 import useDashboardPageState from "../hooks/useDashboardPageState";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import DashboardHeader from "../components/dashboard/DashboardHeader";
 import MetricsBar from "../components/dashboard/MetricsBar";
 import AppsGrid from "../components/dashboard/AppsGrid";
@@ -25,12 +25,16 @@ import QuickToolModal from "../components/dashboard/quickadd/QuickToolModal";
 import QuickPhotoModal from "../components/dashboard/quickadd/QuickPhotoModal";
 import JobHistory from "../components/JobHistory";
 import UpgradePrompt from "@/components/UpgradePrompt";
+import SubscriptionBanner from "../components/shared/SubscriptionBanner";
+import Toast from "../components/shared/Toast";
 
 export default function Dashboard() {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
 
+  const [toast, setToast] = useState(null);
   const [showActiveJobsModal, setShowActiveJobsModal] = useState(false);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [assigningJob, setAssigningJob] = useState(null);
@@ -85,6 +89,24 @@ export default function Dashboard() {
   }, [syncActiveJob]);
 
   useEffect(() => {
+    const success = searchParams.get("success");
+    if (success === "true") {
+      setToast({
+        message: "Subscription activated. You are now on Pro.",
+        type: "success",
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("success");
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+  useEffect(() => {
     const isPanelOpen = showSettingsPanel || showWorkersPanel || showFleetPanel || showPhoneBookPanel;
     if (!isPanelOpen) return undefined;
     const { body } = document;
@@ -133,6 +155,8 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
+      <SubscriptionBanner />
+      <Toast toast={toast} onClose={() => setToast(null)} />
       {showUpgradePrompt && (
         <UpgradePrompt
           isOpen={showUpgradePrompt}

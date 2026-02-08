@@ -12,12 +12,17 @@ export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpd
     includeCustomers: false,
   });
   const [newWorker, setNewWorker] = useState({ name: "", role: "" });
+  const [accessError, setAccessError] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'workers', currentCount: 0, limit: 0, tier: 'free' });
 
   const handleAddWorker = async () => {
     if (!newWorker.name.trim()) return;
     const { data, error } = await addWorker(newWorker);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (error?.limitReached) {
       setUpgradePromptData({ resourceType: error.resourceType || 'workers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
       setShowUpgradePrompt(true);
@@ -32,6 +37,10 @@ export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpd
   const handleDeleteWorker = async (id) => {
     if (!confirm("Remove worker?")) return;
     const { error } = await deleteWorker(id);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error && onResourcesUpdated) {
       await onResourcesUpdated();
     }
@@ -48,6 +57,9 @@ export default function WorkersPanel({ isOpen, onClose, supabase, onResourcesUpd
           limit={upgradePromptData.limit}
           tier={upgradePromptData.tier}
         />
+      )}
+      {accessError && (
+        <p className="text-xs text-red-400">{accessError}</p>
       )}
       <div className="space-y-4">
         <div>

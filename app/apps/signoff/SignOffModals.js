@@ -540,6 +540,10 @@ export default function SignOffModals({ modal }) {
                     const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
                     const limitCheck = await canCreateResource('jobs');
                     if (!limitCheck.allowed && onLimitReached) {
+                      if (limitCheck.readOnly) {
+                        showToast(limitCheck.reason || "Account locked. Renew to edit.", "error");
+                        return;
+                      }
                       onLimitReached({ resourceType: 'jobs', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
                       return;
                     }

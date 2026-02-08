@@ -13,12 +13,13 @@ export default function SignupPage() {
   const [error, setError] = useState(null)
   const [checkEmail, setCheckEmail] = useState(false)
   const [formValues, setFormValues] = useState({ email: '', password: '' })
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [touched, setTouched] = useState({})
   const [fieldErrors, setFieldErrors] = useState({})
   const router = useRouter()
 
   const validate = useMemo(
-    () => (values) =>
+    () => (values, agreed) =>
       buildFieldErrors({
         email: [
           { isValid: isRequired(values.email), message: 'Email is required.' },
@@ -31,6 +32,7 @@ export default function SignupPage() {
             message: 'Password must be at least 8 characters.',
           },
         ],
+        terms: [{ isValid: agreed === true, message: 'You must agree to the Terms of Service to sign up.' }],
       }),
     []
   )
@@ -40,7 +42,7 @@ export default function SignupPage() {
     setFormValues((prev) => {
       const next = { ...prev, [field]: value }
       if (touched[field]) {
-        setFieldErrors(validate(next))
+        setFieldErrors(validate(next, agreedToTerms))
       }
       return next
     })
@@ -48,7 +50,7 @@ export default function SignupPage() {
 
   const handleBlur = (field) => () => {
     setTouched((prev) => ({ ...prev, [field]: true }))
-    setFieldErrors(validate({ ...formValues, [field]: formValues[field] }))
+    setFieldErrors(validate({ ...formValues, [field]: formValues[field] }, agreedToTerms))
   }
 
   const handleSubmit = async (formData) => {
@@ -104,12 +106,12 @@ export default function SignupPage() {
       </div>
 
       <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
-        <form
+          <form
           onSubmit={(event) => {
             event.preventDefault()
-            const nextErrors = validate(formValues)
+            const nextErrors = validate(formValues, agreedToTerms)
             setFieldErrors(nextErrors)
-            setTouched({ email: true, password: true })
+            setTouched({ email: true, password: true, terms: true })
             if (Object.keys(nextErrors).length > 0) return
             handleSubmit(new FormData(event.currentTarget))
           }}
@@ -154,6 +156,34 @@ export default function SignupPage() {
             />
           </FormField>
 
+          <div className="flex items-start gap-3">
+            <input
+              id="signup-terms"
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => {
+                setAgreedToTerms(e.target.checked)
+                if (touched.terms) setFieldErrors(validate(formValues, e.target.checked))
+              }}
+              onBlur={() => {
+                setTouched((prev) => ({ ...prev, terms: true }))
+                setFieldErrors(validate(formValues, agreedToTerms))
+              }}
+              className="mt-1 h-4 w-4 rounded border-[#333] bg-[#1a1a1a] text-[#FF6700] focus:ring-[#FF6700]"
+              aria-invalid={touched.terms && fieldErrors.terms ? 'true' : 'false'}
+            />
+            <label htmlFor="signup-terms" className="text-sm text-gray-400 leading-tight cursor-pointer">
+              I agree to the{' '}
+              <Link href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-[#FF6700] hover:underline">
+                Terms of Service
+              </Link>
+              {' '}to create an account.
+            </label>
+          </div>
+          {touched.terms && fieldErrors.terms && (
+            <p className="text-red-400 text-sm" role="alert">{fieldErrors.terms}</p>
+          )}
+
           {error && (
             <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg text-red-400 text-sm text-center">
               {error}
@@ -162,8 +192,8 @@ export default function SignupPage() {
 
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+            disabled={loading || !agreedToTerms}
+            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'CREATE ACCOUNT'}
           </button>

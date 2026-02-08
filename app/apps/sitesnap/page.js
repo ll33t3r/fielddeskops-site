@@ -13,6 +13,7 @@ import Link from 'next/link';
 import JobSelector from '../../components/shared/JobSelector';
 import Toast from '../../components/shared/Toast';
 import FormField from '../../components/shared/FormField';
+import SubscriptionBanner from '../../components/shared/SubscriptionBanner';
 import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from '../../utils/validation';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { logError } from '../../../utils/logger';
@@ -64,6 +65,16 @@ export default function SiteSnap() {
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const ensureWriteAccess = async () => {
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      showToast(access.reason || 'Account locked. Renew to edit.', 'error');
+      return false;
+    }
+    return true;
   };
 
   const compressImage = async (file) => {
@@ -233,6 +244,7 @@ export default function SiteSnap() {
   };
 
   const savePhoto = async () => {
+    if (!(await ensureWriteAccess())) return;
     const errors = buildFieldErrors({
       file: [{ isValid: !!fileToUpload, message: 'Please select a photo to upload.' }],
       caption: [{ isValid: photoCaption.length <= 120, message: 'Caption must be under 120 characters.' }],
@@ -266,6 +278,10 @@ export default function SiteSnap() {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('photos');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          showToast(limitCheck.reason || 'Account locked. Renew to edit.', 'error');
+          return;
+        }
         setUpgradePromptData({ resourceType: 'photos', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -344,6 +360,7 @@ export default function SiteSnap() {
   };
 
   const deleteSelectedPhotos = async () => {
+    if (!(await ensureWriteAccess())) return;
     try {
       if (!isOnline) {
         showToast('You are offline. Reconnect to delete photos.', 'error');
@@ -367,6 +384,7 @@ export default function SiteSnap() {
   };
 
   const linkToEstimate = async (estimateId) => {
+    if (!(await ensureWriteAccess())) return;
     if (!fullscreenPhoto?.id) return;
     if (!isOnline) {
       showToast('You are offline. Reconnect to link estimates.', 'error');
@@ -412,6 +430,7 @@ export default function SiteSnap() {
   };
 
   const saveAnnotation = async (text) => {
+    if (!(await ensureWriteAccess())) return;
     if (!fullscreenPhoto?.id) return;
     if (!text.trim()) {
       setFormErrors((prev) => ({ ...prev, annotation: 'Please enter an annotation.' }));
@@ -507,6 +526,7 @@ export default function SiteSnap() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] pb-32 relative">
+      <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt
           isOpen={showUpgradePrompt}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, DollarSign } from "lucide-react";
 import { createClient } from "../../../utils/supabase/client";
+import { roundCurrency } from "../../../utils/validation";
 import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved }) {
@@ -80,14 +81,14 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
     const safeMaterials = Number(materialsCost) || 0;
     const labor = safeHours * (Number(settings.hourly_rate) || 0);
     const materials = safeMaterials * (1 + (Number(settings.markup_percentage) || 0) / 100);
-    const sub = labor + materials;
-    const taxAmount = settings.tax_enabled ? sub * (Number(settings.tax_rate) || 0) / 100 : 0;
+    const sub = roundCurrency(labor + materials);
+    const taxAmount = settings.tax_enabled ? roundCurrency(sub * (Number(settings.tax_rate) || 0) / 100) : 0;
     return {
-      laborCost: labor,
-      materialsWithMarkup: materials,
+      laborCost: roundCurrency(labor),
+      materialsWithMarkup: roundCurrency(materials),
       subtotal: sub,
       tax: taxAmount,
-      total: sub + taxAmount,
+      total: roundCurrency(sub + taxAmount),
     };
   }, [hours, materialsCost, settings]);
 
@@ -111,6 +112,10 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('estimates');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          setError(limitCheck.reason || 'Account locked. Renew to edit.');
+          return;
+        }
         setUpgradePromptData({ resourceType: 'estimates', currentCount: limitCheck.currentCount, limit: limitCheck.limit, tier: limitCheck.tier });
         setShowUpgradePrompt(true);
         return;
@@ -124,9 +129,9 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
         .insert({
           user_id: user.id,
           job_id: activeJob.id,
-          subtotal,
-          tax,
-          total_price: total,
+          subtotal: roundCurrency(subtotal),
+          tax: roundCurrency(tax),
+          total_price: roundCurrency(total),
           status: "DRAFT",
           notes,
         });

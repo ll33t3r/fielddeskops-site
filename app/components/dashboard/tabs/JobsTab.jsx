@@ -13,6 +13,7 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
   const [newJobWorkerId, setNewJobWorkerId] = useState("");
   const [editingJob, setEditingJob] = useState(null);
   const [jobMenuOpen, setJobMenuOpen] = useState(null);
+  const [accessError, setAccessError] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
 
@@ -23,6 +24,10 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
       assigned_worker_id: newJobWorkerId || null,
     });
 
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (error?.limitReached) {
       setUpgradePromptData({
         resourceType: error.resourceType || 'jobs',
@@ -43,6 +48,10 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
 
   const handleUpdateJob = async (id, updates) => {
     const { error } = await updateJob(id, updates);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error) {
       setEditingJob(null);
       setJobMenuOpen(null);
@@ -53,6 +62,10 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
   const handleDeleteJob = async (id) => {
     if (!confirm("Delete this job?")) return;
     const { error } = await deleteJob(id);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error) {
       if (activeJob?.id === id) onSelectJob(null);
       setJobMenuOpen(null);
@@ -78,6 +91,9 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
           limit={upgradePromptData.limit}
           tier={upgradePromptData.tier}
         />
+      )}
+      {accessError && (
+        <p className="text-xs text-red-400">{accessError}</p>
       )}
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Create Job</label>

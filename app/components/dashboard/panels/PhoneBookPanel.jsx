@@ -21,6 +21,7 @@ export default function PhoneBookPanel({
   const [customerSearch, setCustomerSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", phone: "", email: "", address: "", notes: "" });
+  const [accessError, setAccessError] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'customers', currentCount: 0, limit: 0, tier: 'free' });
   const nameInputRef = useRef(null);
@@ -37,6 +38,10 @@ export default function PhoneBookPanel({
     const trimmedName = newCustomer.name.trim();
     if (!trimmedName) return;
     const { error } = await addCustomer({ ...newCustomer, name: trimmedName });
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (error?.limitReached) {
       setUpgradePromptData({ resourceType: error.resourceType || 'customers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
       setShowUpgradePrompt(true);
@@ -65,6 +70,9 @@ export default function PhoneBookPanel({
           limit={upgradePromptData.limit}
           tier={upgradePromptData.tier}
         />
+      )}
+      {accessError && (
+        <p className="text-xs text-red-400">{accessError}</p>
       )}
       <div className="space-y-4">
         <div className="relative">

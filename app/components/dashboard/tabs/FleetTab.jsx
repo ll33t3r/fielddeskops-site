@@ -11,12 +11,17 @@ export default function FleetTab({ supabase, onResourcesUpdated }) {
     includeCustomers: false,
   });
   const [newRig, setNewRig] = useState({ name: "", plate: "" });
+  const [accessError, setAccessError] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'rigs', currentCount: 0, limit: 0, tier: 'free' });
 
   const handleAddRig = async () => {
     if (!newRig.name.trim()) return;
     const { data, error } = await addRig(newRig);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (error?.limitReached) {
       setUpgradePromptData({ resourceType: error.resourceType || 'rigs', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
       setShowUpgradePrompt(true);
@@ -31,6 +36,10 @@ export default function FleetTab({ supabase, onResourcesUpdated }) {
   const handleDeleteRig = async (id) => {
     if (!confirm("Remove rig?")) return;
     const { error } = await deleteRig(id);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error) {
       await onResourcesUpdated();
     }
@@ -47,6 +56,9 @@ export default function FleetTab({ supabase, onResourcesUpdated }) {
           limit={upgradePromptData.limit}
           tier={upgradePromptData.tier}
         />
+      )}
+      {accessError && (
+        <p className="text-xs text-red-400">{accessError}</p>
       )}
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Rig</label>

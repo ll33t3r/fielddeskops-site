@@ -33,6 +33,7 @@ export default function CustomerDetailModal({
   const [totalPaid, setTotalPaid] = useState(0);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [accessError, setAccessError] = useState("");
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -161,6 +162,12 @@ export default function CustomerDetailModal({
     const errors = validateEditFields({ ...editFields, name: trimmedName });
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0 || !localCustomer?.id) return;
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      setAccessError(access.reason || "Account locked. Renew to edit.");
+      return;
+    }
 
     const payload = {
       name: trimmedName,
@@ -193,6 +200,16 @@ export default function CustomerDetailModal({
     if (onUpdate) await onUpdate();
   };
 
+  const handleToggleEdit = async () => {
+    const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+    const access = await getWriteAccessStatus();
+    if (!access.allowed) {
+      setAccessError(access.reason || "Account locked. Renew to edit.");
+      return;
+    }
+    setIsEditing((prev) => !prev);
+  };
+
   if (!isOpen || !localCustomer) return null;
 
   return (
@@ -206,7 +223,7 @@ export default function CustomerDetailModal({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsEditing((prev) => !prev)}
+              onClick={handleToggleEdit}
               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-[var(--text-sub)] transition"
               aria-label="Edit customer"
             >
@@ -219,6 +236,9 @@ export default function CustomerDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {accessError && (
+            <p className="text-xs text-red-400">{accessError}</p>
+          )}
           <section className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-sub)]">Contact Info</h3>
             <div className="space-y-3">

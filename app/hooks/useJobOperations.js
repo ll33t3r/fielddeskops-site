@@ -60,6 +60,18 @@ export default function useJobOperations(supabase, options = {}) {
       const { canCreateResource, incrementResourceUsage } = await import('@/lib/subscription/subscriptionHelpers');
       const limitCheck = await canCreateResource('jobs');
       if (!limitCheck.allowed) {
+        if (limitCheck.readOnly) {
+          return {
+            data: null,
+            error: Object.assign(new Error(limitCheck.reason || 'Account locked. Renew to edit.'), {
+              readOnly: true,
+              resourceType: 'jobs',
+              currentCount: limitCheck.currentCount,
+              limit: limitCheck.limit,
+              tier: limitCheck.tier,
+            }),
+          };
+        }
         return {
           data: null,
           error: Object.assign(new Error('Limit reached'), {
@@ -99,6 +111,11 @@ export default function useJobOperations(supabase, options = {}) {
 
   const updateJob = useCallback(async (id, updates) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("jobs").update(updates).eq("id", id);
       if (!error) {
         await loadJobs();
@@ -112,6 +129,11 @@ export default function useJobOperations(supabase, options = {}) {
 
   const deleteJob = useCallback(async (id) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("jobs").delete().eq("id", id);
       if (!error) {
         await loadJobs();
@@ -125,6 +147,11 @@ export default function useJobOperations(supabase, options = {}) {
 
   const assignToJob = useCallback(async (jobId, field, valueId) => {
     try {
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        return { error: Object.assign(new Error(access.reason || 'Account locked. Renew to edit.'), { readOnly: access.readOnly }) };
+      }
       const { error } = await supabase.from("jobs").update({ [field]: valueId }).eq("id", jobId);
       if (!error) {
         await loadJobs();

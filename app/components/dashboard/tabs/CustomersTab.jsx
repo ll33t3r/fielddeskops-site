@@ -19,6 +19,7 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [newErrors, setNewErrors] = useState({});
   const [editErrors, setEditErrors] = useState({});
+  const [accessError, setAccessError] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'customers', currentCount: 0, limit: 0, tier: 'free' });
 
@@ -41,6 +42,10 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
     setNewErrors(errors);
     if (Object.keys(errors).length > 0) return;
     const { error } = await addCustomer({ ...newCustomer, name: trimmedName });
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (error?.limitReached) {
       setUpgradePromptData({ resourceType: error.resourceType || 'customers', currentCount: error.currentCount ?? 0, limit: error.limit ?? 0, tier: error.tier || 'free' });
       setShowUpgradePrompt(true);
@@ -58,6 +63,10 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
   const handleDeleteCustomer = async (id) => {
     if (!confirm("Remove customer?")) return;
     const { error } = await deleteCustomer(id);
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error) {
       await onResourcesUpdated();
     }
@@ -75,6 +84,10 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
       address: editingCustomer.address || "",
       notes: editingCustomer.notes || "",
     });
+    if (error?.readOnly) {
+      setAccessError(error.message || "Account locked. Renew to edit.");
+      return;
+    }
     if (!error) {
       setEditingCustomer(null);
       setEditErrors({});
@@ -101,6 +114,9 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
           limit={upgradePromptData.limit}
           tier={upgradePromptData.tier}
         />
+      )}
+      {accessError && (
+        <p className="text-xs text-red-400">{accessError}</p>
       )}
       <div>
         <label className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest mb-2 block">Add Customer</label>
