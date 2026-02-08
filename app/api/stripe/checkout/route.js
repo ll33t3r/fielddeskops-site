@@ -48,23 +48,33 @@ export async function POST(request) {
       logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
       priceId = null
     }
-    // Server uses STRIPE_PAYMENT_LINK (set in Vercel); optional body from client.
-    const paymentLink = (
+    // Server: try STRIPE_PAYMENT_LINK, then STRIPE_CHECKOUT_LINK (Vercel sometimes only exposes one), then body.
+    const rawLink =
       process.env.STRIPE_PAYMENT_LINK ||
+      process.env.STRIPE_CHECKOUT_LINK ||
       bodyPaymentLink
-    )?.trim()
-    if (!priceId && !paymentLink) {
-      const rawServer = process.env.STRIPE_PAYMENT_LINK
-      const debug =
-        typeof rawServer === 'string' && rawServer.trim()
-          ? `STRIPE_PAYMENT_LINK is set but invalid (length ${rawServer.trim().length}).`
-          : 'Payment link not set. In Vercel set STRIPE_PAYMENT_LINK to your https://buy.stripe.com/... URL (Production), save, then redeploy.'
-      logError('Checkout missing price ID and payment link', { hasServer: !!rawServer })
+    const paymentLink = typeof rawLink === 'string' ? rawLink.trim() : ''
+    const validLink = paymentLink && VALID_PAYMENT_LINK_REGEX.test(paymentLink) ? paymentLink : null
+
+    if (!priceId && !validLink) {
+      const hasA = !!(process.env.STRIPE_PAYMENT_LINK?.trim())
+      const hasB = !!(process.env.STRIPE_CHECKOUT_LINK?.trim())
+      logError('Checkout missing price ID and payment link', {
+        hasStripePaymentLink: hasA,
+        hasStripeCheckoutLink: hasB,
+        linkLength: paymentLink.length,
+        linkValid: !!validLink,
+      })
+      const msg = paymentLink && !validLink
+        ? `Payment link is set but invalid (must be https://buy.stripe.com/...). Check for typos or extra characters.`
+        : 'Payment link not set. In Vercel set STRIPE_PAYMENT_LINK (or STRIPE_CHECKOUT_LINK) to your https://buy.stripe.com/... URL. Assign to Production, save, then redeploy.'
       return NextResponse.json(
-        { error: debug },
+        { error: msg },
         { status: 500 }
       )
     }
+
+    const paymentLinkToUse = validLink || null
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     if (!supabaseUrl) {
@@ -154,8 +164,8 @@ export async function POST(request) {
     }
 
     // If using Payment Link (no Price ID), redirect to the link
-    if (!priceId && paymentLink?.trim()) {
-      return NextResponse.json({ url: paymentLink.trim() })
+    if (!priceId && paymentLinkToUse) {
+      return NextResponse.json({ url: paymentLinkToUse })
     }
 
     // Build checkout session config (Price ID flow)
