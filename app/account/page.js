@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase/server'
 import BillingPortalButton from './BillingPortalButton'
 
+export const dynamic = 'force-dynamic'
+
 // Map internal tier values to display names
 function getPlanDisplay(tier, status) {
   if (status === 'paid' || tier === 'paid' || tier === 'pro') {
