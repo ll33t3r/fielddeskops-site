@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { logError } from "../../../utils/logger";
 import { getPaymentLink } from "@/lib/stripePaymentLink";
 
@@ -77,16 +76,18 @@ export default function SubscriptionBanner() {
       <div className="mx-4 mt-4 mb-2 rounded-xl border border-[#FF6700]/40 bg-[#FF6700]/10 p-4 text-sm text-[var(--text-main)]">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-semibold text-[#FF6700]">Account locked. Renew to edit.</p>
-          <Link
-            href="/account"
-            className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-4 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition"
+          <button
+            onClick={handleUpgrade}
+            disabled={isLoadingUpgrade}
+            className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-4 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Manage Billing
-          </Link>
+            {isLoadingUpgrade ? "Opening..." : "Upgrade Account"}
+          </button>
         </div>
         <p className="mt-2 text-xs text-[var(--text-sub)]">
           You can still view all saved data, but creating or editing is disabled until renewal.
         </p>
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       </div>
     );
   }
