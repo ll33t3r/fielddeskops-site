@@ -15,7 +15,7 @@ export function useSubscription() {
         const { data: userData, error: userError } = await supabase.auth.getUser();
 
         if (userError) {
-          logError("Subscription status auth failed", userError);
+          logError('Subscription status auth failed', userError);
           return;
         }
 
@@ -24,26 +24,22 @@ export function useSubscription() {
           return;
         }
 
-        // Check the subscriptions table
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('status')
-          .eq('user_id', user.id)
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('subscription_status, subscription_tier')
+          .eq('id', user.id)
           .maybeSingle();
 
         if (error) {
-          logError("Subscription status check failed", error);
+          logError('Subscription status check failed', error);
           return;
         }
 
-        // If status is 'pro' (or 'active'/'trialing' depending on your webhook logic), they are Pro.
-        if (data && (data.status === 'pro' || data.status === 'active' || data.status === 'trialing')) {
-          if (isMounted) setIsPro(true);
-        } else {
-          if (isMounted) setIsPro(false);
-        }
+        const status = profile?.subscription_status || profile?.subscription_tier || 'free';
+        const pro = status === 'paid' || status === 'pro' || status === 'trial';
+        if (isMounted) setIsPro(pro);
       } catch (error) {
-        logError("Subscription status check failed", error);
+        logError('Subscription status check failed', error);
       } finally {
         if (isMounted) setLoading(false);
       }
