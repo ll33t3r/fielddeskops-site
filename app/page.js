@@ -3,9 +3,16 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function RootPage() {
   const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  let session = null;
+  try {
+    const {
+      data: { session: activeSession },
+      error,
+    } = await supabase.auth.getSession();
+    session = error ? null : activeSession;
+  } catch {
+    session = null;
+  }
 
   if (session) {
     redirect("/dashboard");

@@ -4,9 +4,16 @@ import SubscriptionClient from './SubscriptionClient'
 
 export default async function SubscriptionPage() {
   const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  let session = null
+  try {
+    const {
+      data: { session: activeSession },
+      error,
+    } = await supabase.auth.getSession()
+    session = error ? null : activeSession
+  } catch {
+    session = null
+  }
 
   if (!session) {
     const message = encodeURIComponent('Please log in to continue.')

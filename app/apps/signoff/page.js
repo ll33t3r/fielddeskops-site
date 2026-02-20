@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";

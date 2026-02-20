@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { logError } from "../../../utils/logger";
 import { getPaymentLink } from "@/lib/stripePaymentLink";
@@ -87,6 +88,12 @@ export default function SubscriptionBanner() {
         <p className="mt-2 text-xs text-[var(--text-sub)]">
           You can still view all saved data, but creating or editing is disabled until renewal.
         </p>
+        <Link
+          href="/account"
+          className="mt-2 inline-block text-xs font-semibold text-[#FF6700] hover:underline"
+        >
+          View account status
+        </Link>
         {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       </div>
     );
@@ -101,6 +108,12 @@ export default function SubscriptionBanner() {
             <p className="text-xs text-[var(--text-sub)]">
               You are on the free plan. Upgrade to unlock unlimited jobs, photos, contracts, and inventory.
             </p>
+            <Link
+              href="/account"
+              className="mt-1 inline-block text-xs font-semibold text-[#FF6700] hover:underline"
+            >
+              View account status
+            </Link>
           </div>
           <button
             onClick={handleUpgrade}
