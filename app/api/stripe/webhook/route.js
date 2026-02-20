@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import * as Sentry from '@sentry/nextjs';
 import { logError } from '../../../../utils/logger';
 import {
   handleCheckoutCompleted,
@@ -91,6 +92,7 @@ export async function POST(request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
+    Sentry.captureException(error);
     logError('Webhook handler failed', error);
     return NextResponse.json(
       { error: error.message || 'Webhook handler failed' },

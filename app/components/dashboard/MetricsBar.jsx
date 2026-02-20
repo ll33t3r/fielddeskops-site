@@ -11,7 +11,7 @@ export default function MetricsBar({
   onOpenAlertsModal,
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2 mb-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
       <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center relative group">
         <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Revenue</p>
         <p className="text-[#22c55e] font-oswald text-lg tracking-tight">{formatCurrency(metrics.revenue)}</p>

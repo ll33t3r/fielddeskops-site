@@ -1,7 +1,9 @@
-﻿'use server'
+'use server'
 
 import { createClient } from '../../../lib/supabase/server'
 import { headers } from 'next/headers'
+import { sendWelcomeEmail } from '@/lib/email'
+import { logError } from '../../../utils/logger'
 
 export async function signup(formData) {
   const origin = headers().get('origin')
@@ -19,6 +21,16 @@ export async function signup(formData) {
 
   if (error) {
     return { error: error.message }
+  }
+
+  // Scaffolded transactional email path:
+  // this only sends when RESEND_API_KEY is configured.
+  try {
+    if (typeof email === 'string' && email.trim()) {
+      await sendWelcomeEmail({ to: email.trim() })
+    }
+  } catch (emailError) {
+    logError('Signup welcome email failed', emailError, { email })
   }
 
   // Check if we have an active session immediately (Auto-Confirm ON)

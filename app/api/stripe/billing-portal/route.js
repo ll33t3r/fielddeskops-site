@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import * as Sentry from '@sentry/nextjs'
 import { logError } from '../../../../utils/logger'
 
 export const dynamic = 'force-dynamic'
@@ -86,15 +87,68 @@ export async function POST() {
       )
     }
 
-    // Create Stripe billing portal session
     const stripe = new Stripe(stripeSecretKey)
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
-      return_url: `${siteUrl}/account`,
-    })
+    const keyMode = stripeSecretKey.includes('_test_') ? 'test' : 'live'
+    let customerId = profile.stripe_customer_id
+    let portalSession
+
+    try {
+      portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${siteUrl}/account`,
+      })
+    } catch (portalError) {
+      const isMissingCustomer =
+        portalError?.code === 'resource_missing' &&
+        typeof portalError?.message === 'string' &&
+        portalError.message.toLowerCase().includes('no such customer')
+
+      if (!isMissingCustomer) {
+        throw portalError
+      }
+
+      // Recovery path: try to find the current-mode customer by authenticated email.
+      let recoveredCustomerId = null
+      if (user.email) {
+        const customerResult = await stripe.customers.list({ email: user.email, limit: 1 })
+        recoveredCustomerId = customerResult?.data?.[0]?.id || null
+      }
+
+      if (!recoveredCustomerId) {
+        return NextResponse.json(
+          {
+            error:
+              `Your billing account was created in a different Stripe mode. ` +
+              `Current server key is ${keyMode.toUpperCase()} mode. ` +
+              `Please use Renew / Resubscribe to create a billing record in this mode.`,
+          },
+          { status: 409 }
+        )
+      }
+
+      customerId = recoveredCustomerId
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: recoveredCustomerId })
+        .eq('id', user.id)
+
+      if (updateError) {
+        logError('Billing portal customer recovery profile update failed', updateError, {
+          userId: user.id,
+          recoveredCustomerId,
+        })
+      }
+
+      portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${siteUrl}/account`,
+      })
+    }
 
     return NextResponse.json({ url: portalSession.url })
   } catch (error) {
+    Sentry.captureException(error)
     logError('Billing portal session creation failed', error)
     return NextResponse.json(
       { error: error.message || 'Failed to create billing portal session.' },

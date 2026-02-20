@@ -27,6 +27,7 @@ import JobHistory from "../components/JobHistory";
 import UpgradePrompt from "@/components/UpgradePrompt";
 import SubscriptionBanner from "../components/shared/SubscriptionBanner";
 import Toast from "../components/shared/Toast";
+import Link from "next/link";
 
 export default function Dashboard() {
   const supabase = createClient();
@@ -172,11 +173,11 @@ export default function Dashboard() {
         onOpenJobHistory={() => setShowJobHistory(true)}
       />
 
-      <div className="px-6 mb-3">
+      <div className="px-4 sm:px-6 mb-3">
         <JobSelector />
       </div>
 
-      <div className="px-6 pb-3 shrink-0">
+      <div className="px-4 sm:px-6 pb-3 shrink-0">
           <MetricsBar
           metrics={metrics}
           privacyMode={privacyMode}
@@ -187,17 +188,25 @@ export default function Dashboard() {
         />
       </div>
 
-      <main className="flex-1 flex items-center justify-center px-6 pb-32">
-        <div className="w-full flex items-center justify-center pb-40">
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 pb-20 sm:pb-32">
+        <div className="w-full flex items-center justify-center pb-16 sm:pb-32">
           <AppsGrid activeJob={activeJob} />
         </div>
       </main>
 
-      <div className="pb-4 text-center shrink-0">
+      <div className="pb-4 text-center shrink-0 space-y-2">
         <p className="text-[9px] font-bold uppercase tracking-widest">
           <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
           <span className="text-[#FF6700]">FIELDDESKOPS</span>
         </p>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <Link href="/legal/terms?from=%2Fdashboard" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors">
+            Terms
+          </Link>
+          <Link href="/legal/privacy?from=%2Fdashboard" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors">
+            Privacy
+          </Link>
+        </div>
       </div>
 
       <QuickAddMenu

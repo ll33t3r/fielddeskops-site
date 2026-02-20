@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import * as Sentry from '@sentry/nextjs'
 import { logError } from '../../../../utils/logger'
 import { getPaymentLink } from '../../../../lib/stripePaymentLink'
 
@@ -214,6 +215,7 @@ export async function POST(request) {
     return NextResponse.json({ url: session.url })
 
   } catch (error) {
+    Sentry.captureException(error)
     logError('Checkout session creation failed', error)
     return NextResponse.json(
       { error: error.message || 'Failed to create checkout session' },

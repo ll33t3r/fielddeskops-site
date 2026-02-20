@@ -17,9 +17,16 @@ function getPlanDisplay(tier, status) {
 
 export default async function AccountPage() {
   const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  let session = null
+  try {
+    const {
+      data: { session: activeSession },
+      error,
+    } = await supabase.auth.getSession()
+    session = error ? null : activeSession
+  } catch {
+    session = null
+  }
 
   if (!session) {
     const message = encodeURIComponent('Please log in to continue.')
@@ -34,6 +41,9 @@ export default async function AccountPage() {
 
   const subscriptionStatus = profile?.subscription_status || 'free'
   const subscriptionTier = profile?.subscription_tier || 'free'
+  const hasStripeCustomer = !!profile?.stripe_customer_id
+  const isActiveSubscription = subscriptionStatus === 'paid' || subscriptionStatus === 'trial'
+  const hasPastSubscription = Boolean(profile?.stripe_customer_id)
   const plan = getPlanDisplay(subscriptionTier, subscriptionStatus)
   const userEmail = session.user.email || 'Unknown'
   const memberSince = profile?.created_at
@@ -56,56 +66,60 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] p-4 md:p-8 text-[var(--text-main)]">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
+    <div className="h-screen overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)]">
+      <div className="max-w-6xl mx-auto p-4 md:p-8 pb-10">
+        <div className="mb-8 industrial-card rounded-2xl p-5 md:p-6 border border-[#FF6700]/30 shadow-[0_0_28px_rgba(255,103,0,0.15)]">
           <Link
             href="/dashboard"
-            className="inline-flex items-center text-[var(--text-sub)] hover:text-[#FF6700] mb-6 font-semibold"
+            className="inline-flex items-center rounded-xl border border-[#FF6700]/60 bg-[#FF6700]/15 px-4 py-2 text-sm font-bold text-[#FF6700] shadow-[0_0_18px_rgba(255,103,0,0.25)] hover:bg-[#FF6700]/25 hover:shadow-[0_0_24px_rgba(255,103,0,0.45)] transition mb-5"
           >
             Back to Dashboard
           </Link>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-oswald font-bold">Account Settings</h1>
-              <p className="text-[var(--text-sub)] mt-2">Manage your FieldDeskOps account</p>
-            </div>
+          <div>
+            <h1 className="text-4xl md:text-5xl font-oswald font-black uppercase tracking-wide">
+              Account Command
+            </h1>
+            <p className="text-[var(--text-sub)] mt-2">Manage billing, subscription, and usage in one place.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="industrial-card rounded-2xl p-6">
-              <h2 className="text-xl font-oswald font-semibold mb-4">Subscription</h2>
+            <div className="industrial-card rounded-2xl p-6 border border-[var(--border-color)]">
+              <h2 className="text-xl font-oswald font-bold uppercase tracking-wide mb-4">Subscription</h2>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-[var(--text-sub)]">Current Plan</p>
-                  <p className={`text-2xl font-bold ${plan.color}`}>{plan.label}</p>
+                  <p className={`text-3xl font-oswald font-bold ${plan.color}`}>{plan.label}</p>
                 </div>
                 <span className="rounded-full border border-[#FF6700]/60 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#FF6700]">
                   {subscriptionStatus}
                 </span>
               </div>
 
-              {subscriptionStatus === 'paid' && (
-                <p className="mt-2 text-sm text-green-400">Active subscription</p>
-              )}
-              {subscriptionStatus === 'trial' && (
-                <p className="mt-2 text-sm text-yellow-400">Trial period</p>
-              )}
-              {(subscriptionStatus === 'free' || subscriptionStatus === 'inactive') && (
-                <p className="mt-2 text-sm text-[var(--text-sub)]">
-                  Upgrade to Pro to unlock unlimited resources.
-                </p>
+              {isActiveSubscription ? (
+                <p className="mt-2 text-sm font-extrabold text-green-400">Pro Active</p>
+              ) : (
+                <p className="mt-2 text-sm font-bold text-[#FF6700]">Not Active</p>
               )}
 
-              <div className="mt-4 flex flex-wrap gap-3">
-                <BillingPortalButton />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {isActiveSubscription && hasStripeCustomer ? (
+                  <BillingPortalButton action="billing" label="Manage Billing" />
+                ) : (
+                  <BillingPortalButton
+                    action="upgrade"
+                    label={hasPastSubscription ? 'Renew / Resubscribe' : 'Upgrade'}
+                  />
+                )}
               </div>
+              <p className="mt-3 text-xs text-[var(--text-sub)]">
+                Use billing to cancel or manage your subscription.
+              </p>
             </div>
 
-            <div className="industrial-card rounded-2xl p-6">
-              <h2 className="text-xl font-oswald font-semibold mb-4">Profile</h2>
+            <div className="industrial-card rounded-2xl p-6 border border-[var(--border-color)]">
+              <h2 className="text-xl font-oswald font-bold uppercase tracking-wide mb-4">Profile</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-[var(--text-sub)] mb-1">Email</label>
@@ -122,33 +136,33 @@ export default async function AccountPage() {
           </div>
 
           <div className="space-y-6">
-            <div className="industrial-card rounded-2xl p-6">
-              <h3 className="text-lg font-oswald font-semibold mb-4">Quick Actions</h3>
+            <div className="industrial-card rounded-2xl p-6 border border-[var(--border-color)]">
+              <h3 className="text-lg font-oswald font-bold uppercase tracking-wide mb-4">Quick Actions</h3>
               <div className="space-y-3">
                 <Link
                   href="/auth/login"
-                  className="block w-full text-center py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors text-white"
+                  className="block w-full text-center py-3 rounded-lg font-bold transition border border-red-500/40 bg-red-900/20 hover:bg-red-900/40 text-red-300"
                 >
                   Sign Out
                 </Link>
                 <Link
-                  href="/legal/terms"
-                  className="block w-full text-center py-3 rounded-lg font-medium transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/50"
+                  href="/legal/terms?from=%2Faccount"
+                  className="block w-full text-center py-3 rounded-lg font-bold transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/60"
                 >
                   Terms of Service
                 </Link>
                 <Link
-                  href="/legal/privacy"
-                  className="block w-full text-center py-3 rounded-lg font-medium transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/50"
+                  href="/legal/privacy?from=%2Faccount"
+                  className="block w-full text-center py-3 rounded-lg font-bold transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/60"
                 >
                   Privacy Policy
                 </Link>
               </div>
             </div>
 
-            <div className="industrial-card rounded-2xl p-6">
-              <h3 className="text-lg font-oswald font-semibold mb-4">Usage</h3>
-              <div className="space-y-3">
+            <div className="industrial-card rounded-2xl p-6 border border-[var(--border-color)]">
+              <h3 className="text-lg font-oswald font-bold uppercase tracking-wide mb-4">Usage Tracking</h3>
+              <div className="space-y-2">
                 <UsageStat label="Jobs" count={usageMap.jobs} />
                 <UsageStat label="Estimates" count={usageMap.estimates} />
                 <UsageStat label="Photos" count={usageMap.photos} />
@@ -166,9 +180,9 @@ export default async function AccountPage() {
 function UsageStat({ label, count }) {
   const total = count ?? 0
   return (
-    <div>
+    <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 flex items-center justify-between">
       <p className="text-[var(--text-sub)] text-sm">{label}</p>
-      <p className="text-xl font-bold">{total} created</p>
+      <p className="text-base font-bold text-[var(--text-main)]">{total} created</p>
     </div>
   )
 }

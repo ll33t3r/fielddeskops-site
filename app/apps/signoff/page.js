@@ -19,6 +19,7 @@ import { buildFieldErrors, inRange, isEmail, isPhone, isRequired } from "../../u
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
 import UpgradePrompt from "@/components/UpgradePrompt";
+import { track } from "@vercel/analytics";
 
 export default function SignOff() {
   const supabase = createClient();
@@ -59,6 +60,17 @@ export default function SignOff() {
   const [showNewJobModal, setShowNewJobModal] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState("");
   const [newJobCustomer, setNewJobCustomer] = useState("");
+
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem("fdo_first_app_opened")) {
+        track("first_app_opened", { app: "signoff" });
+        sessionStorage.setItem("fdo_first_app_opened", "1");
+      }
+    } catch {
+      // noop
+    }
+  }, []);
   
   const [contracts, setContracts] = useState([]);
   const [templates, setTemplates] = useState([]);

@@ -5,6 +5,7 @@ import { signup } from './actions'
 import { useRouter } from 'next/navigation'
 import { Loader2, ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
+import { track } from '@vercel/analytics'
 import FormField from '../../components/shared/FormField'
 import { buildFieldErrors, inRange, isEmail, isRequired } from '../../utils/validation'
 
@@ -14,6 +15,7 @@ export default function SignupPage() {
   const [checkEmail, setCheckEmail] = useState(false)
   const [formValues, setFormValues] = useState({ email: '', password: '' })
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [signupStartedTracked, setSignupStartedTracked] = useState(false)
   const [touched, setTouched] = useState({})
   const [fieldErrors, setFieldErrors] = useState({})
   const router = useRouter()
@@ -39,6 +41,10 @@ export default function SignupPage() {
 
   const handleChange = (field) => (event) => {
     const { value } = event.target
+    if (!signupStartedTracked) {
+      track('signup_started')
+      setSignupStartedTracked(true)
+    }
     setFormValues((prev) => {
       const next = { ...prev, [field]: value }
       if (touched[field]) {
@@ -63,6 +69,7 @@ export default function SignupPage() {
       setError(result.error)
       setLoading(false)
     } else if (result?.autoConfirmed) {
+      track('signup_completed')
       setFormValues({ email: '', password: '' })
       setTouched({})
       setFieldErrors({})
@@ -70,6 +77,7 @@ export default function SignupPage() {
       router.refresh()
       router.push('/')
     } else {
+      track('signup_completed')
       setFormValues({ email: '', password: '' })
       setTouched({})
       setFieldErrors({})
@@ -174,8 +182,12 @@ export default function SignupPage() {
             />
             <label htmlFor="signup-terms" className="text-sm text-gray-400 leading-tight cursor-pointer">
               I agree to the{' '}
-              <Link href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-[#FF6700] hover:underline">
+              <Link href="/legal/terms?from=%2Fauth%2Fsignup" target="_blank" rel="noopener noreferrer" className="text-[#FF6700] hover:underline">
                 Terms of Service
+              </Link>
+              {' '}and{' '}
+              <Link href="/legal/privacy?from=%2Fauth%2Fsignup" target="_blank" rel="noopener noreferrer" className="text-[#FF6700] hover:underline">
+                Privacy Policy
               </Link>
               {' '}to create an account.
             </label>
@@ -206,13 +218,13 @@ export default function SignupPage() {
               Sign In
             </Link>
           </p>
+          <p className="text-gray-500 text-xs mt-3">
+            <Link href="/legal/terms?from=%2Fauth%2Fsignup" className="hover:text-white">Terms</Link>
+            {" · "}
+            <Link href="/legal/privacy?from=%2Fauth%2Fsignup" className="hover:text-white">Privacy</Link>
+          </p>
         </div>
       </div>
-       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
-        .font-inter { font-family: 'Inter', sans-serif; }
-        .font-oswald { font-family: 'Oswald', sans-serif; }
-      `}</style>
     </div>
   )
 }

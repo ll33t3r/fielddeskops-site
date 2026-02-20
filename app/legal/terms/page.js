@@ -2,17 +2,40 @@
 
 import Link from "next/link";
 import { Shield, ArrowLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const LAST_UPDATED = "February 5, 2026";
 
 export default function TermsOfService() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const handleBack = () => {
+    const from = searchParams.get("from");
+    if (from && from.startsWith("/")) {
+      router.push(from);
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/welcome");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-inter">
       <div className="p-6 border-b border-industrial-border flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground"
+            aria-label="Go back"
+          >
             <ArrowLeft size={20} />
-          </Link>
+          </button>
           <h1 className="font-oswald font-bold text-xl tracking-wide uppercase">Terms of Service</h1>
         </div>
         <Shield className="text-[#FF6700]" size={24} />
@@ -97,7 +120,7 @@ export default function TermsOfService() {
               You are solely responsible for User Content. You represent that you have all rights needed to provide it and that it does not infringe any third-party rights or violate any law. We may remove or refuse to display content that we believe violates these Terms or is harmful, without obligation to you.
             </p>
             <p className="text-industrial-muted">
-              Our handling of personal data is described in our <Link href="/legal/privacy" className="text-[#FF6700] hover:underline">Privacy Policy</Link>. You agree to that policy as part of these Terms.
+              Our handling of personal data is described in our <Link href="/legal/privacy?from=%2Flegal%2Fterms" className="text-[#FF6700] hover:underline">Privacy Policy</Link>. You agree to that policy as part of these Terms.
             </p>
           </section>
 

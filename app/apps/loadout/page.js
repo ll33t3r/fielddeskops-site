@@ -18,6 +18,7 @@ import SubscriptionBanner from "../../components/shared/SubscriptionBanner";
 import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from "../../utils/validation";
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
+import { track } from "@vercel/analytics";
 
 
 const THEME_ORANGE = "#FF6700";
@@ -78,6 +79,17 @@ export default function LoadOut() {
   const [showAddTool, setShowAddTool] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [newTool, setNewTool] = useState({ name: "", brand: "", serial: "" });
+
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem("fdo_first_app_opened")) {
+        track("first_app_opened", { app: "loadout" });
+        sessionStorage.setItem("fdo_first_app_opened", "1");
+      }
+    } catch {
+      // noop
+    }
+  }, []);
   const [newPhoto, setNewPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [uploading, setUploading] = useState(false);

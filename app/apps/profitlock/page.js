@@ -17,6 +17,7 @@ import { buildFieldErrors, inRange, isNumber, isRequired, roundCurrency } from "
 import { useOnlineStatus } from "../../../hooks/useOnlineStatus";
 import { logError } from "../../../utils/logger";
 import UpgradePrompt from "@/components/UpgradePrompt";
+import { track } from "@vercel/analytics";
 
 export default function ProfitLock() {
   const supabase = createClient();
@@ -27,22 +28,12 @@ export default function ProfitLock() {
   const [estimateHistory, setEstimateHistory] = useState([]); 
   const [customer, setCustomer] = useState(null);
 
-  const [mode, setMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("profitlock_mode") || "SIMPLE";
-    }
-    return "SIMPLE";
-  });
+  const [mode, setMode] = useState("SIMPLE");
   
   const [profitMethod, setProfitMethod] = useState("MARKUP");
   const [profitLocked, setProfitLocked] = useState(true);
   const [isInvoiceMode, setIsInvoiceMode] = useState(false);
-  const [discountType, setDiscountType] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("profitlock_discount_type") || "DOLLAR";
-    }
-    return "DOLLAR";
-  });
+  const [discountType, setDiscountType] = useState("DOLLAR");
   const [showMethodMenu, setShowMethodMenu] = useState(false);
   const [showMethodDetails, setShowMethodDetails] = useState(false);
   
@@ -77,10 +68,54 @@ export default function ProfitLock() {
   const [jobSearch, setJobSearch] = useState("");
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'resources', currentCount: 0, limit: 0, tier: 'free' });
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [jobCostEstimate, setJobCostEstimate] = useState({
+    labor: "",
+    materials: "",
+    subcontractors: "",
+    overhead: "",
+  });
+  const [jobCostEntries, setJobCostEntries] = useState([]);
+  const [jobCostForm, setJobCostForm] = useState({
+    category: "labor",
+    amount: "",
+    enteredBy: "",
+    note: "",
+  });
+  const [savingJobCostEstimate, setSavingJobCostEstimate] = useState(false);
+  const [savingJobCostEntry, setSavingJobCostEntry] = useState(false);
+  const [loadingJobCosting, setLoadingJobCosting] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem("fdo_first_app_opened")) {
+        track("first_app_opened", { app: "profitlock" });
+        sessionStorage.setItem("fdo_first_app_opened", "1");
+      }
+    } catch {
+      // noop
+    }
+  }, []);
+
+  const JOB_COST_CATEGORIES = [
+    { key: "labor", label: "Labor" },
+    { key: "materials", label: "Materials" },
+    { key: "subcontractors", label: "Subcontractors" },
+    { key: "overhead", label: "Overhead" },
+  ];
 
   useEffect(() => { 
       loadData(); 
       loadSettings();
+      const savedMode = localStorage.getItem("profitlock_mode");
+      if (savedMode === "SIMPLE" || savedMode === "ADVANCED") {
+        setMode(savedMode);
+      }
+      const savedDiscountType = localStorage.getItem("profitlock_discount_type");
+      if (savedDiscountType === "DOLLAR" || savedDiscountType === "PERCENT") {
+        setDiscountType(savedDiscountType);
+      }
+      setHasHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -142,6 +177,106 @@ export default function ProfitLock() {
   useEffect(() => {
     saveSettings();
   }, [hourlyRate, targetValue, profitMethod, taxRate, includeTax, paymentTerms, quoteValidDays]);
+
+  const resetJobCostingState = () => {
+    setJobCostEstimate({
+      labor: "",
+      materials: "",
+      subcontractors: "",
+      overhead: "",
+    });
+    setJobCostEntries([]);
+    setJobCostForm({
+      category: "labor",
+      amount: "",
+      enteredBy: "",
+      note: "",
+    });
+    setLoadingJobCosting(false);
+  };
+
+  const loadJobCosting = async (jobId) => {
+    if (!jobId) {
+      resetJobCostingState();
+      return;
+    }
+
+    setLoadingJobCosting(true);
+    try {
+      const [
+        estimateRes,
+        entriesRes,
+      ] = await Promise.all([
+        supabase
+          .from("job_cost_estimates")
+          .select("labor_estimate, materials_estimate, subcontractors_estimate, overhead_estimate")
+          .eq("job_id", jobId)
+          .maybeSingle(),
+        supabase
+          .from("job_cost_entries")
+          .select("id, category, amount, note, entered_by, incurred_at, created_at")
+          .eq("job_id", jobId)
+          .order("incurred_at", { ascending: false })
+          .limit(100),
+      ]);
+
+      if (estimateRes.error) {
+        logError("ProfitLock job cost estimate fetch failed", estimateRes.error, { jobId });
+      } else {
+        const estimate = estimateRes.data;
+        setJobCostEstimate({
+          labor: estimate?.labor_estimate != null ? String(estimate.labor_estimate) : "",
+          materials: estimate?.materials_estimate != null ? String(estimate.materials_estimate) : "",
+          subcontractors: estimate?.subcontractors_estimate != null ? String(estimate.subcontractors_estimate) : "",
+          overhead: estimate?.overhead_estimate != null ? String(estimate.overhead_estimate) : "",
+        });
+      }
+
+      if (entriesRes.error) {
+        logError("ProfitLock job cost entries fetch failed", entriesRes.error, { jobId });
+      } else {
+        setJobCostEntries(entriesRes.data || []);
+      }
+    } catch (error) {
+      logError("ProfitLock job costing load failed", error, { jobId });
+    } finally {
+      setLoadingJobCosting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeJob?.id) {
+      loadJobCosting(activeJob.id);
+    } else {
+      resetJobCostingState();
+    }
+  }, [activeJob?.id]);
+
+  useEffect(() => {
+    if (!activeJob?.id) return undefined;
+
+    const channel = supabase
+      .channel(`profitlock-job-costing-${activeJob.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "job_cost_entries", filter: `job_id=eq.${activeJob.id}` },
+        () => {
+          loadJobCosting(activeJob.id);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "job_cost_estimates", filter: `job_id=eq.${activeJob.id}` },
+        () => {
+          loadJobCosting(activeJob.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeJob?.id]);
 
   const loadCustomer = async (customerId) => {
     try {
@@ -266,6 +401,132 @@ export default function ProfitLock() {
     (j.status === "ACTIVE" || j.status === "PENDING")
   );
 
+  const getJobCostEstimateValue = (key) => {
+    return roundCurrency(parseFloat(jobCostEstimate[key]) || 0);
+  };
+
+  const handleSaveJobCostEstimate = async () => {
+    if (!activeJob?.id) {
+      showToast("Select a job before saving job costs.", "error");
+      return;
+    }
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to save.", "error");
+      return;
+    }
+
+    setSavingJobCostEstimate(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        showToast("Please log in to save job costs.", "error");
+        if (userError) logError("ProfitLock job cost auth failed", userError);
+        return;
+      }
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        showToast(access.reason || "Account locked. Renew to edit.", "error");
+        return;
+      }
+
+      const laborEstimate = getJobCostEstimateValue("labor");
+      const materialsEstimate = getJobCostEstimateValue("materials");
+      const subcontractorsEstimate = getJobCostEstimateValue("subcontractors");
+      const overheadEstimate = getJobCostEstimateValue("overhead");
+      const totalEstimate = roundCurrency(
+        laborEstimate + materialsEstimate + subcontractorsEstimate + overheadEstimate
+      );
+
+      const { error } = await supabase
+        .from("job_cost_estimates")
+        .upsert({
+          user_id: user.id,
+          job_id: activeJob.id,
+          labor_estimate: laborEstimate,
+          materials_estimate: materialsEstimate,
+          subcontractors_estimate: subcontractorsEstimate,
+          overhead_estimate: overheadEstimate,
+          total_estimate: totalEstimate,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,job_id" });
+
+      if (error) {
+        showToast("Failed to save job budget.", "error");
+        logError("ProfitLock job cost estimate save failed", error, { jobId: activeJob.id });
+        return;
+      }
+
+      showToast("Job budget saved.", "success");
+      await loadJobCosting(activeJob.id);
+    } catch (error) {
+      showToast("Failed to save job budget.", "error");
+      logError("ProfitLock job cost estimate save failed", error, { jobId: activeJob?.id });
+    } finally {
+      setSavingJobCostEstimate(false);
+    }
+  };
+
+  const handleAddJobCostEntry = async () => {
+    if (!activeJob?.id) {
+      showToast("Select a job before logging costs.", "error");
+      return;
+    }
+    if (!isOnline) {
+      showToast("You're offline. Reconnect to save.", "error");
+      return;
+    }
+    if (!inRange(jobCostForm.amount, 0, 100000000)) {
+      showToast("Enter a valid actual cost amount.", "error");
+      return;
+    }
+
+    setSavingJobCostEntry(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        showToast("Please log in to save job costs.", "error");
+        if (userError) logError("ProfitLock job cost auth failed", userError);
+        return;
+      }
+      const { getWriteAccessStatus } = await import('@/lib/subscription/subscriptionHelpers');
+      const access = await getWriteAccessStatus();
+      if (!access.allowed) {
+        showToast(access.reason || "Account locked. Renew to edit.", "error");
+        return;
+      }
+
+      const { error } = await supabase.from("job_cost_entries").insert({
+        user_id: user.id,
+        job_id: activeJob.id,
+        category: jobCostForm.category,
+        amount: roundCurrency(parseFloat(jobCostForm.amount) || 0),
+        entered_by: jobCostForm.enteredBy?.trim() || null,
+        note: jobCostForm.note?.trim() || null,
+        incurred_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        showToast("Failed to log actual cost.", "error");
+        logError("ProfitLock job cost entry save failed", error, { jobId: activeJob.id });
+        return;
+      }
+
+      setJobCostForm((prev) => ({
+        ...prev,
+        amount: "",
+        note: "",
+      }));
+      showToast("Actual cost logged.", "success");
+      await loadJobCosting(activeJob.id);
+    } catch (error) {
+      showToast("Failed to log actual cost.", "error");
+      logError("ProfitLock job cost entry save failed", error, { jobId: activeJob?.id });
+    } finally {
+      setSavingJobCostEntry(false);
+    }
+  };
+
   /**
    * ProfitLock totals (all currency rounded to 2 decimals).
    * - Subtotal: SIMPLE = materials + (hours × hourlyRate); ADVANCED = sum of (qty × unit_cost) per line.
@@ -311,16 +572,53 @@ export default function ProfitLock() {
     }
     price = roundCurrency(price);
 
-    const profit = roundCurrency(price - cost);
-    const margin = price > 0 ? roundCurrency(((price - cost) / price) * 100) : 0;
     const tax = includeTax ? roundCurrency(price * (taxRate / 100)) : 0;
     const total = roundCurrency(price + tax);
 
-    return { subtotal, discount, cost, price, profit, margin, tax, total };
+    return { subtotal, discount, cost, price, tax, total };
   };
 
-  const { subtotal, discount, cost, price, profit, margin, tax, total } = calculateTotals();
-  const isBelowTarget = profitMethod === "MARGIN" && margin < targetValue;
+  const { subtotal, discount, cost, price, tax, total } = calculateTotals();
+  const estimatedByCategory = {
+    labor: getJobCostEstimateValue("labor"),
+    materials: getJobCostEstimateValue("materials"),
+    subcontractors: getJobCostEstimateValue("subcontractors"),
+    overhead: getJobCostEstimateValue("overhead"),
+  };
+  const actualByCategory = JOB_COST_CATEGORIES.reduce((acc, cat) => {
+    acc[cat.key] = 0;
+    return acc;
+  }, {});
+  jobCostEntries.forEach((entry) => {
+    const key = entry.category;
+    if (Object.prototype.hasOwnProperty.call(actualByCategory, key)) {
+      actualByCategory[key] = roundCurrency(actualByCategory[key] + (Number(entry.amount) || 0));
+    }
+  });
+
+  const estimatedJobCostTotal = roundCurrency(
+    estimatedByCategory.labor +
+    estimatedByCategory.materials +
+    estimatedByCategory.subcontractors +
+    estimatedByCategory.overhead
+  );
+  const actualJobCostTotal = roundCurrency(
+    actualByCategory.labor +
+    actualByCategory.materials +
+    actualByCategory.subcontractors +
+    actualByCategory.overhead
+  );
+  const budgetRemaining = roundCurrency(estimatedJobCostTotal - actualJobCostTotal);
+  const projectedFinalCost = roundCurrency(
+    JOB_COST_CATEGORIES.reduce((acc, cat) => {
+      return acc + Math.max(estimatedByCategory[cat.key], actualByCategory[cat.key]);
+    }, 0)
+  );
+  const hasActualJobCosts = mode === "ADVANCED" && actualJobCostTotal > 0;
+  const effectiveCost = hasActualJobCosts ? actualJobCostTotal : cost;
+  const effectiveProfit = roundCurrency(price - effectiveCost);
+  const effectiveMargin = price > 0 ? roundCurrency((effectiveProfit / price) * 100) : 0;
+  const isBelowTarget = profitMethod === "MARGIN" && effectiveMargin < targetValue;
 
   const addLineItem = () => setLineItems([...lineItems, { id: Date.now(), description: "", quantity: "", unit_cost: "" }]);
   const updateLineItem = (id, field, value) => {
@@ -538,8 +836,16 @@ export default function ProfitLock() {
   const validUntilDate = new Date();
   validUntilDate.setDate(validUntilDate.getDate() + quoteValidDays);
 
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-[100dvh] bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-[#FF6700]" />
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
+    <div className="min-h-[100dvh] bg-[var(--bg-main)] text-[var(--text-main)] font-inter flex flex-col relative overflow-hidden selection:bg-[#FF6700] selection:text-black">
       <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt
@@ -657,7 +963,11 @@ export default function ProfitLock() {
               <button onClick={() => setIsInvoiceMode(false)} className="absolute top-3 right-3 p-1 bg-gray-300 rounded-full hover:bg-gray-400 transition"><X size={16} className="text-black"/></button>
           </div>
       ) : (
-      <main className="flex-1 p-4 max-w-2xl mx-auto w-full space-y-4 overflow-y-auto pb-20">
+      <main
+        className={`flex-1 p-3 sm:p-4 max-w-2xl mx-auto w-full space-y-3 sm:space-y-4 ${
+          mode === "ADVANCED" ? "overflow-y-auto hide-scrollbar pb-20" : "overflow-hidden pb-6"
+        }`}
+      >
         <div className="bg-[var(--bg-card)] rounded-lg p-4 border border-[var(--border-color)] space-y-4">
             
             <div className="flex gap-2">
@@ -873,6 +1183,177 @@ export default function ProfitLock() {
                       </div>
                     )}
                 </div>
+            )}
+
+            {mode === "ADVANCED" && (
+            <div className="bg-[var(--bg-surface)] rounded-lg p-4 border border-[var(--border-color)] space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-[var(--text-sub)] uppercase tracking-wider">Job Costing Dashboard</p>
+                  <p className="text-[11px] text-[var(--text-sub)]">Live budget vs actual for {activeJob?.title || "selected job"}</p>
+                </div>
+                {loadingJobCosting ? <Loader2 size={14} className="animate-spin text-[#FF6700]" /> : null}
+              </div>
+
+              {!activeJob?.id ? (
+                <p className="text-xs text-[var(--text-sub)]">Select a job to manage job costing.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    {JOB_COST_CATEGORIES.map((cat) => (
+                      <div key={cat.key} className="space-y-1">
+                        <label className="text-[10px] font-black text-[var(--text-sub)] uppercase">{cat.label} Budget</label>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-sub)]">$</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={jobCostEstimate[cat.key]}
+                            onChange={(e) => setJobCostEstimate((prev) => ({ ...prev, [cat.key]: e.target.value }))}
+                            className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 pl-6 text-xs text-[var(--input-text)] outline-none focus:border-[#FF6700]"
+                            style={{ fontSize: "16px" }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleSaveJobCostEstimate}
+                    disabled={savingJobCostEstimate}
+                    className="w-full py-2 bg-[#FF6700] text-black font-bold text-xs uppercase rounded hover:bg-[#ff8533] transition disabled:opacity-50"
+                  >
+                    {savingJobCostEstimate ? "Saving Budget..." : "Save Job Budget"}
+                  </button>
+
+                  <div className="grid grid-cols-12 gap-2 items-end">
+                    <div className="col-span-4">
+                      <label className="text-[10px] font-black text-[var(--text-sub)] uppercase block mb-1">Category</label>
+                      <select
+                        value={jobCostForm.category}
+                        onChange={(e) => setJobCostForm((prev) => ({ ...prev, category: e.target.value }))}
+                        className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-[var(--input-text)] outline-none focus:border-[#FF6700]"
+                        style={{ fontSize: "16px" }}
+                      >
+                        {JOB_COST_CATEGORIES.map((cat) => (
+                          <option key={cat.key} value={cat.key}>{cat.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-4">
+                      <label className="text-[10px] font-black text-[var(--text-sub)] uppercase block mb-1">Actual Cost</label>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-sub)]">$</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          value={jobCostForm.amount}
+                          onChange={(e) => setJobCostForm((prev) => ({ ...prev, amount: e.target.value }))}
+                          className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 pl-6 text-xs text-[var(--input-text)] outline-none focus:border-[#FF6700]"
+                          style={{ fontSize: "16px" }}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-span-4">
+                      <button
+                        onClick={handleAddJobCostEntry}
+                        disabled={savingJobCostEntry}
+                        className="w-full py-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded text-xs font-bold uppercase hover:border-[#FF6700] hover:text-[#FF6700] transition disabled:opacity-50"
+                      >
+                        {savingJobCostEntry ? "Logging..." : "Log Cost"}
+                      </button>
+                    </div>
+                    <div className="col-span-6">
+                      <input
+                        value={jobCostForm.enteredBy}
+                        onChange={(e) => setJobCostForm((prev) => ({ ...prev, enteredBy: e.target.value }))}
+                        placeholder="Crew/Admin name (optional)"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] outline-none focus:border-[#FF6700]"
+                        style={{ fontSize: "16px" }}
+                      />
+                    </div>
+                    <div className="col-span-6">
+                      <input
+                        value={jobCostForm.note}
+                        onChange={(e) => setJobCostForm((prev) => ({ ...prev, note: e.target.value }))}
+                        placeholder="Note (optional)"
+                        className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded p-2 text-xs text-[var(--input-text)] placeholder:text-[var(--input-placeholder)] outline-none focus:border-[#FF6700]"
+                        style={{ fontSize: "16px" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-[var(--bg-card)] rounded p-3 border border-[var(--border-color)]">
+                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-black">Original Estimate</p>
+                      <p className="text-lg font-oswald font-bold">${estimatedJobCostTotal.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-[var(--bg-card)] rounded p-3 border border-[var(--border-color)]">
+                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-black">Actual Cost</p>
+                      <p className="text-lg font-oswald font-bold">${actualJobCostTotal.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-[var(--bg-card)] rounded p-3 border border-[var(--border-color)]">
+                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-black">Budget Remaining</p>
+                      <p className={`text-lg font-oswald font-bold ${budgetRemaining >= 0 ? "text-green-500" : "text-red-500"}`}>${budgetRemaining.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-[var(--bg-card)] rounded p-3 border border-[var(--border-color)]">
+                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-black">Projected Final</p>
+                      <p className="text-lg font-oswald font-bold">${projectedFinalCost.toFixed(2)}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {JOB_COST_CATEGORIES.map((cat) => {
+                      const budget = estimatedByCategory[cat.key] || 0;
+                      const actual = actualByCategory[cat.key] || 0;
+                      const pctUsed = budget > 0 ? Math.min((actual / budget) * 100, 999) : 0;
+                      return (
+                        <div key={`progress-${cat.key}`} className="bg-[var(--bg-card)] rounded p-2 border border-[var(--border-color)]">
+                          <div className="flex items-center justify-between text-[11px] mb-1">
+                            <span className="font-bold">{cat.label}</span>
+                            <span className="text-[var(--text-sub)]">
+                              ${actual.toFixed(2)} / ${budget.toFixed(2)} ({pctUsed.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div className="h-2 rounded bg-black/30 overflow-hidden">
+                            <div
+                              className={`h-full ${pctUsed <= 100 ? "bg-[#FF6700]" : "bg-red-500"}`}
+                              style={{ width: `${Math.min(pctUsed, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-[var(--text-sub)] uppercase font-black">Recent Actual Cost Entries</p>
+                    {jobCostEntries.length === 0 ? (
+                      <p className="text-xs text-[var(--text-sub)]">No costs logged yet.</p>
+                    ) : (
+                      jobCostEntries.slice(0, 8).map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between p-2 rounded border border-[var(--border-color)] bg-[var(--bg-card)] text-xs">
+                          <div>
+                            <p className="font-bold capitalize">{entry.category}</p>
+                            <p className="text-[var(--text-sub)]">
+                              {entry.entered_by ? `${entry.entered_by} • ` : ""}
+                              {entry.note || "No note"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-oswald text-sm">${Number(entry.amount || 0).toFixed(2)}</p>
+                            <p className="text-[10px] text-[var(--text-sub)]">{new Date(entry.incurred_at || entry.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             )}
 
             <div className="bg-[var(--bg-surface)] rounded-lg p-6 border border-[var(--border-color)] text-center">
@@ -1092,8 +1573,8 @@ export default function ProfitLock() {
                         
                         {showProfitDetails ? (
                             <div className="mt-2">
-                                <p className={`text-xl font-oswald font-bold ${profit > 0 ? "text-green-500" : "text-red-500"}`}>${profit.toFixed(2)}</p>
-                                <p className="text-xs text-[var(--text-sub)] mt-1">Margin: {margin.toFixed(1)}%</p>
+                                <p className={`text-xl font-oswald font-bold ${effectiveProfit > 0 ? "text-green-500" : "text-red-500"}`}>${effectiveProfit.toFixed(2)}</p>
+                                <p className="text-xs text-[var(--text-sub)] mt-1">Margin: {effectiveMargin.toFixed(1)}%</p>
                                 {isBelowTarget && profitLocked && <p className="text-xs text-green-500 font-bold mt-1">✓ ProfitLock protecting</p>}
                             </div>
                         ) : (

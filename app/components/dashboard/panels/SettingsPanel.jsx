@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { LogOut, Moon, Sun, ShieldCheck } from "lucide-react";
+import { track } from "@vercel/analytics";
 import PanelContainer from "./PanelContainer";
+import { getPaymentLink } from "@/lib/stripePaymentLink";
 
 export default function SettingsPanel({
   isOpen,
@@ -24,6 +27,95 @@ export default function SettingsPanel({
     markup: "15",
     taxRate: "8.25",
   });
+  const [subscription, setSubscription] = useState({
+    loading: true,
+    tier: "free",
+    isReadOnly: false,
+    stripeCustomerId: null,
+  });
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSubscription = async () => {
+      try {
+        const { getUserSubscription } = await import("@/lib/subscription/subscriptionHelpers");
+        const data = await getUserSubscription();
+        if (!mounted) return;
+        setSubscription({
+          loading: false,
+          tier: data?.tier || "free",
+          isReadOnly: Boolean(data?.isReadOnly),
+          stripeCustomerId: data?.stripeCustomerId || null,
+        });
+      } catch (err) {
+        if (!mounted) return;
+        setSubscription((prev) => ({ ...prev, loading: false }));
+      }
+    };
+    loadSubscription();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const isActiveSubscription =
+    !subscription.isReadOnly && (subscription.tier === "paid" || subscription.tier === "trial");
+  const hasPastSubscription = Boolean(subscription.stripeCustomerId);
+
+  const handleUpgrade = async () => {
+    setSubscriptionError("");
+    setBillingLoading(true);
+    try {
+      track("upgrade_clicked");
+      const paymentLink = getPaymentLink() || undefined;
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentLink }),
+      });
+      const data = await response.json();
+      if (!response.ok || data?.error) {
+        setSubscriptionError(data?.error || `Server error (${response.status})`);
+        return;
+      }
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setSubscriptionError("Checkout link missing. Please try again.");
+    } catch (err) {
+      setSubscriptionError("Unable to start checkout. Please try again.");
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    setSubscriptionError("");
+    setBillingLoading(true);
+    try {
+      const response = await fetch("/api/stripe/billing-portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      if (!response.ok || data?.error) {
+        setSubscriptionError(data?.error || `Server error (${response.status})`);
+        return;
+      }
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setSubscriptionError("Billing link missing. Please try again.");
+    } catch (err) {
+      setSubscriptionError("Unable to open billing portal. Please try again.");
+    } finally {
+      setBillingLoading(false);
+    }
+  };
 
   return (
     <PanelContainer isOpen={isOpen} onClose={onClose} title="Settings">
@@ -130,8 +222,55 @@ export default function SettingsPanel({
 
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-sub)]">Subscription</h3>
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-4 text-xs text-[var(--text-sub)]">
-            Subscription details will appear here.
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-4 space-y-3">
+            {subscription.loading ? (
+              <p className="text-xs text-[var(--text-sub)]">Loading subscription status...</p>
+            ) : isActiveSubscription ? (
+              <p className="text-sm font-extrabold text-green-400">Pro Active</p>
+            ) : (
+              <p className="text-sm font-bold text-[#FF6700]">Not Active</p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/account"
+                className="inline-flex items-center justify-center rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] px-3 py-2 text-xs font-bold text-[var(--text-main)] hover:border-[#FF6700]/50 transition"
+                onClick={onClose}
+              >
+                Account Page
+              </Link>
+
+              {!subscription.loading && isActiveSubscription && hasPastSubscription && (
+                <button
+                  onClick={handleManageBilling}
+                  disabled={billingLoading}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {billingLoading ? "Opening..." : "Manage Billing"}
+                </button>
+              )}
+
+              {!subscription.loading && !isActiveSubscription && (
+                <button
+                  onClick={handleUpgrade}
+                  disabled={billingLoading}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {billingLoading
+                    ? "Opening..."
+                    : hasPastSubscription
+                      ? "Renew / Resubscribe"
+                      : "Upgrade"}
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-[var(--text-sub)]">
+              Open Account Page for full billing controls and usage tracking.
+            </p>
+            {subscriptionError && (
+              <p className="text-xs text-red-400">{subscriptionError}</p>
+            )}
           </div>
         </section>
 

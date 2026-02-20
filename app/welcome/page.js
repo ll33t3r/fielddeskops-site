@@ -384,8 +384,8 @@ export default function WelcomePage() {
               <a href="#pricing" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Pricing</a>
               <Link href="/auth/login" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Login</Link>
               <Link href="/auth/signup" className="text-[#FF6700] font-semibold hover:underline text-sm">Sign Up</Link>
-              <Link href="/legal/terms" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Terms</Link>
-              <Link href="/legal/privacy" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Privacy</Link>
+              <Link href="/legal/terms?from=%2Fwelcome" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Terms</Link>
+              <Link href="/legal/privacy?from=%2Fwelcome" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors text-sm">Privacy</Link>
             </div>
           </div>
           <div className="mt-8 text-center text-[var(--text-sub)] text-sm">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import * as Sentry from "@sentry/nextjs";
 import { logError } from "../../../utils/logger";
 
 const FEEDBACK_TO = "fielddeskops@gmail.com";
@@ -84,6 +85,7 @@ export async function POST(request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    Sentry.captureException(error);
     logError("Feedback API error", error);
     return NextResponse.json(
       { error: "Something went wrong. Please try again or email fielddeskops@gmail.com." },

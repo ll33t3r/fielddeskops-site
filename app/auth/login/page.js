@@ -152,15 +152,15 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center">
           <Link href="/auth/signup" className="text-gray-500 hover:text-white text-sm">
-             Back to Signup
+            Back to Signup
           </Link>
+          <p className="text-gray-500 text-xs mt-3">
+            <Link href="/legal/terms?from=%2Fauth%2Flogin" className="hover:text-white">Terms</Link>
+            {" · "}
+            <Link href="/legal/privacy?from=%2Fauth%2Flogin" className="hover:text-white">Privacy</Link>
+          </p>
         </div>
       </div>
-       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Oswald:wght@500;700&display=swap');
-        .font-inter { font-family: 'Inter', sans-serif; }
-        .font-oswald { font-family: 'Oswald', sans-serif; }
-      `}</style>
     </div>
   )
 }

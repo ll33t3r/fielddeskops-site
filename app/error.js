@@ -3,10 +3,12 @@
 import { useEffect } from "react";
 import { logError } from "../utils/logger";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 export default function GlobalError({ error, reset }) {
   useEffect(() => {
     logError("App crash", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

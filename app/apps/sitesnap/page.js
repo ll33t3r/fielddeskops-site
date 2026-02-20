@@ -17,6 +17,7 @@ import SubscriptionBanner from '../../components/shared/SubscriptionBanner';
 import { buildFieldErrors, inRange, isFileSizeAllowed, isFileTypeAllowed, isRequired } from '../../utils/validation';
 import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { logError } from '../../../utils/logger';
+import { track } from '@vercel/analytics';
 import {
   ReactCompareSlider,
   ReactCompareSliderImage
@@ -54,6 +55,17 @@ export default function SiteSnap() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'photos', currentCount: 0, limit: 0, tier: 'free' });
+
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem('fdo_first_app_opened')) {
+        track('first_app_opened', { app: 'sitesnap' });
+        sessionStorage.setItem('fdo_first_app_opened', '1');
+      }
+    } catch {
+      // noop
+    }
+  }, []);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);

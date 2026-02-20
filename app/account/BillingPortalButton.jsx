@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { getPaymentLink } from '@/lib/stripePaymentLink'
+import { track } from '@vercel/analytics'
 
-export default function BillingPortalButton({ hasStripeCustomer }) {
+export default function BillingPortalButton({ action = 'upgrade', label }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -11,7 +13,24 @@ export default function BillingPortalButton({ hasStripeCustomer }) {
     setError(null)
 
     try {
-      const res = await fetch('/api/stripe/billing-portal', { method: 'POST' })
+      const isBillingAction = action === 'billing'
+      let res
+
+      if (isBillingAction) {
+        res = await fetch('/api/stripe/billing-portal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      } else {
+        track('upgrade_clicked')
+        const paymentLink = getPaymentLink() || undefined
+        res = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentLink }),
+        })
+      }
+
       const data = await res.json()
 
       if (!res.ok) {
@@ -21,20 +40,14 @@ export default function BillingPortalButton({ hasStripeCustomer }) {
 
       if (data.url) {
         window.location.href = data.url
+        return
       }
+      setError('Redirect link missing. Please try again.')
     } catch (err) {
-      setError('Unable to open billing portal. Please try again.')
+      setError('Unable to continue. Please try again.')
     } finally {
       setLoading(false)
     }
-  }
-
-  if (!hasStripeCustomer) {
-    return (
-      <p className="text-sm text-gray-500 italic">
-        No billing account yet. Subscribe to a paid plan to manage billing.
-      </p>
-    )
   }
 
   return (
@@ -42,9 +55,9 @@ export default function BillingPortalButton({ hasStripeCustomer }) {
       <button
         onClick={handleClick}
         disabled={loading}
-        className="inline-block px-6 py-3 bg-primary hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors text-white"
+        className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-6 py-3 text-sm font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Opening...' : 'Manage Billing'}
+        {loading ? 'Opening...' : (label || (action === 'billing' ? 'Manage Billing' : 'Upgrade Account'))}
       </button>
       {error && (
         <p className="mt-2 text-sm text-red-400">{error}</p>

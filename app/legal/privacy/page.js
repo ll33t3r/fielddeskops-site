@@ -2,17 +2,40 @@
 
 import Link from "next/link";
 import { Lock, ArrowLeft } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-const LAST_UPDATED = "February 5, 2026";
+const LAST_UPDATED = "February 20, 2026";
 
 export default function PrivacyPolicy() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const handleBack = () => {
+    const from = searchParams.get("from");
+    if (from && from.startsWith("/")) {
+      router.push(from);
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/welcome");
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-inter">
       <div className="p-6 border-b border-industrial-border flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-50">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="p-2 bg-industrial-card rounded-full hover:bg-industrial-border transition text-foreground"
+            aria-label="Go back"
+          >
             <ArrowLeft size={20} />
-          </Link>
+          </button>
           <h1 className="font-oswald font-bold text-xl tracking-wide uppercase">Privacy Policy</h1>
         </div>
         <Lock className="text-[#FF6700]" size={24} />
@@ -63,6 +86,8 @@ export default function PrivacyPolicy() {
               <li><strong>Supabase</strong> — Database hosting, authentication, and file storage (photos, documents). Data is stored in Supabase-managed infrastructure with row-level security.</li>
               <li><strong>Stripe</strong> — Payment processing and subscription management. We share your email and a user identifier with Stripe to process payments. We do not store your credit card number; Stripe handles all card data under PCI-DSS compliance.</li>
               <li><strong>Vercel</strong> — Application hosting, serverless functions, and content delivery.</li>
+              <li><strong>Vercel Analytics & Speed Insights</strong> — Privacy-focused product analytics and performance metrics (for page views and funnel telemetry).</li>
+              <li><strong>Sentry</strong> — Error monitoring used to capture crashes and diagnose reliability issues.</li>
               <li><strong>Resend</strong> — Transactional email delivery (e.g., feedback submissions). Your email address may be included in messages routed through Resend.</li>
             </ul>
             <p className="text-industrial-muted mt-4">
@@ -78,9 +103,10 @@ export default function PrivacyPolicy() {
             <ul className="list-disc pl-6 space-y-2 text-foreground">
               <li><strong>Authentication cookies:</strong> Set by Supabase to maintain your login session. These are essential for the Service to function and cannot be disabled.</li>
               <li><strong>Local storage:</strong> Used to save your UI preferences (e.g., theme, view mode). This data stays on your device and is not transmitted to our servers.</li>
+              <li><strong>Analytics signals:</strong> We collect product usage events (for example: signup started/completed, first app opened, and upgrade clicks) to improve onboarding and reliability.</li>
             </ul>
             <p className="text-industrial-muted mt-4">
-              We do not use advertising cookies, tracking pixels, or third-party analytics cookies.
+              We do not use advertising cookies or cross-site ad tracking pixels.
             </p>
           </section>
 

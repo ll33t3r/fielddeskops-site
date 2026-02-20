@@ -25,7 +25,7 @@ function AppCard({ href, label, sub, icon, active }) {
 
 export default function AppsGrid({ activeJob }) {
   return (
-    <div className="grid grid-cols-2 gap-4 w-full max-w-2xl">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
       <AppCard href="/apps/profitlock" label="PROFITLOCK" sub="Bids & Invoices" icon={<Calculator size={28} />} active={activeJob} />
       <AppCard href="/apps/loadout" label="LOADOUT" sub="Inventory" icon={<Package size={28} />} active={activeJob} />
       <AppCard href="/apps/sitesnap" label="SITESNAP" sub="Photos" icon={<Camera size={28} />} active={activeJob} />
