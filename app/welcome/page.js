@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { loadStripe } from '@stripe/stripe-js'
 import { createClient } from '../utils/supabase/client'
 import { logError } from '../../utils/logger'
 import {
@@ -25,9 +24,6 @@ export default function WelcomePage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
-  const [stripePromise] = useState(() =>
-    loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
-  )
 
   // Check if user is logged in - redirect to dashboard if they are
   useEffect(() => {
@@ -40,6 +36,14 @@ export default function WelcomePage() {
     }
     checkAuth()
   }, [router, supabase, searchParams])
+
+  // Safety reset: if a previous route left body scroll locked, restore it on Welcome.
+  useEffect(() => {
+    const { body, documentElement } = document
+    body.style.overflow = ''
+    body.style.touchAction = ''
+    documentElement.style.overflow = ''
+  }, [])
 
   // Smooth scroll for anchor links
   useEffect(() => {
@@ -59,11 +63,6 @@ export default function WelcomePage() {
   }, [])
 
   const handleCheckout = async () => {
-    if (!process.env.NEXT_PUBLIC_STRIPE_PRICE_ID) {
-      alert('Stripe price ID not configured')
-      return
-    }
-
     setLoading(true)
 
     try {
@@ -73,7 +72,7 @@ export default function WelcomePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID,
+          paymentLink: process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK,
         }),
       })
 
@@ -82,16 +81,10 @@ export default function WelcomePage() {
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create checkout session')
       }
-
-      // Redirect to Stripe Checkout
-      const stripe = await stripePromise
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: data.sessionId,
-      })
-
-      if (error) {
-        throw error
+      if (!data?.url || typeof data.url !== 'string') {
+        throw new Error('Checkout URL missing from server response')
       }
+      window.location.assign(data.url)
     } catch (error) {
       logError('Welcome checkout failed', error)
       alert(error.message || 'Failed to start checkout. Please try again.')
@@ -100,7 +93,7 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
+    <div className="h-screen overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
       {/* NAVIGATION BAR */}
       <nav className="sticky top-0 z-50 bg-[var(--bg-card)]/90 backdrop-blur-xl border-b border-[var(--border-color)]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

@@ -3,7 +3,6 @@ import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 import { logError } from '../../../../utils/logger';
 import {
-  logWebhook,
   handleCheckoutCompleted,
   handleSubscriptionUpdated,
   handleSubscriptionDeleted,
@@ -11,8 +10,10 @@ import {
 } from '../../../../lib/stripeWebhookHandlers';
 
 // App Router: request.text() = raw body (do NOT use request.json() when verifying signature).
-// Optional: STRIPE_WEBHOOK_INSECURE_SKIP_VERIFY=true bypasses verification (Vercel/Next body bug). Use only for launch; fix properly later.
-const SKIP_VERIFY = process.env.STRIPE_WEBHOOK_INSECURE_SKIP_VERIFY === 'true';
+// Optional local debugging escape hatch. Never allow insecure verification bypass in production.
+const SKIP_VERIFY =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.STRIPE_WEBHOOK_INSECURE_SKIP_VERIFY === 'true';
 
 export async function POST(request) {
   try {

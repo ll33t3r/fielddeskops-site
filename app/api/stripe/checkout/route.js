@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { logError } from '../../../../utils/logger'
+import { getPaymentLink } from '../../../../lib/stripePaymentLink'
 
 // Prevent static generation
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,13 @@ export async function POST(request) {
         { status: 500 }
       )
     }
+    if (process.env.NODE_ENV === 'production' && stripeSecretKey.includes('_test_')) {
+      logError('Checkout running in production with test Stripe secret key')
+      return NextResponse.json(
+        { error: 'Stripe is not configured for production billing.' },
+        { status: 500 }
+      )
+    }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
     if (!siteUrl) {
@@ -52,10 +60,19 @@ export async function POST(request) {
     // Client-sent link first (from NEXT_PUBLIC_STRIPE_PAYMENT_LINK at build time); then server env if Vercel exposes it
     const rawLink =
       bodyPaymentLink ||
+      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ||
       process.env.STRIPE_PAYMENT_LINK ||
-      process.env.STRIPE_CHECKOUT_LINK
+      process.env.STRIPE_CHECKOUT_LINK ||
+      getPaymentLink()
     const paymentLink = typeof rawLink === 'string' ? rawLink.trim() : ''
     const validLink = paymentLink && VALID_PAYMENT_LINK_REGEX.test(paymentLink) ? paymentLink : null
+    if (process.env.NODE_ENV === 'production' && validLink && validLink.includes('/test_')) {
+      logError('Checkout running in production with test Stripe payment link')
+      return NextResponse.json(
+        { error: 'Stripe payment link is not configured for production billing.' },
+        { status: 500 }
+      )
+    }
 
     if (!priceId && !validLink) {
       logError('Checkout missing price ID and payment link', {
