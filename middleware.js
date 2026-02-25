@@ -35,31 +35,29 @@ export async function middleware(request) {
     })
   }
 
-  let session = null
+  let user = null
   try {
     const {
-      data: { session: activeSession },
-      error: sessionError,
-    } = await supabase.auth.getSession()
+      data: { user: activeUser },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-    if (sessionError) {
+    if (userError) {
       const isMissingRefreshToken =
-        sessionError.code === 'refresh_token_not_found' || sessionError.status === 400
+        userError.code === 'refresh_token_not_found' || userError.status === 400
       if (isMissingRefreshToken) {
         clearSupabaseAuthCookies()
       }
-      session = null
+      user = null
     } else {
-      session = activeSession ?? null
+      user = activeUser ?? null
     }
   } catch {
     clearSupabaseAuthCookies()
-    session = null
+    user = null
   }
 
   const pathname = request.nextUrl.pathname
-  const isSupabaseTestRoute =
-    pathname === '/supabase-test' || pathname.startsWith('/supabase-test/')
 
   // Define public routes (no auth required)
   const publicRoutes = ['/', '/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
@@ -68,11 +66,6 @@ export async function middleware(request) {
   // Define protected routes
   const protectedRoutes = ['/dashboard', '/apps', '/settings', '/command', '/account']
 
-  // Hide Supabase test route unless explicitly enabled.
-  if (isSupabaseTestRoute && process.env.ENABLE_SUPABASE_TEST_ROUTE !== 'true') {
-    return new NextResponse('Not Found', { status: 404 })
-  }
-
   const isPublicRoute = publicRoutes.some((route) =>
     route === '/' ? pathname === '/' : pathname === route || pathname.startsWith(`${route}/`)
   )
@@ -80,7 +73,7 @@ export async function middleware(request) {
 
   // Root: send new users to Welcome, logged-in to Dashboard
   if (pathname === '/') {
-    if (session) {
+    if (user) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
     return NextResponse.redirect(new URL('/welcome', request.url))
@@ -95,7 +88,7 @@ export async function middleware(request) {
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route))
 
   // If accessing a protected route without a session, redirect to login
-  if (isProtectedRoute && !session) {
+  if (isProtectedRoute && !user) {
     const redirectUrl = new URL('/auth/login', request.url)
     redirectUrl.searchParams.set('redirectTo', pathname)
     redirectUrl.searchParams.set('message', 'Please log in to continue.')

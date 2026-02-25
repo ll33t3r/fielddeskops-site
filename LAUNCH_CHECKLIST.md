@@ -9,6 +9,12 @@ Assessment of what’s left before launch (as of this review).
 - **Stripe webhook → profile unlock**  
   Checkout session now includes `metadata: { userId }` so `checkout.session.completed` can update the user’s profile to `paid`. Without this, paying users would stay on free limits.
 
+- **Middleware cleanup**  
+  Removed leftover `/supabase-test` path handling from middleware and removed related env/docs references.
+
+- **UI copy cleanup**  
+  Replaced stale "(Coming soon)" labels in customer quick actions with "(Planned)".
+
 ---
 
 ## 🔴 Critical before launch
@@ -41,7 +47,6 @@ Assessment of what’s left before launch (as of this review).
 ## 🟡 Recommended
 
 4. **Welcome page copy**  
-   - LoadOut feature card still says “COMING SOON” but LoadOut is live. Remove or change that badge so it doesn’t say “Coming Soon.”
    - “Hero Visual Placeholder” can stay as-is or be replaced with a real screenshot/mockup when you have one.
 
 5. **Feedback / “Report a problem”**  
@@ -49,13 +54,10 @@ Assessment of what’s left before launch (as of this review).
    - Add Resend and set the env vars so in-app feedback works, or  
    - Keep the current message and ensure your support email (e.g. fielddeskops@gmail.com) is visible.
 
-6. **`/supabase-test`**  
-   Consider removing this route in production or protecting it (e.g. only in development or behind a secret path) so it doesn’t expose Supabase connectivity info.
-
-7. **LoadOut – swap items**  
+6. **LoadOut – swap items**  
    “Swap” in mass-select mode updates UI only; there’s a comment “Add DB persistence here in future.” Acceptable for launch; add DB persistence later if you want swaps to persist.
 
-8. **Pricing page**  
+7. **Pricing page**  
    Pro plan “Upgrade Now” is wired (checkout + webhook now correctly set profile to paid). “Crews” with “Coming Soon” is fine if that plan isn’t live yet.
 
 ---
@@ -86,4 +88,4 @@ Assessment of what’s left before launch (as of this review).
 
 ---
 
-**Summary:** With env vars, Stripe webhook, and Supabase migrations in place, the main code-side gap (checkout metadata for webhook) is fixed. The rest is copy tweaks, optional feedback config, and locking down or removing `/supabase-test` for production.
+**Summary:** With env vars, Stripe webhook, and Supabase migrations in place, the main code-side gap (checkout metadata for webhook) is fixed. Remaining work is mostly deployment configuration and final validation.

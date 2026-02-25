@@ -140,8 +140,18 @@ export default function Dashboard() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.replace("/auth/login");
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } finally {
+      // Extra cleanup to avoid stale browser-auth state after logout.
+      if (typeof window !== "undefined") {
+        Object.keys(window.localStorage)
+          .filter((key) => key.startsWith("sb-"))
+          .forEach((key) => window.localStorage.removeItem(key));
+      }
+      router.replace("/auth/login");
+      router.refresh();
+    }
   };
 
   const handleQuickAddSaved = async () => {

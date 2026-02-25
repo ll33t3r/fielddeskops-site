@@ -35,6 +35,5 @@ npm run secrets:scan:staged
 5. Re-run `npm run secrets:scan` before pushing.
 
 ## Production guidance
-- Keep `ENABLE_SUPABASE_TEST_ROUTE=false` in production.
 - Use least privilege and RLS for all Supabase tables.
 - Do not log raw secrets or authorization headers.

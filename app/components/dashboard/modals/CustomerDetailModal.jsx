@@ -423,13 +423,13 @@ export default function CustomerDetailModal({
                 className="bg-white/10 text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
                 disabled
               >
-                <DollarSign size={16} /> Send Quote (Coming soon)
+                <DollarSign size={16} /> Send Quote (Planned)
               </button>
               <button
                 className="bg-white/10 text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
                 disabled
               >
-                📸 Send Photos (Coming soon)
+                📸 Send Photos (Planned)
               </button>
             </div>
           </section>
