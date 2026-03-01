@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPaymentLink } from "@/lib/stripePaymentLink";
 
 export default function ReadOnlyBanner() {
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -30,11 +29,9 @@ export default function ReadOnlyBanner() {
     setError("");
     setIsLoadingUpgrade(true);
     try {
-      const paymentLink = getPaymentLink() || undefined;
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentLink }),
       });
       const data = await response.json();
       if (!response.ok || data?.error) {

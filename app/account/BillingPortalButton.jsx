@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { getPaymentLink } from '@/lib/stripePaymentLink'
 import { track } from '@vercel/analytics'
 
 export default function BillingPortalButton({ action = 'upgrade', label }) {
@@ -23,11 +22,9 @@ export default function BillingPortalButton({ action = 'upgrade', label }) {
         })
       } else {
         track('upgrade_clicked')
-        const paymentLink = getPaymentLink() || undefined
         res = await fetch('/api/stripe/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paymentLink }),
         })
       }
 

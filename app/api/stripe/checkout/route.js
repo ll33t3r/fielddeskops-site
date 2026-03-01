@@ -4,28 +4,12 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import * as Sentry from '@sentry/nextjs'
 import { logError } from '../../../../utils/logger'
-import { getPaymentLink } from '../../../../lib/stripePaymentLink'
 
 // Prevent static generation
 export const dynamic = 'force-dynamic'
 
-// Test links: .../test_xxx; live links: .../xxx (alphanumeric only)
-const VALID_PAYMENT_LINK_REGEX = /^https:\/\/buy\.stripe\.com\/[a-zA-Z0-9_]+$/
-
 export async function POST(request) {
   try {
-    // Prefer link from client body (NEXT_PUBLIC_ inlined at build) — Vercel often doesn't expose server env to this route
-    let bodyPaymentLink = null
-    try {
-      const body = await request.json().catch(() => ({}))
-      const raw = body?.paymentLink
-      if (typeof raw === 'string' && VALID_PAYMENT_LINK_REGEX.test(raw.trim())) {
-        bodyPaymentLink = raw.trim()
-      }
-    } catch {
-      // ignore
-    }
-
     // Validate environment variables with better error logging
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY
     if (!stripeSecretKey) {
@@ -52,45 +36,22 @@ export async function POST(request) {
       )
     }
 
-    // Price ID must start with "price_" — ignore if set to a key (pk_/sk_) by mistake
-    let priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim()
-    if (priceId && !priceId.startsWith('price_')) {
-      logError('Checkout: NEXT_PUBLIC_STRIPE_PRICE_ID looks like a key, not a price ID. Using payment link.')
-      priceId = null
-    }
-    // Client-sent link first (from NEXT_PUBLIC_STRIPE_PAYMENT_LINK at build time); then server env if Vercel exposes it
-    const rawLink =
-      bodyPaymentLink ||
-      process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ||
-      process.env.STRIPE_PAYMENT_LINK ||
-      process.env.STRIPE_CHECKOUT_LINK ||
-      getPaymentLink()
-    const paymentLink = typeof rawLink === 'string' ? rawLink.trim() : ''
-    const validLink = paymentLink && VALID_PAYMENT_LINK_REGEX.test(paymentLink) ? paymentLink : null
-    if (process.env.NODE_ENV === 'production' && validLink && validLink.includes('/test_')) {
-      logError('Checkout running in production with test Stripe payment link')
-      return NextResponse.json(
-        { error: 'Stripe payment link is not configured for production billing.' },
-        { status: 500 }
-      )
-    }
-
-    if (!priceId && !validLink) {
-      logError('Checkout missing price ID and payment link', {
-        gotBodyLink: !!bodyPaymentLink,
-        hasStripePaymentLink: !!(process.env.STRIPE_PAYMENT_LINK?.trim()),
-        hasStripeCheckoutLink: !!(process.env.STRIPE_CHECKOUT_LINK?.trim()),
+    // Price ID must start with "price_" for subscription checkout
+    const priceId =
+      process.env.STRIPE_PRICE_ID?.trim() || process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim()
+    if (!priceId || !priceId.startsWith('price_')) {
+      logError('Checkout missing STRIPE_PRICE_ID or NEXT_PUBLIC_STRIPE_PRICE_ID (must be price_xxx)', null, {
+        hasStripePriceId: !!process.env.STRIPE_PRICE_ID?.trim(),
+        hasNextPublicPriceId: !!process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim(),
       })
-      const msg = paymentLink && !validLink
-        ? `Payment link is set but invalid (must be https://buy.stripe.com/...). Check for typos or extra characters.`
-        : 'Payment link not set. In Vercel set NEXT_PUBLIC_STRIPE_PAYMENT_LINK to your https://buy.stripe.com/... URL (Production), save, then redeploy with "Clear cache and redeploy". The client sends this link to the server so checkout works even when server env is not available.'
       return NextResponse.json(
-        { error: msg },
+        {
+          error:
+            'Stripe Price ID not configured. Set STRIPE_PRICE_ID or NEXT_PUBLIC_STRIPE_PRICE_ID to your price_xxx value.',
+        },
         { status: 500 }
       )
     }
-
-    const paymentLinkToUse = validLink || null
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     if (!supabaseUrl) {
@@ -115,35 +76,28 @@ export async function POST(request) {
 
     // Get current user from Supabase
     const cookieStore = cookies()
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        cookies: {
-          get(name) {
-            return cookieStore.get(name)?.value
-          },
-          set(name, value, options) {
-            try {
-              cookieStore.set({ name, value, ...options })
-            } catch {
-              // Ignore if called from route handler
-            }
-          },
-          remove(name, options) {
-            try {
-              cookieStore.set({ name, value: '', ...options })
-            } catch {
-              // Ignore if called from route handler
-            }
-          },
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        get(name) {
+          return cookieStore.get(name)?.value
         },
-      }
-    )
+        set(name, value, options) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch {
+            // Ignore if called from route handler
+          }
+        },
+        remove(name, options) {
+          try {
+            cookieStore.set({ name, value: '', ...options })
+          } catch {
+            // Ignore if called from route handler
+          }
+        },
+      },
+    })
 
-    // Price ID is now from environment variable (already validated above)
-
-        // Require authenticated user
     const {
       data: { user },
       error: authError,
@@ -157,40 +111,25 @@ export async function POST(request) {
       )
     }
 
-    // Ensure profile exists (RLS should restrict profiles by auth.uid()).
-    if (user) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single()
+    // Ensure profile exists (RLS restricts by auth.uid())
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single()
 
-      if (profileError && profileError.code === 'PGRST116') {
-        const { error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            subscription_status: 'inactive',
-          })
-
-        if (createError) {
-          logError('Checkout profile create failed', createError)
-        }
+    if (profileError && profileError.code === 'PGRST116') {
+      const { error: createError } = await supabase.from('profiles').insert({
+        id: user.id,
+        subscription_status: 'inactive',
+      })
+      if (createError) {
+        logError('Checkout profile create failed', createError)
       }
     }
 
-    // If using Payment Link (no Price ID), redirect to the link with user ref so webhook can upgrade this account
-    if (!priceId && paymentLinkToUse) {
-      const params = new URLSearchParams()
-      params.set('client_reference_id', user.id)
-      if (user.email) params.set('prefilled_email', user.email)
-      const sep = paymentLinkToUse.includes('?') ? '&' : '?'
-      const url = `${paymentLinkToUse}${sep}${params.toString()}`
-      return NextResponse.json({ url })
-    }
-
-    // Build checkout session config (Price ID flow)
-    const sessionConfig = {
+    // Create dynamic checkout session with user ID for webhook
+    const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
@@ -204,16 +143,23 @@ export async function POST(request) {
       },
       success_url: `${siteUrl}/dashboard?success=true`,
       cancel_url: `${siteUrl}/welcome`,
-      metadata: { userId: user.id },
+      customer_email: user.email || undefined,
+      // CRITICAL: Webhook needs this to upgrade user to Pro
+      client_reference_id: user.id,
+      metadata: {
+        supabase_user_id: user.id,
+      },
+    })
+
+    if (!session.url) {
+      logError('Stripe checkout session missing url', null, { sessionId: session.id })
+      return NextResponse.json(
+        { error: 'Failed to create checkout session. Please try again.' },
+        { status: 500 }
+      )
     }
 
-    sessionConfig.customer_email = user.email
-    sessionConfig.client_reference_id = user.id
-
-    const session = await stripe.checkout.sessions.create(sessionConfig)
-
     return NextResponse.json({ url: session.url })
-
   } catch (error) {
     Sentry.captureException(error)
     logError('Checkout session creation failed', error)

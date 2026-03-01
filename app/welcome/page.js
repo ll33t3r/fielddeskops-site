@@ -71,9 +71,6 @@ export default function WelcomePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          paymentLink: process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK,
-        }),
       })
 
       const data = await response.json()
