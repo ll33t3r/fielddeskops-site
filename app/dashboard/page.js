@@ -34,6 +34,21 @@ import Link from "next/link";
 export default function Dashboard() {
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!supabase) {
+      router.replace('/auth/login?message=Please sign in again.');
+      return;
+    }
+  }, [supabase, router]);
+
+  if (!supabase) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-main)]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#FF6700]" />
+      </div>
+    );
+  }
   const searchParams = useSearchParams();
   const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
 

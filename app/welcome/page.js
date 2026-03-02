@@ -28,6 +28,7 @@ export default function WelcomePage() {
   // Check if user is logged in - redirect to dashboard if they are
   useEffect(() => {
     const checkAuth = async () => {
+      if (!supabase) return
       const { data: { user } } = await supabase.auth.getUser()
       const allowUpgrade = searchParams.get('upgrade') === 'true'
       if (user && !allowUpgrade) {
