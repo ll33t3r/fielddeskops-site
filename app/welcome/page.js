@@ -91,7 +91,7 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
+    <div className="min-h-screen min-h-[100dvh] overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
       {/* NAVIGATION BAR */}
       <nav className="sticky top-0 z-50 bg-[var(--bg-card)]/90 backdrop-blur-xl border-b border-[var(--border-color)]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">

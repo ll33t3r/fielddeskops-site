@@ -121,6 +121,7 @@ export async function POST(request) {
     if (profileError && profileError.code === 'PGRST116') {
       const { error: createError } = await supabase.from('profiles').insert({
         id: user.id,
+        email: user.email ?? null,
         subscription_status: 'inactive',
       })
       if (createError) {

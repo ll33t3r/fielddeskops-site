@@ -40,6 +40,7 @@ body {
   color: var(--text-main);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport - accounts for browser chrome, OS dock/taskbar */
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 

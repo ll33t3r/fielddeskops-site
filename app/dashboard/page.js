@@ -182,7 +182,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-screen w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
+    <div className="min-h-screen min-h-[100dvh] w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-y-auto flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
       <SubscriptionBanner />
       <Toast toast={toast} onClose={() => setToast(null)} />
       {showUpgradePrompt && (

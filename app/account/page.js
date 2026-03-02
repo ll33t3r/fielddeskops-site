@@ -66,7 +66,7 @@ export default async function AccountPage() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)]">
+    <div className="min-h-screen min-h-[100dvh] overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)]">
       <div className="max-w-6xl mx-auto p-4 md:p-8 pb-10">
         <div className="mb-8 industrial-card rounded-2xl p-5 md:p-6 border border-[#FF6700]/30 shadow-[0_0_28px_rgba(255,103,0,0.15)]">
           <Link

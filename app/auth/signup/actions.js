@@ -23,6 +23,21 @@ export async function signup(formData) {
     return { error: error.message }
   }
 
+  // Ensure profile exists (belt-and-suspenders: DB trigger may not be deployed)
+  if (data?.user?.id) {
+    await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: data.user.id,
+          email: data.user.email ?? email,
+          subscription_status: 'inactive',
+          subscription_tier: 'free',
+        },
+        { onConflict: 'id', ignoreDuplicates: false }
+      )
+  }
+
   // Scaffolded transactional email path:
   // this only sends when RESEND_API_KEY is configured.
   try {
