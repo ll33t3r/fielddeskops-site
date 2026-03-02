@@ -15,40 +15,42 @@ export async function POST(request) {
     if (!stripeSecretKey) {
       logError('Checkout missing STRIPE_SECRET_KEY')
       return NextResponse.json(
-        { error: 'Stripe Secret Key not configured. Check environment variables.' },
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
-    if (process.env.NODE_ENV === 'production' && stripeSecretKey.includes('_test_')) {
-      logError('Checkout running in production with test Stripe secret key')
-      return NextResponse.json(
-        { error: 'Stripe is not configured for production billing.' },
-        { status: 500 }
-      )
-    }
-
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
     if (!siteUrl) {
       logError('Checkout missing NEXT_PUBLIC_SITE_URL')
       return NextResponse.json(
-        { error: 'Site URL not configured. Check environment variables.' },
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
 
     // Price ID must start with "price_" for subscription checkout
-    const priceId =
-      process.env.STRIPE_PRICE_ID?.trim() || process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim()
+    // Prefer NEXT_PUBLIC_ (inlined at build) for reliability across serverless cold starts
+    const priceId = (
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim() ||
+      process.env.STRIPE_PRICE_ID?.trim() ||
+      ''
+    ).trim()
     if (!priceId || !priceId.startsWith('price_')) {
-      logError('Checkout missing STRIPE_PRICE_ID or NEXT_PUBLIC_STRIPE_PRICE_ID (must be price_xxx)', null, {
-        hasStripePriceId: !!process.env.STRIPE_PRICE_ID?.trim(),
-        hasNextPublicPriceId: !!process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim(),
+      logError('Checkout missing price ID', null, {
+        hasNextPublic: !!process.env.NEXT_PUBLIC_STRIPE_PRICE_ID?.trim(),
+        hasServer: !!process.env.STRIPE_PRICE_ID?.trim(),
+        priceIdLen: priceId?.length ?? 0,
       })
       return NextResponse.json(
-        {
-          error:
-            'Stripe Price ID not configured. Set STRIPE_PRICE_ID or NEXT_PUBLIC_STRIPE_PRICE_ID to your price_xxx value.',
-        },
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
+        { status: 500 }
+      )
+    }
+
+    if (process.env.NODE_ENV === 'production' && stripeSecretKey.includes('_test_')) {
+      logError('Checkout running in production with test Stripe secret key')
+      return NextResponse.json(
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
@@ -57,7 +59,7 @@ export async function POST(request) {
     if (!supabaseUrl) {
       logError('Checkout missing NEXT_PUBLIC_SUPABASE_URL')
       return NextResponse.json(
-        { error: 'Supabase URL not configured. Check environment variables.' },
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
@@ -66,7 +68,7 @@ export async function POST(request) {
     if (!supabaseAnonKey) {
       logError('Checkout missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
       return NextResponse.json(
-        { error: 'Supabase Anon Key not configured. Check environment variables.' },
+        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
         { status: 500 }
       )
     }
