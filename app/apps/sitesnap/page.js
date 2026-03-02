@@ -539,7 +539,7 @@ export default function SiteSnap() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] pb-32 relative">
+    <div className="min-h-screen min-h-[100dvh] overflow-y-auto bg-[var(--bg-main)] pb-32 relative">
       <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt

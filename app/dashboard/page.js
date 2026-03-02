@@ -182,7 +182,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-y-auto flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
+    <div className="h-screen h-[100dvh] min-h-0 w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-hidden flex flex-col pb-28 sm:pb-32 relative selection:bg-[#FF6700] selection:text-black transition-colors">
       <SubscriptionBanner />
       <Toast toast={toast} onClose={() => setToast(null)} />
       {showUpgradePrompt && (
@@ -215,8 +215,8 @@ export default function Dashboard() {
         />
       </div>
 
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 pb-20 sm:pb-32">
-        <div className="w-full flex items-center justify-center pb-16 sm:pb-32">
+      <main className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center px-4 sm:px-6 pt-4 pb-28 sm:pb-36">
+        <div className="w-full flex-1 flex items-center justify-center py-4">
           <AppsGrid activeJob={activeJob} />
         </div>
       </main>

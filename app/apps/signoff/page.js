@@ -1133,7 +1133,7 @@ export default function SignOff() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
+    <div className="min-h-screen min-h-[100dvh] overflow-y-auto bg-[var(--bg-main)] text-[var(--text-main)] pb-32">
       <SubscriptionBanner />
       {showUpgradePrompt && (
         <UpgradePrompt
