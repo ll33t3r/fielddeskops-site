@@ -3,18 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function RootPage() {
   const supabase = createClient();
-  let session = null;
+  let user = null;
   try {
     const {
-      data: { session: activeSession },
+      data: { user: activeUser },
       error,
-    } = await supabase.auth.getSession();
-    session = error ? null : activeSession;
+    } = await supabase.auth.getUser();
+    user = error ? null : activeUser;
   } catch {
-    session = null;
+    user = null;
   }
 
-  if (session) {
+  if (user) {
     redirect("/dashboard");
   }
   redirect("/welcome");

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase/server'
 import BillingPortalButton from './BillingPortalButton'
+import { signoutForm } from '../auth/signout/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,18 +18,18 @@ function getPlanDisplay(tier, status) {
 
 export default async function AccountPage() {
   const supabase = createClient()
-  let session = null
+  let user = null
   try {
     const {
-      data: { session: activeSession },
+      data: { user: activeUser },
       error,
-    } = await supabase.auth.getSession()
-    session = error ? null : activeSession
+    } = await supabase.auth.getUser()
+    user = error ? null : activeUser
   } catch {
-    session = null
+    user = null
   }
 
-  if (!session) {
+  if (!user) {
     const message = encodeURIComponent('Please log in to continue.')
     redirect(`/auth/login?redirectTo=${encodeURIComponent('/account')}&message=${message}`)
   }
@@ -36,7 +37,7 @@ export default async function AccountPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select('subscription_status, subscription_tier, stripe_customer_id, stripe_subscription_id, created_at')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
   const subscriptionStatus = profile?.subscription_status || 'free'
@@ -45,7 +46,7 @@ export default async function AccountPage() {
   const isActiveSubscription = subscriptionStatus === 'paid' || subscriptionStatus === 'trial'
   const hasPastSubscription = Boolean(profile?.stripe_customer_id)
   const plan = getPlanDisplay(subscriptionTier, subscriptionStatus)
-  const userEmail = session.user.email || 'Unknown'
+  const userEmail = user.email || 'Unknown'
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString('en-US', {
         month: 'long',
@@ -56,7 +57,7 @@ export default async function AccountPage() {
   const { data: usageRows } = await supabase
     .from('usage_tracking')
     .select('resource_type, total_created')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
 
   const usageMap = {}
   if (usageRows) {
@@ -139,12 +140,14 @@ export default async function AccountPage() {
             <div className="industrial-card rounded-2xl p-6 border border-[var(--border-color)]">
               <h3 className="text-lg font-oswald font-bold uppercase tracking-wide mb-4">Quick Actions</h3>
               <div className="space-y-3">
-                <Link
-                  href="/auth/login"
-                  className="block w-full text-center py-3 rounded-lg font-bold transition border border-red-500/40 bg-red-900/20 hover:bg-red-900/40 text-red-300"
-                >
-                  Sign Out
-                </Link>
+                <form action={signoutForm}>
+                  <button
+                    type="submit"
+                    className="block w-full text-center py-3 rounded-lg font-bold transition border border-red-500/40 bg-red-900/20 hover:bg-red-900/40 text-red-300 cursor-pointer"
+                  >
+                    Sign Out
+                  </button>
+                </form>
                 <Link
                   href="/legal/terms?from=%2Faccount"
                   className="block w-full text-center py-3 rounded-lg font-bold transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/60"

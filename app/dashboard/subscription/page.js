@@ -4,18 +4,18 @@ import SubscriptionClient from './SubscriptionClient'
 
 export default async function SubscriptionPage() {
   const supabase = createClient()
-  let session = null
+  let user = null
   try {
     const {
-      data: { session: activeSession },
+      data: { user: activeUser },
       error,
-    } = await supabase.auth.getSession()
-    session = error ? null : activeSession
+    } = await supabase.auth.getUser()
+    user = error ? null : activeUser
   } catch {
-    session = null
+    user = null
   }
 
-  if (!session) {
+  if (!user) {
     const message = encodeURIComponent('Please log in to continue.')
     redirect(
       `/auth/login?redirectTo=${encodeURIComponent('/dashboard/subscription')}&message=${message}`
