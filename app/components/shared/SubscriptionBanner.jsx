@@ -71,56 +71,46 @@ export default function SubscriptionBanner() {
 
   if (status.isReadOnly) {
     return (
-      <div className="mx-4 mt-4 mb-2 rounded-xl border border-[#FF6700]/40 bg-[#FF6700]/10 p-4 text-sm text-[var(--text-main)]">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="font-semibold text-[#FF6700]">Account locked. Renew to edit.</p>
-          <button
-            onClick={handleUpgrade}
-            disabled={isLoadingUpgrade}
-            className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-4 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isLoadingUpgrade ? "Opening..." : "Upgrade Account"}
-          </button>
+      <div className="w-full max-w-full min-w-0 px-4 sm:px-6 mt-2 mb-2">
+        <div className="rounded-lg border border-[#FF6700]/40 bg-[#FF6700]/10 px-3 py-2 text-sm text-[var(--text-main)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+            <p className="font-semibold text-[#FF6700] text-xs sm:text-sm min-w-0 shrink">Account locked. Renew to edit.</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/account" className="text-xs font-semibold text-[#FF6700] hover:underline">Account</Link>
+            <button
+              onClick={handleUpgrade}
+              disabled={isLoadingUpgrade}
+              className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-1.5 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isLoadingUpgrade ? "..." : "Renew"}
+            </button>
+            </div>
+          </div>
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
         </div>
-        <p className="mt-2 text-xs text-[var(--text-sub)]">
-          You can still view all saved data, but creating or editing is disabled until renewal.
-        </p>
-        <Link
-          href="/account"
-          className="mt-2 inline-block text-xs font-semibold text-[#FF6700] hover:underline"
-        >
-          View account status
-        </Link>
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       </div>
     );
   }
 
   if (status.tier === "free" && !status.stripeCustomerId) {
     return (
-      <div className="mx-4 mt-4 mb-2 rounded-xl border border-[#FF6700]/30 bg-[#FF6700]/5 p-4 text-sm text-[var(--text-main)]">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-semibold text-[#FF6700]">Free demo account</p>
-            <p className="text-xs text-[var(--text-sub)]">
-              You are on the free plan. Upgrade to unlock unlimited jobs, photos, contracts, and inventory.
-            </p>
-            <Link
-              href="/account"
-              className="mt-1 inline-block text-xs font-semibold text-[#FF6700] hover:underline"
+      <div className="w-full max-w-full min-w-0 px-4 sm:px-6 mt-2 mb-2">
+        <div className="rounded-lg border border-[#FF6700]/30 bg-[#FF6700]/5 px-3 py-2 text-sm text-[var(--text-main)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+            <p className="font-semibold text-[#FF6700] text-xs sm:text-sm min-w-0 shrink">Free demo</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/account" className="text-xs font-semibold text-[#FF6700] hover:underline hidden sm:inline">Account</Link>
+            <button
+              onClick={handleUpgrade}
+              disabled={isLoadingUpgrade}
+              className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-1.5 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              View account status
-            </Link>
+              {isLoadingUpgrade ? "..." : "Upgrade to Pro"}
+            </button>
+            </div>
           </div>
-          <button
-            onClick={handleUpgrade}
-            disabled={isLoadingUpgrade}
-            className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-4 py-2 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isLoadingUpgrade ? "Opening..." : "Upgrade to Pro"}
-          </button>
+          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
         </div>
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       </div>
     );
   }
