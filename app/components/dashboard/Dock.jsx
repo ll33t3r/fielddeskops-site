@@ -17,7 +17,7 @@ export default function Dock({ onButtonClick }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 px-4 pb-3 pointer-events-none h-24">
       <div className="mx-auto max-w-xl pointer-events-auto h-full">
-        <div className="grid grid-cols-5 gap-2 items-center h-full rounded-2xl bg-black/60 border border-white/10 backdrop-blur-xl px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
+        <div className="grid grid-cols-5 gap-2 items-center h-full rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-color)] backdrop-blur-xl px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.45)]">
           {BUTTONS.map((button) => {
             const Icon = button.icon;
             const isActive = activeButton === button.id;
@@ -34,7 +34,7 @@ export default function Dock({ onButtonClick }) {
                     "min-h-[48px] min-w-[48px] rounded-xl",
                     isPrimary
                       ? "h-16 w-16 bg-[#FF6700] text-black shadow-[0_0_20px_rgba(255,103,0,0.5)]"
-                      : "bg-white/5 text-[var(--text-sub)] hover:text-[var(--text-main)]",
+                      : "bg-[var(--bg-surface)] text-[var(--text-sub)] hover:text-[var(--text-main)] hover:bg-[var(--hover-surface)]",
                     isActive && !isPrimary ? "text-[#FF6700] shadow-[0_0_12px_rgba(255,103,0,0.45)]" : "",
                   ].join(" ")}
                   aria-label={button.label}

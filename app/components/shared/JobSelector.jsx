@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle, ChevronDown, Loader2, Plus, X } from "lucide-react";
 import { createClient } from "../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
-import { buildFieldErrors, isRequired } from "../../utils/validation";
 import { logError } from "../../../utils/logger";
 import UpgradePrompt from "@/components/UpgradePrompt";
 
@@ -17,11 +16,8 @@ export default function JobSelector() {
   const [jobName, setJobName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
-  const [touched, setTouched] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
-  const inputRef = useRef(null);
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -63,6 +59,18 @@ export default function JobSelector() {
     loadJobs();
   }, [loadJobs, syncActiveJob]);
 
+  useEffect(() => {
+    const handleClosePopouts = (event) => {
+      if (event?.detail?.source === "job-selector") return;
+      setShowDropdown(false);
+      setError(null);
+    };
+    window.addEventListener("fdops:close-popouts", handleClosePopouts);
+    return () => {
+      window.removeEventListener("fdops:close-popouts", handleClosePopouts);
+    };
+  }, []);
+
   // When a job is reopened from Job History, refetch list so it appears in the dropdown
   useEffect(() => {
     if (activeJob?.id && activeJob?.status === "ACTIVE" && !jobs.some((j) => j.id === activeJob.id)) {
@@ -70,21 +78,14 @@ export default function JobSelector() {
     }
   }, [activeJob?.id, activeJob?.status, jobs, loadJobs]);
 
-  const validate = useMemo(
-    () => (value) =>
-      buildFieldErrors({
-        jobName: [{ isValid: isRequired(value), message: "Job name is required." }],
-      }),
-    []
-  );
-
   const handleCreate = async (e) => {
     e?.preventDefault?.();
     setError(null);
-    const nextErrors = validate(jobName);
-    setFieldErrors(nextErrors);
-    setTouched(true);
-    if (Object.keys(nextErrors).length > 0) return;
+    const trimmedName = jobName.trim();
+    if (!trimmedName) {
+      setError("Enter a job name to create.");
+      return;
+    }
 
     setCreating(true);
 
@@ -117,7 +118,7 @@ export default function JobSelector() {
         .from("jobs")
         .insert({
           user_id: user.id,
-          title: jobName.trim(),
+          title: trimmedName,
           status: "ACTIVE",
         })
         .select("id, user_id, title, status, customer_id, rig_id, assigned_worker_id, created_at, updated_at, completed_at")
@@ -134,8 +135,6 @@ export default function JobSelector() {
         setActiveJob(data);
         setJobName("");
         setShowDropdown(false);
-        setTouched(false);
-        setFieldErrors({});
       }
     } catch (error) {
       logError("Job selector create failed", error);
@@ -147,6 +146,7 @@ export default function JobSelector() {
 
   const handleSelect = (job) => {
     setActiveJob(job);
+    setError(null);
     setShowDropdown(false);
   };
 
@@ -158,69 +158,104 @@ export default function JobSelector() {
     }
   };
 
-  const fieldError = touched ? fieldErrors.jobName : null;
-  const showError = error || fieldError;
+  const showError = error;
+  const openDropdown = () => {
+    window.dispatchEvent(new CustomEvent("fdops:close-popouts", { detail: { source: "job-selector" } }));
+    setError(null);
+    setShowDropdown(true);
+  };
 
   return (
     <div className="w-full">
       <div className="relative">
-        <form onSubmit={handleCreate} className="relative z-30 group" noValidate>
-          {/* Fixed-height row so Plus/Create/Chevron stay aligned when error shows */}
-          <div className="relative min-h-[3rem] flex items-center">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FF6700] z-10 shrink-0">
-              {creating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+        <button
+          type="button"
+          onClick={() => {
+            if (showDropdown) {
+              setShowDropdown(false);
+              return;
+            }
+            openDropdown();
+          }}
+          className={`relative ${showDropdown ? "z-[120]" : "z-[20]"} w-full min-h-[3rem] bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-3 py-2 text-left focus:outline-none focus:border-[#FF6700] focus:shadow-[0_0_15px_rgba(255,103,0,0.2)] transition-[border-color,box-shadow] flex items-center justify-between gap-2`}
+          aria-expanded={showDropdown}
+          aria-invalid={showError ? "true" : "false"}
+          aria-describedby={showError ? "job-name-error" : undefined}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[#FF6700] shrink-0">
+              {activeJob ? <CheckCircle size={16} /> : <Plus size={16} />}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#FF6700]">
+                {activeJob ? "Active job" : "Job"}
+              </p>
+              <p className="text-sm text-[var(--text-main)] truncate">
+                {activeJob?.title || "Start or select job..."}
+              </p>
             </div>
-            <input
-              ref={inputRef}
-              id="job-name"
-              type="text"
-              placeholder="Start or Select Job..."
-              value={jobName}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                setJobName(nextValue);
-                if (touched) {
-                  setFieldErrors(validate(nextValue));
-                }
-              }}
-              onBlur={(event) => {
-                setTouched(true);
-                setFieldErrors(validate(event.target.value));
-              }}
-              onFocus={() => setShowDropdown(true)}
-              className="w-full min-h-[3rem] bg-[var(--bg-card)] backdrop-blur-xl border border-[var(--border-color)] rounded-xl py-3 pl-12 pr-28 text-base text-[var(--text-main)] placeholder:text-[var(--text-sub)] focus:outline-none focus:border-[#FF6700] focus:shadow-[0_0_15px_rgba(255,103,0,0.2)] transition-all"
-              aria-invalid={fieldError ? "true" : "false"}
-              aria-describedby={showError ? "job-name-error" : undefined}
-            />
-            <button
-              type="submit"
-              className="absolute right-12 top-1/2 -translate-y-1/2 bg-[#FF6700] text-black text-xs font-bold px-3 py-1.5 rounded-lg shadow-[0_0_12px_rgba(255,103,0,0.3)] hover:shadow-[0_0_16px_rgba(255,103,0,0.45)] transition shrink-0"
-            >
-              Create
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowDropdown((prev) => !prev)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-sub)] hover:text-[#FF6700] z-10 shrink-0"
-            >
-              <ChevronDown size={18} />
-            </button>
           </div>
-        </form>
+          <ChevronDown size={18} className="text-[var(--text-sub)] shrink-0" />
+        </button>
 
         {showError && (
           <p id="job-name-error" className="mt-1.5 text-xs text-red-500" role="alert">
-            {error || fieldError}
+            {error}
           </p>
         )}
 
         {showDropdown && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => { setShowDropdown(false); setError(null); }} aria-hidden />
-            <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0a0a] border border-[var(--border-color)] rounded-xl shadow-2xl z-40 overflow-hidden">
-              <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3 bg-black/60">
+            <div className="fixed inset-0 z-[110]" onClick={() => { setShowDropdown(false); setError(null); }} aria-hidden />
+            <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-xl shadow-2xl z-[120] overflow-hidden">
+              <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3 bg-[var(--bg-surface)]">
                 Jobs
               </div>
+              <form onSubmit={handleCreate} className="p-3 border-b border-[var(--border-color)] bg-[var(--bg-surface)]">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="job-name"
+                    type="text"
+                    placeholder="New job name..."
+                    value={jobName}
+                    onChange={(e) => {
+                      setJobName(e.target.value);
+                      if (error) setError(null);
+                    }}
+                    className="flex-1 min-h-[2.5rem] bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 text-sm text-[var(--text-main)] placeholder:text-[var(--text-sub)] focus:outline-none focus:border-[#FF6700]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-2 text-xs font-bold text-black disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {creating ? <Loader2 size={14} className="animate-spin" /> : "Create"}
+                  </button>
+                </div>
+              </form>
+              {activeJob ? (
+                <div className="px-3 py-2 border-b border-[var(--border-color)] flex items-center justify-between">
+                  <p className="text-xs text-[var(--text-sub)] truncate pr-2">
+                    Selected: <span className="text-[var(--text-main)] font-semibold">{activeJob.title}</span>
+                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={handleMarkComplete}
+                      className="p-1.5 hover:bg-[#FF6700]/15 rounded text-[#FF6700]"
+                      title="Mark complete"
+                    >
+                      <CheckCircle size={14} />
+                    </button>
+                    <button
+                      onClick={clearActiveJob}
+                      className="p-1.5 hover:bg-[#FF6700]/15 rounded text-[#FF6700]"
+                      title="Clear selected job"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {loading ? (
                 <div className="px-3 py-4 text-xs text-[var(--text-sub)]">Loading jobs...</div>
               ) : jobs.length === 0 ? (
@@ -230,15 +265,15 @@ export default function JobSelector() {
                   <button
                     key={job.id}
                     onClick={() => handleSelect(job)}
-                    className="w-full text-left px-3 py-2 hover:bg-[#FF6700]/10 transition flex justify-between items-center group border-b border-white/5 last:border-0"
+                    className="w-full text-left px-3 py-3 min-h-[2.5rem] hover:bg-[#FF6700]/10 transition flex justify-between items-center gap-3 group border-b border-[var(--border-color)] last:border-0"
                   >
-                    <span className="text-sm text-[var(--text-main)] group-hover:text-[#FF6700]">
+                    <span className="text-base leading-tight text-[var(--text-main)] group-hover:text-[#FF6700] truncate">
                       {job.title}
-                      <span className="text-[10px] text-[var(--text-sub)] ml-2">
+                      <span className="text-xs text-[var(--text-sub)] ml-2">
                         • {job.status || "ACTIVE"}
                       </span>
                     </span>
-                    <span className="text-xs text-[var(--text-sub)]">
+                    <span className="text-xs text-[var(--text-sub)] shrink-0">
                       {new Date(job.created_at).toLocaleDateString()}
                     </span>
                   </button>
@@ -260,29 +295,6 @@ export default function JobSelector() {
         />
       )}
 
-      {activeJob && (
-        <div className="flex items-center justify-between bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-lg p-3 mt-3 shadow-[0_0_10px_rgba(255,103,0,0.15)]">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-[#FF6700] shadow-[0_0_8px_#FF6700] animate-pulse"></div>
-            <div>
-              <p className="text-[10px] text-[#FF6700] font-bold uppercase tracking-wider">ACTIVE JOB</p>
-              <p className="font-oswald text-sm text-[var(--text-main)] tracking-wide">{activeJob.title}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={handleMarkComplete}
-              className="p-2 hover:bg-[#FF6700]/20 rounded text-[#FF6700]"
-              title="Mark complete"
-            >
-              <CheckCircle size={14} />
-            </button>
-            <button onClick={clearActiveJob} className="p-2 hover:bg-[#FF6700]/20 rounded text-[#FF6700]" title="Clear">
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -11,11 +11,11 @@ export default function AssignResourcesModal({ isOpen, onClose, data }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
+      <div className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm animate-in fade-in" onClick={onClose} />
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl animate-in zoom-in-95">
         <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">
           <h2 className="font-oswald text-lg text-[#FF6700]">ASSIGN TO: {assigningJob.title}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-[var(--hover-surface)] rounded-lg">
             <X size={20} />
           </button>
         </div>

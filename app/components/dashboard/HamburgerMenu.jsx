@@ -45,17 +45,17 @@ export default function HamburgerMenu({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in pointer-events-auto" onClick={onClose} />
+      <div className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm animate-in fade-in pointer-events-auto" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 w-96 max-w-[90vw] z-50 bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl animate-in slide-in-from-right duration-300 overflow-y-auto">
         <div className="sticky top-0 bg-[var(--bg-card)] border-b border-[var(--border-color)] p-5 flex justify-between items-center backdrop-blur-xl z-10">
           <h2 className="font-oswald text-xl text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">COMMAND MENU</h2>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg text-[var(--text-sub)] transition">
+          <button onClick={onClose} className="p-2 hover:bg-[var(--hover-surface)] rounded-lg text-[var(--text-sub)] transition">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-5 space-y-6">
-          <div className="grid grid-cols-4 gap-1 bg-black/40 p-1 rounded-lg">
+          <div className="grid grid-cols-4 gap-1 bg-[var(--bg-surface)] p-1 rounded-lg border border-[var(--border-color)]">
             {TABS.map((tab) => (
               <button
                 key={tab}
@@ -113,8 +113,8 @@ export default function HamburgerMenu({
                 {theme === "dark" ? <Moon size={18} className="text-[#FF6700]" /> : <Sun size={18} className="text-[var(--text-sub)]" />}
                 <span className="text-sm font-bold text-[var(--text-main)]">{theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
               </div>
-              <div className={`w-10 h-5 rounded-full transition-colors ${theme === "dark" ? "bg-[#FF6700]" : "bg-gray-700"}`}>
-                <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${theme === "dark" ? "translate-x-5" : ""}`}></div>
+              <div className={`w-10 h-5 rounded-full transition-colors ${theme === "dark" ? "bg-[#FF6700]" : "bg-[var(--switch-off-bg)]"}`}>
+                <div className={`w-4 h-4 rounded-full bg-[var(--switch-knob)] m-0.5 transition-transform ${theme === "dark" ? "translate-x-5" : ""}`}></div>
               </div>
             </button>
 

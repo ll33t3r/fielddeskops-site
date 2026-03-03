@@ -62,27 +62,32 @@ export default function SignupPage() {
   const handleSubmit = async (formData) => {
     setLoading(true)
     setError(null)
-    
-    const result = await signup(formData)
-    
-    if (result?.error) {
-      setError(result.error)
-      setLoading(false)
-    } else if (result?.autoConfirmed) {
+
+    try {
+      const result = await signup(formData)
+
+      if (result?.error) {
+        setError(result.error)
+        return
+      }
+
       track('signup_completed')
       setFormValues({ email: '', password: '' })
       setTouched({})
       setFieldErrors({})
-      // If account created AND logged in -> Go to Dashboard
-      router.refresh()
-      router.push('/')
-    } else {
-      track('signup_completed')
-      setFormValues({ email: '', password: '' })
-      setTouched({})
-      setFieldErrors({})
+
+      if (result?.autoConfirmed) {
+        // If account created AND logged in -> Go to Dashboard
+        router.refresh()
+        router.push('/')
+        return
+      }
+
       // If account created but needs email check
       setCheckEmail(true)
+    } catch {
+      setError('Unable to create your account right now. Please try again.')
+    } finally {
       setLoading(false)
     }
   }

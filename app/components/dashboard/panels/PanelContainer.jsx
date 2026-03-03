@@ -61,7 +61,7 @@ export default function PanelContainer({ isOpen, onClose, title, children }) {
   return (
     <>
       <div
-        className={`fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
+        className={`fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
       />
       <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4">
@@ -74,10 +74,10 @@ export default function PanelContainer({ isOpen, onClose, title, children }) {
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)]">
             <div className="flex items-center gap-3">
-              <span className="h-1.5 w-12 rounded-full bg-white/10" />
+              <span className="h-1.5 w-12 rounded-full bg-[var(--bg-muted)]" />
               <h2 className="text-sm font-bold uppercase tracking-widest text-[#FF6700]">{title}</h2>
             </div>
-            <button onClick={onClose} className="p-2 rounded-lg text-[var(--text-sub)] hover:bg-white/10 transition">
+            <button onClick={onClose} className="p-2 rounded-lg text-[var(--text-sub)] hover:bg-[var(--hover-surface)] transition">
               <X size={18} />
             </button>
           </div>

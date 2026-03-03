@@ -8,7 +8,7 @@ import useResourcesManagement from "./useResourcesManagement";
 
 export default function useDashboardPageState({ supabase, router, setActiveJob }) {
   const { jobs: liveJobs, refresh: refreshBrain } = useLiveBrain();
-  const { metrics, alertList, loadMetrics, setJobsCount, dismissAlert } = useDashboardMetrics(supabase);
+  const { metrics, alertList, revenueBreakdown, loadMetrics, setJobsCount, dismissAlert } = useDashboardMetrics(supabase);
   const { jobs, setJobs, loadJobs, createJob, updateJob, assignToJob } = useJobOperations(supabase, { autoLoad: false });
   const { fleet, customers, rigs, workers, loadResources } = useResourcesManagement(supabase, { includeRigs: true, autoLoad: false });
 
@@ -100,8 +100,13 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
     const { error } = await updateJob(id, updates);
     if (!error) {
       await refreshBrain();
+      await loadMetrics();
+      const loadedJobs = await loadJobs();
+      if (loadedJobs) {
+        setJobsCount(loadedJobs.filter((job) => job.status === "ACTIVE").length);
+      }
     }
-  }, [updateJob, refreshBrain]);
+  }, [updateJob, refreshBrain, loadMetrics, loadJobs, setJobsCount]);
 
   const handleAssignToJob = useCallback(async (jobId, field, valueId) => {
     const { error } = await assignToJob(jobId, field, valueId);
@@ -117,6 +122,15 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
       setJobsCount(loadedJobs.filter((job) => job.status === "ACTIVE").length);
     }
   }, [refreshBrain, loadJobs, setJobsCount]);
+
+  const refreshJobsAndMetrics = useCallback(async () => {
+    await refreshBrain();
+    await loadMetrics();
+    const loadedJobs = await loadJobs();
+    if (loadedJobs) {
+      setJobsCount(loadedJobs.filter((job) => job.status === "ACTIVE").length);
+    }
+  }, [refreshBrain, loadMetrics, loadJobs, setJobsCount]);
 
   const manualRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -149,6 +163,7 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
     refreshing,
     manualRefresh,
     metrics,
+    revenueBreakdown,
     alertList,
     dismissAlert,
     liveJobs,
@@ -163,6 +178,7 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
     handleUpdateJob,
     handleAssignToJob,
     refreshJobsData,
+    refreshJobsAndMetrics,
     loadResources,
     refreshDashboardData,
     showUpgradePrompt,

@@ -24,6 +24,7 @@ export default function WelcomePage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
   // Check if user is logged in - redirect to dashboard if they are
   useEffect(() => {
@@ -49,7 +50,9 @@ export default function WelcomePage() {
   // Smooth scroll for anchor links
   useEffect(() => {
     const handleAnchorClick = (e) => {
-      const href = e.target.getAttribute('href')
+      const anchor = e.target.closest('a[href^="#"]')
+      if (!anchor) return
+      const href = anchor.getAttribute('href')
       if (href && href.startsWith('#')) {
         e.preventDefault()
         const target = document.querySelector(href)
@@ -65,6 +68,7 @@ export default function WelcomePage() {
 
   const handleCheckout = async () => {
     setLoading(true)
+    setCheckoutError('')
 
     try {
       const response = await fetch('/api/stripe/checkout', {
@@ -85,7 +89,7 @@ export default function WelcomePage() {
       window.location.assign(data.url)
     } catch (error) {
       logError('Welcome checkout failed', error)
-      alert(error.message || 'Failed to start checkout. Please try again.')
+      setCheckoutError(error.message || 'Failed to start checkout. Please try again.')
       setLoading(false)
     }
   }
@@ -143,6 +147,11 @@ export default function WelcomePage() {
               {loading ? <><Loader2 className="animate-spin" size={20} /> Loading...</> : 'Start 7-Day Pro Trial'}
             </button>
           </div>
+          {checkoutError ? (
+            <p className="mt-4 text-sm text-red-400" role="alert">
+              {checkoutError}
+            </p>
+          ) : null}
           <div className="mt-14 h-[420px] sm:h-[500px] bg-gradient-to-br from-[#FF6700]/15 via-[#FF6700]/5 to-transparent rounded-2xl border border-[#FF6700]/20 shadow-[0_0_60px_rgba(255,103,0,0.15)] flex items-center justify-center">
             <div className="text-center px-4">
               <Zap size={48} className="text-[#FF6700] mx-auto mb-4 opacity-90" />
@@ -345,6 +354,11 @@ export default function WelcomePage() {
                 {loading ? <><Loader2 className="animate-spin" size={20} /> Loading...</> : 'Start 7-Day Pro Trial'}
               </button>
             </div>
+            {checkoutError ? (
+              <p className="mt-4 text-sm text-red-400" role="alert">
+                {checkoutError}
+              </p>
+            ) : null}
           </div>
         </div>
       </section>

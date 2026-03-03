@@ -222,7 +222,7 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
                       });
                       setExpandedCustomer(customer.id);
                     }}
-                    className="p-1.5 hover:bg-white/10 rounded"
+                    className="p-1.5 hover:bg-[var(--hover-surface)] rounded"
                     aria-label="Edit customer"
                   >
                     <Edit2 size={14} className="text-[var(--text-sub)]" />
@@ -308,7 +308,7 @@ export default function CustomersTab({ supabase, onResourcesUpdated }) {
                     <>
                       {customer.email && <p className="text-xs text-[var(--text-sub)] flex items-center gap-2"><Mail size={12} />{customer.email}</p>}
                       {customer.address && <p className="text-xs text-[var(--text-sub)] flex items-center gap-2"><MapPin size={12} />{customer.address}</p>}
-                      {customer.notes && <p className="text-xs text-[var(--text-sub)] flex items-start gap-2 bg-black/40 p-2 rounded"><FileText size={12} className="mt-0.5 shrink-0" />{customer.notes}</p>}
+                      {customer.notes && <p className="text-xs text-[var(--text-sub)] flex items-start gap-2 bg-[var(--bg-surface)] p-2 rounded"><FileText size={12} className="mt-0.5 shrink-0" />{customer.notes}</p>}
                       <button onClick={() => handleDeleteCustomer(customer.id)} className="w-full bg-red-900/20 border border-red-500/30 text-red-500 py-2 rounded text-xs font-bold hover:bg-red-900/40 transition flex items-center justify-center gap-2">
                         <Trash2 size={12} /> Delete Customer
                       </button>

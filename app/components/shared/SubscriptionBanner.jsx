@@ -13,6 +13,7 @@ export default function SubscriptionBanner() {
   });
   const [error, setError] = useState("");
   const [isLoadingUpgrade, setIsLoadingUpgrade] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -36,6 +37,16 @@ export default function SubscriptionBanner() {
     loadStatus();
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleLimitReached = () => {
+      setIsDismissed(false);
+    };
+    window.addEventListener("fdops:limit-reached", handleLimitReached);
+    return () => {
+      window.removeEventListener("fdops:limit-reached", handleLimitReached);
     };
   }, []);
 
@@ -69,51 +80,65 @@ export default function SubscriptionBanner() {
 
   if (status.loading) return null;
 
-  if (status.isReadOnly) {
-    return (
-      <div className="w-full max-w-full min-w-0 px-4 sm:px-6 mt-2 mb-2">
-        <div className="rounded-lg border border-[#FF6700]/40 bg-[#FF6700]/10 px-3 py-2 text-sm text-[var(--text-main)]">
-          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-            <p className="font-semibold text-[#FF6700] text-xs sm:text-sm min-w-0 shrink">Account locked. Renew to edit.</p>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href="/account" className="text-xs font-semibold text-[#FF6700] hover:underline">Account</Link>
-            <button
-              onClick={handleUpgrade}
-              disabled={isLoadingUpgrade}
-              className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-1.5 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isLoadingUpgrade ? "..." : "Renew"}
-            </button>
-            </div>
-          </div>
-          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
-        </div>
-      </div>
-    );
-  }
+  const showReadOnlyToast = status.isReadOnly;
+  const showFreeToast = status.tier === "free" && !status.stripeCustomerId;
+  const shouldShowToast = (showReadOnlyToast || showFreeToast) && !isDismissed;
 
-  if (status.tier === "free" && !status.stripeCustomerId) {
-    return (
-      <div className="w-full max-w-full min-w-0 px-4 sm:px-6 mt-2 mb-2">
-        <div className="rounded-lg border border-[#FF6700]/30 bg-[#FF6700]/5 px-3 py-2 text-sm text-[var(--text-main)]">
-          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-            <p className="font-semibold text-[#FF6700] text-xs sm:text-sm min-w-0 shrink">Free demo</p>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link href="/account" className="text-xs font-semibold text-[#FF6700] hover:underline hidden sm:inline">Account</Link>
-            <button
-              onClick={handleUpgrade}
-              disabled={isLoadingUpgrade}
-              className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-1.5 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isLoadingUpgrade ? "..." : "Upgrade to Pro"}
-            </button>
-            </div>
-          </div>
-          {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
-        </div>
-      </div>
-    );
-  }
+  if (!shouldShowToast) return null;
 
-  return null;
+  return (
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[200] w-[calc(100%-1rem)] max-w-lg pointer-events-none">
+      <div
+        className={[
+          "pointer-events-auto rounded-xl border shadow-2xl backdrop-blur-xl",
+          "px-3 py-3 sm:px-4",
+          showReadOnlyToast
+            ? "bg-[#1d1206]/95 border-[#FF6700]/50"
+            : "bg-[#0a0a0a]/92 border-[#FF6700]/30",
+        ].join(" ")}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            {showReadOnlyToast ? (
+              <>
+                <p className="text-sm font-semibold text-[#FF6700]">Subscription paused</p>
+                <p className="text-xs text-[var(--text-main)] mt-0.5">
+                  Your workspace is in read-only mode. Renew to keep creating and editing.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-[#FF6700]">Welcome to the free demo</p>
+                <p className="text-xs text-[var(--text-main)] mt-0.5">
+                  Build as you go, then unlock unlimited jobs, customers, and all apps when you are ready.
+                </p>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => setIsDismissed(true)}
+            className="text-[var(--text-sub)] hover:text-[var(--text-main)] text-xs px-2 py-1"
+            aria-label="Dismiss free demo notice"
+          >
+            Dismiss
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <Link href="/account" className="text-xs font-semibold text-[#FF6700] hover:underline">
+            Account
+          </Link>
+          <button
+            onClick={handleUpgrade}
+            disabled={isLoadingUpgrade}
+            className="inline-flex items-center justify-center rounded-lg bg-[#FF6700] px-3 py-1.5 text-xs font-bold text-black hover:shadow-[0_0_12px_rgba(255,103,0,0.4)] transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isLoadingUpgrade ? "..." : showReadOnlyToast ? "Renew now" : "Upgrade now"}
+          </button>
+        </div>
+
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      </div>
+    </div>
+  );
 }

@@ -215,33 +215,33 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
                       <p className="text-[10px] text-[var(--text-sub)]">{job.status} • {new Date(job.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="relative">
-                      <button onClick={() => setJobMenuOpen(jobMenuOpen === job.id ? null : job.id)} className="p-1.5 hover:bg-white/10 rounded">
+                      <button onClick={() => setJobMenuOpen(jobMenuOpen === job.id ? null : job.id)} className="p-1.5 hover:bg-[var(--hover-surface)] rounded">
                         <MoreVertical size={16} className="text-[var(--text-sub)]" />
                       </button>
                       {jobMenuOpen === job.id && (
-                        <div className="absolute right-0 top-full mt-1 bg-[#0a0a0a] border border-[var(--border-color)] rounded-lg shadow-xl z-10 min-w-[140px]">
-                          <button onClick={() => { setEditingJob(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2">
+                        <div className="absolute right-0 top-full mt-1 bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-lg shadow-xl z-10 min-w-[140px]">
+                          <button onClick={() => { setEditingJob(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2">
                             <Edit2 size={12} /> Edit
                           </button>
                           {job.status === "ACTIVE" && (
-                            <button onClick={() => handleUpdateJob(job.id, { status: "COMPLETED" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-green-500">
+                            <button onClick={() => handleUpdateJob(job.id, { status: "COMPLETED" })} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2 text-green-500">
                               <CheckCircle2 size={12} /> Complete
                             </button>
                           )}
                           {job.status === "ACTIVE" && (
-                            <button onClick={() => handleUpdateJob(job.id, { status: "INACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-gray-400">
+                            <button onClick={() => handleUpdateJob(job.id, { status: "INACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2 text-gray-400">
                               <Archive size={12} /> Make Inactive
                             </button>
                           )}
                           {job.status === "INACTIVE" && (
-                            <button onClick={() => handleUpdateJob(job.id, { status: "ACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-blue-400">
+                            <button onClick={() => handleUpdateJob(job.id, { status: "ACTIVE" })} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2 text-blue-400">
                               <RotateCcw size={12} /> Reactivate
                             </button>
                           )}
-                          <button onClick={() => { onAssignResources(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 border-t border-white/10">
+                          <button onClick={() => { onAssignResources(job); setJobMenuOpen(null); }} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2 border-t border-[var(--border-color)]">
                             <Users size={12} /> Assign Resources
                           </button>
-                          <button onClick={() => handleDeleteJob(job.id)} className="w-full text-left px-3 py-2 hover:bg-white/10 text-xs flex items-center gap-2 text-red-500 border-t border-white/10">
+                          <button onClick={() => handleDeleteJob(job.id)} className="w-full text-left px-3 py-2 hover:bg-[var(--hover-surface)] text-xs flex items-center gap-2 text-red-500 border-t border-[var(--border-color)]">
                             <Trash2 size={12} /> Delete
                           </button>
                         </div>
@@ -250,7 +250,7 @@ export default function JobsTab({ supabase, activeJob, rigs = [], workers = [], 
                   </div>
 
                   {(job.customers || job.fleet || job.crew) && (
-                    <div className="text-xs text-[var(--text-sub)] space-y-1 mt-2 pt-2 border-t border-white/10">
+                    <div className="text-xs text-[var(--text-sub)] space-y-1 mt-2 pt-2 border-t border-[var(--border-color)]">
                       {job.customers && <p className="flex items-center gap-1"><UserCircle size={10} /> {job.customers.name}</p>}
                       {job.fleet && <p className="flex items-center gap-1"><Truck size={10} /> {job.fleet.name}</p>}
                       {job.crew && <p className="flex items-center gap-1"><Users size={10} /> {job.crew.name}</p>}

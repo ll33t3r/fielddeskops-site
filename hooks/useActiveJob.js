@@ -179,6 +179,7 @@ export function useActiveJob() {
       }
 
       await clearActiveJob();
+      window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "complete", jobId } }));
       return { error: null };
     } catch (error) {
       logError("ActiveJob completion failed", error, { jobId });

@@ -30,11 +30,11 @@ export default function QuickAddMenu({ isOpen, onClose, onActionSelect }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center pb-24 px-4">
       <div
-        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
+        className={`absolute inset-0 bg-[var(--bg-overlay)] backdrop-blur-sm transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
       />
       <div
-        className={`relative w-full max-w-md bg-black/70 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl p-3 transition-all duration-200 ${
+        className={`relative w-full max-w-md bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl shadow-2xl backdrop-blur-xl p-3 transition-all duration-200 ${
           isVisible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-3"
         }`}
       >
@@ -48,7 +48,7 @@ export default function QuickAddMenu({ isOpen, onClose, onActionSelect }) {
                   if (onActionSelect) onActionSelect(action.id);
                   if (onClose) onClose();
                 }}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[var(--text-main)] transition"
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--hover-surface)] text-[var(--text-main)] transition"
               >
                 <div className="flex items-center gap-3">
                   <span className="h-9 w-9 rounded-full bg-[#FF6700]/20 text-[#FF6700] flex items-center justify-center">

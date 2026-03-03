@@ -214,7 +214,7 @@ export default function CustomerDetailModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 py-6">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[var(--bg-overlay)] backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[90vh] bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
           <div>
@@ -224,12 +224,12 @@ export default function CustomerDetailModal({
           <div className="flex items-center gap-2">
             <button
               onClick={handleToggleEdit}
-              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-[var(--text-sub)] transition"
+              className="p-2 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--hover-surface)] text-[var(--text-sub)] transition"
               aria-label="Edit customer"
             >
               <Edit2 size={18} />
             </button>
-            <button onClick={onClose} className="p-2 rounded-lg text-[var(--text-sub)] hover:bg-white/10 transition">
+            <button onClick={onClose} className="p-2 rounded-lg text-[var(--text-sub)] hover:bg-[var(--hover-surface)] transition">
               <X size={18} />
             </button>
           </div>
@@ -316,7 +316,7 @@ export default function CustomerDetailModal({
                           notes: localCustomer.notes || "",
                         });
                       }}
-                      className="flex-1 bg-white/10 text-[var(--text-main)] py-2 rounded-lg font-bold hover:bg-white/20 transition"
+                      className="flex-1 bg-[var(--bg-surface)] text-[var(--text-main)] py-2 rounded-lg font-bold hover:bg-[var(--hover-surface)] transition"
                     >
                       Cancel
                     </button>
@@ -420,13 +420,13 @@ export default function CustomerDetailModal({
                 <Mail size={16} /> Email
               </a>
               <button
-                className="bg-white/10 text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
+                className="bg-[var(--bg-surface)] text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
                 disabled
               >
                 <DollarSign size={16} /> Send Quote (Planned)
               </button>
               <button
-                className="bg-white/10 text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
+                className="bg-[var(--bg-surface)] text-[var(--text-main)] py-2 rounded-lg font-bold flex items-center justify-center gap-2"
                 disabled
               >
                 📸 Send Photos (Planned)

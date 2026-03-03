@@ -7,17 +7,32 @@ export default function MetricsBar({
   privacyMode,
   formatCurrency,
   onTogglePrivacyMode,
+  onOpenRevenueBreakdown,
   onOpenActiveJobsModal,
   onOpenAlertsModal,
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-      <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center relative group">
+      <div
+        onClick={onOpenRevenueBreakdown}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenRevenueBreakdown();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center relative group hover:bg-[var(--bg-surface)] transition active:scale-95 cursor-pointer"
+      >
         <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Revenue</p>
         <p className="text-[#22c55e] font-oswald text-lg tracking-tight">{formatCurrency(metrics.revenue)}</p>
         <button
-          onClick={onTogglePrivacyMode}
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePrivacyMode();
+          }}
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-[var(--hover-surface)] rounded"
           title={privacyMode ? "Show" : "Hide"}
         >
           {privacyMode ? <EyeOff size={12} className="text-[#FF6700]" /> : <Eye size={12} className="text-[var(--text-sub)]" />}

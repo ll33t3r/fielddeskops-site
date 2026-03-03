@@ -1,14 +1,18 @@
 # Stripe on fielddeskops.com – Troubleshooting
 
-When Stripe works on **Vercel preview** and **localhost** but fails on **fielddeskops.com**, check the following.
+> **Current host: Netlify.** Stripe checkout, webhooks, and Supabase work correctly on Netlify. Earlier issues (webhook signature verification failures) were Vercel-specific and resolved by migrating.
 
 ---
 
-## 1. Vercel production env vars
+When Stripe works on **Preview** and **localhost** but fails on **fielddeskops.com**, check the following.
+
+---
+
+## 1. Production env vars
 
 Vercel uses different env vars for **Production** vs **Preview**. Production = your custom domain (`fielddeskops.com`).
 
-**In Vercel → Project → Settings → Environment Variables:**
+**In Netlify → Site → Site configuration → Environment variables (or Vercel → Project → Settings → Environment Variables):**
 
 - Ensure Production is checked for all needed vars.
 - `NEXT_PUBLIC_SITE_URL` **must match the domain users visit:**
@@ -31,7 +35,7 @@ The webhook URL in Stripe must match the canonical domain:
 
 Whichever is the main URL (no redirect). If `fielddeskops.com` 301s to `www.fielddeskops.com`, use `www` in the webhook.
 
-Use the correct **Signing secret** for that endpoint and put it in `STRIPE_WEBHOOK_SECRET` in Vercel Production.
+Use the correct **Signing secret** for that endpoint and put it in `STRIPE_WEBHOOK_SECRET` in your host's Production env.
 
 ---
 
@@ -51,11 +55,11 @@ Without these, auth can fail after checkout redirects.
 ## 4. What is actually failing?
 
 - **“Upgrade” doesn’t go to Stripe**  
-  Check Vercel Production logs. Likely: missing env var, `getUser()` returning null (auth/redirect issue), or `NEXT_PUBLIC_SITE_URL` not set.
+  Check host logs (Netlify Functions / Vercel). Likely: missing env var, `getUser()` returning null (auth/redirect issue), or `NEXT_PUBLIC_SITE_URL` not set.
 
 - **Checkout completes, but user stays Free**  
   Webhook signature or delivery. Check Stripe Dashboard → Developers → Webhooks → your endpoint.  
-  If status is not 2xx, webhook body may be modified before your route. See `VERCEL_WEBHOOK_SUPPORT_MESSAGE.md` for Vercel support guidance.
+  On Vercel, webhook body modification was a known issue; Netlify passes the raw body correctly.
 
 - **Success redirect goes to wrong domain**  
   `success_url` and `cancel_url` come from `NEXT_PUBLIC_SITE_URL`. Ensure it matches the domain users actually use.
@@ -68,7 +72,7 @@ Without these, auth can fail after checkout redirects.
 2. Open DevTools → Network.
 3. Click Upgrade. Look at the `/api/stripe/checkout` response.
 4. If 401 → auth/cookie problem on production.
-5. If 500 → check Vercel Production function logs and env vars.
+5. If 500 → check Netlify/Vercel function logs and env vars.
 6. If 200 with `url` → checkout created; if redirect fails or user isn’t upgraded, focus on redirect URLs and webhook.
 
 ---
@@ -77,4 +81,5 @@ Without these, auth can fail after checkout redirects.
 
 When changing Production env vars, redeploy:
 
-- Vercel → Deployments → … on latest → Redeploy
+- **Netlify:** Deploys tab → Trigger deploy
+- **Vercel:** Deployments → … on latest → Redeploy

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logError } from '../utils/logger';
 
@@ -15,6 +15,15 @@ export default function UpgradePrompt({
   const router = useRouter();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    window.dispatchEvent(
+      new CustomEvent('fdops:limit-reached', {
+        detail: { resourceType, currentCount, limit, tier },
+      })
+    );
+  }, [isOpen, resourceType, currentCount, limit, tier]);
 
   const handleClose = () => {
     if (onClose) onClose();
@@ -63,25 +72,25 @@ export default function UpgradePrompt({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full shadow-xl">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+      <div className="bg-[var(--bg-main)] border border-[var(--border-color)] rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <h2 className="text-xl font-semibold mb-4 text-[var(--text-main)]">
           Upgrade to Continue
         </h2>
         
-        <p className="text-gray-600 dark:text-gray-300 mb-4">
+        <p className="text-[var(--text-sub)] mb-4">
           You've reached your {tier} tier limit of <strong>{limit}</strong> {resourceType}.
         </p>
         
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
+        <p className="text-[var(--text-sub)] mb-6">
           Current usage: <strong>{currentCount} / {limit}</strong>
         </p>
 
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+        <div className="bg-[#FF6700]/10 border border-[#FF6700]/35 rounded-lg p-4 mb-6">
+          <h3 className="font-semibold text-[#FF6700] mb-2">
             Unlock Unlimited Access - $19.99/month
           </h3>
-          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+          <ul className="text-sm text-[var(--text-main)] space-y-1">
             <li>• Unlimited jobs, customers & photos</li>
             <li>• Unlimited estimates & contracts</li>
             <li>• Share SignOff documents</li>
@@ -90,20 +99,20 @@ export default function UpgradePrompt({
         </div>
 
         {error ? (
-          <p className="text-sm text-red-600 dark:text-red-400 mb-4">{error}</p>
+          <p className="text-sm text-red-400 mb-4">{error}</p>
         ) : null}
 
         <div className="flex gap-3">
           <button
             onClick={handleClose}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            className="flex-1 px-4 py-2 border border-[var(--border-color)] rounded-lg text-[var(--text-main)] hover:bg-[var(--bg-card)] transition"
           >
             {onClose ? 'Close' : 'Go Back'}
           </button>
           <button
             onClick={handleUpgrade}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-[#FF6700] text-black font-semibold rounded-lg hover:shadow-[0_0_12px_rgba(255,103,0,0.35)] transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isLoading ? 'Opening Checkout...' : 'Upgrade Now'}
           </button>

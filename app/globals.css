@@ -9,15 +9,22 @@
   --bg-main: #121212;
   --bg-card: rgba(30, 30, 30, 0.6);
   --bg-surface: rgba(22, 22, 22, 0.7);
+  --bg-elevated: rgba(10, 10, 10, 0.92);
+  --bg-muted: rgba(255, 255, 255, 0.08);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
   --text-main: #ffffff;
   --text-sub: #9ca3af; /* Gray 400 */
   --border-color: rgba(255, 255, 255, 0.08);
+  --hover-surface: rgba(255, 255, 255, 0.1);
   --shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
   
   --color-primary: #FF6700;
   --input-bg: rgba(18, 18, 18, 0.8);
+  --input-border: rgba(255, 255, 255, 0.12);
   --input-text: #ffffff;
   --input-placeholder: #6b7280;
+  --switch-off-bg: #374151;
+  --switch-knob: #000000;
 }
 
 [data-theme='light'] {
@@ -25,13 +32,20 @@
   --bg-main: #d4d4d4;       /* Concrete Gray (Not white, cuts glare) */
   --bg-card: #ffffff;       /* Pure White Cards */
   --bg-surface: #f3f4f6;    /* Light surface */
+  --bg-elevated: #ffffff;
+  --bg-muted: #d1d5db;
+  --bg-overlay: rgba(17, 24, 39, 0.25);
   --text-main: #000000;     /* Pitch Black Text */
-  --text-sub: #171717;      /* Dark Gray Subtext (High Viz) */
+  --text-sub: #374151;      /* Dark Gray Subtext (High Viz) */
   --border-color: #000000;  /* SOLID BLACK BORDERS */
+  --hover-surface: #e5e7eb;
   --shadow: 4px 4px 0px #000000; /* Hard Drop Shadow */
   --input-bg: #ffffff;
+  --input-border: #111827;
   --input-text: #111827;
   --input-placeholder: #6b7280;
+  --switch-off-bg: #9ca3af;
+  --switch-knob: #ffffff;
 }
 
 /* BASE STYLES */

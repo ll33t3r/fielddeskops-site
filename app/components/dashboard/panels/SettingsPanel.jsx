@@ -199,8 +199,8 @@ export default function SettingsPanel({
               {theme === "dark" ? <Moon size={18} className="text-[#FF6700]" /> : <Sun size={18} className="text-[var(--text-sub)]" />}
               <span className="text-sm font-bold text-[var(--text-main)]">{theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
             </div>
-            <div className={`w-10 h-5 rounded-full transition-colors ${theme === "dark" ? "bg-[#FF6700]" : "bg-gray-700"}`}>
-              <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${theme === "dark" ? "translate-x-5" : ""}`} />
+            <div className={`w-10 h-5 rounded-full transition-colors ${theme === "dark" ? "bg-[#FF6700]" : "bg-[var(--switch-off-bg)]"}`}>
+              <div className={`w-4 h-4 rounded-full bg-[var(--switch-knob)] m-0.5 transition-transform ${theme === "dark" ? "translate-x-5" : ""}`} />
             </div>
           </button>
           <button
@@ -211,8 +211,8 @@ export default function SettingsPanel({
               <ShieldCheck size={18} className="text-[#FF6700]" />
               <span className="text-sm font-bold text-[var(--text-main)]">Privacy Mode</span>
             </div>
-            <div className={`w-10 h-5 rounded-full transition-colors ${privacyMode ? "bg-[#FF6700]" : "bg-gray-700"}`}>
-              <div className={`w-4 h-4 rounded-full bg-black m-0.5 transition-transform ${privacyMode ? "translate-x-5" : ""}`} />
+            <div className={`w-10 h-5 rounded-full transition-colors ${privacyMode ? "bg-[#FF6700]" : "bg-[var(--switch-off-bg)]"}`}>
+              <div className={`w-4 h-4 rounded-full bg-[var(--switch-knob)] m-0.5 transition-transform ${privacyMode ? "translate-x-5" : ""}`} />
             </div>
           </button>
         </section>

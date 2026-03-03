@@ -166,11 +166,11 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
           tier={upgradePromptData.tier}
         />
       )}
-      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
+      <div className="fixed inset-0 z-50 bg-[var(--bg-overlay)] backdrop-blur-sm animate-in fade-in" onClick={onClose} />
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto z-50 bg-[var(--bg-card)]/80 border border-[var(--border-color)] rounded-2xl shadow-2xl backdrop-blur-xl animate-in zoom-in-95">
         <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center">
           <h2 className="font-oswald text-lg text-[#FF6700]">QUICK ESTIMATE</h2>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-[var(--hover-surface)] rounded-lg">
             <X size={20} />
           </button>
         </div>
@@ -206,7 +206,7 @@ export default function QuickEstimateModal({ isOpen, onClose, activeJob, onSaved
             </div>
           </div>
 
-          <div className="bg-black/30 border border-white/5 rounded-xl p-4 space-y-2 text-sm">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-4 space-y-2 text-sm">
             {loadingSettings ? (
               <div className="text-[var(--text-sub)] flex items-center gap-2">
                 <Loader2 size={16} className="animate-spin text-[#FF6700]" />

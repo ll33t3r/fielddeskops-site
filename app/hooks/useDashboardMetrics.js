@@ -6,17 +6,30 @@ import { logError } from "../../utils/logger";
 export default function useDashboardMetrics(supabase) {
   const [metrics, setMetrics] = useState({ revenue: 0, jobs: 0, alerts: 0 });
   const [alertList, setAlertList] = useState([]);
+  const [revenueBreakdown, setRevenueBreakdown] = useState([]);
 
   const loadMetrics = useCallback(async () => {
     try {
       const { data: bids, error: bidsError } = await supabase
         .from("estimates")
-        .select("total_price, jobs!inner(status)")
+        .select("job_id, total_price, jobs!inner(id, title, status)")
         .eq("jobs.status", "ACTIVE");
       if (bidsError) {
         logError("Dashboard metrics revenue failed", bidsError);
       }
       const revenue = bids ? bids.reduce((acc, b) => acc + (Number(b.total_price) || 0), 0) : 0;
+      const breakdownMap = new Map();
+      (bids || []).forEach((bid) => {
+        const jobId = bid.job_id || bid.jobs?.id || "unknown";
+        const existing = breakdownMap.get(jobId);
+        const nextAmount = (existing?.revenue || 0) + (Number(bid.total_price) || 0);
+        breakdownMap.set(jobId, {
+          jobId,
+          jobTitle: bid.jobs?.title || "Untitled job",
+          revenue: nextAmount,
+        });
+      });
+      const nextBreakdown = Array.from(breakdownMap.values()).sort((a, b) => b.revenue - a.revenue);
 
       // Only show low-stock alerts for inventory in existing rigs (fleet).
       // Orphaned rows (e.g. after rig delete) or stale data are ignored.
@@ -51,6 +64,7 @@ export default function useDashboardMetrics(supabase) {
       }
 
       setAlertList(stockAlerts);
+      setRevenueBreakdown(nextBreakdown);
       setMetrics((prev) => ({ ...prev, revenue, alerts: stockAlerts.length }));
     } catch (error) {
       logError("Dashboard metrics load failed", error);
@@ -78,6 +92,7 @@ export default function useDashboardMetrics(supabase) {
   return {
     metrics,
     alertList,
+    revenueBreakdown,
     loadMetrics,
     setJobsCount,
     dismissAlert,

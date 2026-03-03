@@ -14,8 +14,8 @@ import AppsGrid from "../components/dashboard/AppsGrid";
 import QuickAddMenu from "../components/dashboard/QuickAddMenu";
 import ActiveJobsModal from "../components/dashboard/modals/ActiveJobsModal";
 import AlertsModal from "../components/dashboard/modals/AlertsModal";
+import RevenueBreakdownModal from "../components/dashboard/modals/RevenueBreakdownModal";
 import AssignResourcesModal from "../components/dashboard/modals/AssignResourcesModal";
-import Dock from "../components/dashboard/Dock";
 import SettingsPanel from "../components/dashboard/panels/SettingsPanel";
 import WorkersPanel from "../components/dashboard/panels/WorkersPanel";
 import FleetPanel from "../components/dashboard/panels/FleetPanel";
@@ -29,7 +29,6 @@ import JobHistory from "../components/JobHistory";
 import UpgradePrompt from "@/components/UpgradePrompt";
 import SubscriptionBanner from "../components/shared/SubscriptionBanner";
 import Toast from "../components/shared/Toast";
-import Link from "next/link";
 
 export default function Dashboard() {
   const supabase = createClient();
@@ -55,6 +54,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState(null);
   const [showActiveJobsModal, setShowActiveJobsModal] = useState(false);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [showRevenueBreakdownModal, setShowRevenueBreakdownModal] = useState(false);
   const [assigningJob, setAssigningJob] = useState(null);
   const [theme, setTheme] = useState("dark");
   const [privacyMode, setPrivacyMode] = useState(true);
@@ -74,6 +74,7 @@ export default function Dashboard() {
     loading,
     greeting,
     metrics,
+    revenueBreakdown,
     alertList,
     dismissAlert,
     jobs,
@@ -84,6 +85,7 @@ export default function Dashboard() {
     handleUpdateJob,
     handleAssignToJob,
     refreshJobsData,
+    refreshJobsAndMetrics,
     loadResources,
     refreshDashboardData,
     showUpgradePrompt,
@@ -125,15 +127,47 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
-    const isPanelOpen = showSettingsPanel || showWorkersPanel || showFleetPanel || showPhoneBookPanel;
-    if (!isPanelOpen) return undefined;
-    const { body } = document;
-    const previousOverflow = body.style.overflow;
-    body.style.overflow = "hidden";
-    return () => {
-      body.style.overflow = previousOverflow || "";
+    const isOverlayOpen =
+      showRevenueBreakdownModal ||
+      showActiveJobsModal ||
+      showAlertsModal ||
+      showQuickAddMenu ||
+      showQuickEstimate ||
+      showQuickInventory ||
+      showQuickTool ||
+      showQuickPhoto ||
+      showSettingsPanel ||
+      showWorkersPanel ||
+      showFleetPanel ||
+      showPhoneBookPanel ||
+      showJobHistory;
+    if (!isOverlayOpen) return;
+    window.dispatchEvent(new CustomEvent("fdops:close-popouts", { detail: { source: "dashboard-overlays" } }));
+  }, [
+    showRevenueBreakdownModal,
+    showActiveJobsModal,
+    showAlertsModal,
+    showQuickAddMenu,
+    showQuickEstimate,
+    showQuickInventory,
+    showQuickTool,
+    showQuickPhoto,
+    showSettingsPanel,
+    showWorkersPanel,
+    showFleetPanel,
+    showPhoneBookPanel,
+    showJobHistory,
+  ]);
+
+  useEffect(() => {
+    const handleJobsChanged = () => {
+      void refreshJobsAndMetrics();
     };
-  }, [showSettingsPanel, showWorkersPanel, showFleetPanel, showPhoneBookPanel]);
+    window.addEventListener("fdops:jobs-changed", handleJobsChanged);
+    return () => {
+      window.removeEventListener("fdops:jobs-changed", handleJobsChanged);
+    };
+  }, [refreshJobsAndMetrics]);
 
 
   const formatCurrency = (val) => {
@@ -175,7 +209,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center">
         <Loader2 className="animate-spin text-[#FF6700]" size={40} />
       </div>
     );
@@ -198,6 +232,14 @@ export default function Dashboard() {
       <DashboardHeader
         greeting={greeting}
         onOpenJobHistory={() => setShowJobHistory(true)}
+        onOpenQuickAdd={() => setShowQuickAddMenu(true)}
+        onOpenWorkers={() => setShowWorkersPanel(true)}
+        onOpenFleet={() => setShowFleetPanel(true)}
+        onOpenPhoneBook={() => {
+          setShowPhoneBookPanelAddMode(false);
+          setShowPhoneBookPanel(true);
+        }}
+        onOpenSettings={() => setShowSettingsPanel(true)}
       />
 
       <div className="px-4 sm:px-6 mb-3">
@@ -210,31 +252,17 @@ export default function Dashboard() {
           privacyMode={privacyMode}
           formatCurrency={formatCurrency}
           onTogglePrivacyMode={togglePrivacyMode}
+          onOpenRevenueBreakdown={() => setShowRevenueBreakdownModal(true)}
           onOpenActiveJobsModal={() => setShowActiveJobsModal(true)}
           onOpenAlertsModal={() => metrics.alerts > 0 ? setShowAlertsModal(true) : alert("No system alerts!")}
         />
       </div>
 
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-6 pb-24 sm:pb-28">
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-6 pb-10">
         <div className="w-full flex items-center justify-center">
           <AppsGrid activeJob={activeJob} />
         </div>
       </main>
-
-      <div className="mt-auto pt-8 pb-8 sm:pb-12 text-center space-y-2 border-t border-[var(--border-color)]">
-        <p className="text-[9px] font-bold uppercase tracking-widest">
-          <span className="text-[var(--text-sub)] opacity-40">POWERED BY </span>
-          <span className="text-[#FF6700]">FIELDDESKOPS</span>
-        </p>
-        <div className="flex items-center justify-center gap-4 text-xs">
-          <Link href="/legal/terms?from=%2Fdashboard" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors">
-            Terms
-          </Link>
-          <Link href="/legal/privacy?from=%2Fdashboard" className="text-[var(--text-sub)] hover:text-[#FF6700] transition-colors">
-            Privacy
-          </Link>
-        </div>
-      </div>
 
       <QuickAddMenu
         isOpen={showQuickAddMenu}
@@ -251,6 +279,16 @@ export default function Dashboard() {
           }
           if (actionType === "add-worker") setShowWorkersPanel(true);
           if (actionType === "add-rig") setShowFleetPanel(true);
+        }}
+      />
+
+      <RevenueBreakdownModal
+        isOpen={showRevenueBreakdownModal}
+        onClose={() => setShowRevenueBreakdownModal(false)}
+        data={{
+          totalRevenue: metrics.revenue,
+          rows: revenueBreakdown,
+          formatCurrency,
         }}
       />
 
@@ -274,19 +312,6 @@ export default function Dashboard() {
         data={{
           alertList,
           onDismissAlert: (index) => dismissAlert(index),
-        }}
-      />
-
-      <Dock
-        onButtonClick={(type) => {
-          if (type === "settings") setShowSettingsPanel(true);
-          if (type === "workers") setShowWorkersPanel(true);
-          if (type === "fleet") setShowFleetPanel(true);
-          if (type === "phonebook") {
-            setShowPhoneBookPanelAddMode(false);
-            setShowPhoneBookPanel(true);
-          }
-          if (type === "quickadd") setShowQuickAddMenu(true);
         }}
       />
 

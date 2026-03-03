@@ -146,7 +146,7 @@ export default function LoginPage() {
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Log In'}
           </button>
@@ -154,7 +154,7 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center">
           <Link href="/auth/signup" className="text-gray-500 hover:text-white text-sm">
-            Back to Signup
+            Create an account
           </Link>
           <p className="text-gray-500 text-xs mt-3">
             <Link href="/legal/terms?from=%2Fauth%2Flogin" className="hover:text-white">Terms</Link>

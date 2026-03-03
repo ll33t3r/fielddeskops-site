@@ -100,6 +100,7 @@ export default function useJobOperations(supabase, options = {}) {
       if (data) {
         await incrementResourceUsage('jobs');
         await loadJobs();
+        window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "create", jobId: data.id } }));
       }
 
       return { data, error: null };
@@ -119,6 +120,7 @@ export default function useJobOperations(supabase, options = {}) {
       const { error } = await supabase.from("jobs").update(updates).eq("id", id);
       if (!error) {
         await loadJobs();
+        window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "update", jobId: id } }));
       }
       return { error };
     } catch (error) {
@@ -137,6 +139,7 @@ export default function useJobOperations(supabase, options = {}) {
       const { error } = await supabase.from("jobs").delete().eq("id", id);
       if (!error) {
         await loadJobs();
+        window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "delete", jobId: id } }));
       }
       return { error };
     } catch (error) {

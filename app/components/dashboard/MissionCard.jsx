@@ -101,7 +101,7 @@ export default function MissionCard({ jobId, isActive, onSelect, onQuickAction }
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-black/30 border border-white/5 rounded-lg p-3">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-3">
                 <div className="flex items-center gap-2 text-[var(--text-sub)] mb-1">
                   <DollarSign size={12} />
                   <span>Estimate</span>
@@ -110,7 +110,7 @@ export default function MissionCard({ jobId, isActive, onSelect, onQuickAction }
                   {estimateTotal > 0 ? formatCurrency(estimateTotal) : "No estimate"}
                 </div>
               </div>
-              <div className="bg-black/30 border border-white/5 rounded-lg p-3">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-3">
                 <div className="flex items-center gap-2 text-[var(--text-sub)] mb-1">
                   <FileText size={12} />
                   <span>Contract</span>
@@ -123,14 +123,14 @@ export default function MissionCard({ jobId, isActive, onSelect, onQuickAction }
                     : "Not started"}
                 </span>
               </div>
-              <div className="bg-black/30 border border-white/5 rounded-lg p-3">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-3">
                 <div className="flex items-center gap-2 text-[var(--text-sub)] mb-1">
                   <Camera size={12} />
                   <span>Photos</span>
                 </div>
                 <div className="text-[var(--text-main)] font-bold">{photoCount} photos</div>
               </div>
-              <div className="bg-black/30 border border-white/5 rounded-lg p-3">
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg p-3">
                 <div className="flex items-center gap-2 text-[var(--text-sub)] mb-1">
                   <Wrench size={12} />
                   <span>Tools</span>

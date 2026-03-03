@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
@@ -56,6 +56,12 @@ export default function LoadOut() {
   const [savingRig, setSavingRig] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [renameRigName, setRenameRigName] = useState("");
+  const [showNewRigForm, setShowNewRigForm] = useState(false);
+  const [newRigName, setNewRigName] = useState("");
+  const [showRigDeleteConfirm, setShowRigDeleteConfirm] = useState(false);
+  const [pendingRigDelete, setPendingRigDelete] = useState(null);
+  const toastTimeoutRef = useRef(null);
+  const rigDeleteTimeoutRef = useRef(null);
 
   // --- STOCK STATE ---
   const [items, setItems] = useState([]);
@@ -119,9 +125,31 @@ export default function LoadOut() {
     if (saved) setViewMode(saved);
   }, []);
 
-  const showToast = (message, type = "info") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  useEffect(() => {
+    const handleClosePopouts = (event) => {
+      if (event?.detail?.source === "loadout-rig-menu") return;
+      setShowSettings(false);
+    };
+    window.addEventListener("fdops:close-popouts", handleClosePopouts);
+    return () => {
+      window.removeEventListener("fdops:close-popouts", handleClosePopouts);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (rigDeleteTimeoutRef.current) clearTimeout(rigDeleteTimeoutRef.current);
+    };
+  }, []);
+
+  const showToast = (message, type = "info", options = {}) => {
+    const durationMs = options.durationMs ?? 3000;
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, type, durationMs, startAt: Date.now(), ...options });
+    if (!options.persistent) {
+      toastTimeoutRef.current = setTimeout(() => setToast(null), durationMs);
+    }
   };
 
   const ensureWriteAccess = async () => {
@@ -259,10 +287,10 @@ export default function LoadOut() {
     setShowSettings(false);
   };
 
-  const createRig = async () => {
-    const name = prompt("Enter Name for new Rig");
-    const trimmed = name?.trim();
+  const createRig = async (providedName) => {
+    const trimmed = (providedName ?? newRigName).trim();
     if (!trimmed) {
+      setFormErrors((prev) => ({ ...prev, newRig: { name: "Please enter a rig name." } }));
       showToast("Please enter a rig name.", "error");
       return;
     }
@@ -307,6 +335,9 @@ export default function LoadOut() {
         await incrementResourceUsage('rigs');
         setRigs([...rigs, newRig]);
         setCurrentRig(newRig);
+        setNewRigName("");
+        setShowNewRigForm(false);
+        setFormErrors((prev) => ({ ...prev, newRig: {} }));
         fetchRigData(newRig.id);
         setShowSettings(false);
       }
@@ -573,6 +604,7 @@ export default function LoadOut() {
   const openStockEdit = (e, item) => {
       if(e) e.stopPropagation();
       vibrate();
+      setShowSettings(false);
       setEditingItem(item);
       setTargetQtyInput(item.min_quantity.toString());
   };
@@ -957,41 +989,182 @@ export default function LoadOut() {
   const handleDeleteRig = async () => {
     if (!(await ensureWriteAccess())) return;
     if (rigs.length === 1) {
-      showToast("Cannot delete only rig", "error");
+      showToast("Cannot delete your only rig.", "error");
       return;
     }
-    if (!confirm(`Delete ${currentRig?.name || "this rig"} and ALL contents? This cannot be undone.`)) return;
+    if (pendingRigDelete) {
+      showToast("Finish the current delete/undo action first.", "info");
+      return;
+    }
+    setShowRigDeleteConfirm(true);
+  };
 
-    vibrate();
-    setLoading(true);
+  const performRigDelete = async (rigId) => {
+    const { error: inventoryError } = await supabase.from("inventory").delete().eq("rig_id", rigId);
+    if (inventoryError) {
+      logError("LoadOut rig inventory delete failed", inventoryError, { id: rigId });
+      return { ok: false, message: "Failed to delete rig inventory." };
+    }
+
+    const { error: toolsError } = await supabase.from("tools").delete().eq("rig_id", rigId);
+    if (toolsError) {
+      logError("LoadOut rig tools delete failed", toolsError, { id: rigId });
+      return { ok: false, message: "Failed to delete rig tools." };
+    }
+
+    const { error: rigError } = await supabase.from("fleet").delete().eq("id", rigId);
+    if (rigError) {
+      logError("LoadOut rig delete failed", rigError, { id: rigId });
+      return { ok: false, message: "Failed to delete rig." };
+    }
+
+    return { ok: true };
+  };
+
+  const restoreDeletedRig = async (snapshot) => {
+    const { rig, inventoryRows, toolRows } = snapshot;
+    const { data: restoredRig, error: restoreRigError } = await supabase
+      .from("fleet")
+      .insert({ user_id: rig.user_id, name: rig.name })
+      .select("id, name, user_id, created_at")
+      .single();
+
+    if (restoreRigError || !restoredRig) {
+      logError("LoadOut rig restore failed", restoreRigError, { sourceRigId: rig.id });
+      throw new Error("Unable to restore rig.");
+    }
+
+    if (inventoryRows.length > 0) {
+      const payload = inventoryRows.map((row) => ({
+        user_id: row.user_id,
+        rig_id: restoredRig.id,
+        name: row.name,
+        quantity: row.quantity,
+        min_quantity: row.min_quantity,
+        color: row.color,
+      }));
+      const { error: restoreInventoryError } = await supabase.from("inventory").insert(payload);
+      if (restoreInventoryError) {
+        logError("LoadOut inventory restore failed", restoreInventoryError, { rigId: restoredRig.id });
+        throw new Error("Unable to restore rig inventory.");
+      }
+    }
+
+    if (toolRows.length > 0) {
+      const payload = toolRows.map((row) => ({
+        user_id: row.user_id,
+        rig_id: restoredRig.id,
+        name: row.name,
+        brand: row.brand,
+        serial_number: row.serial_number,
+        status: row.status,
+        assigned_to: row.assigned_to,
+        photo_url: row.photo_url,
+      }));
+      const { error: restoreToolsError } = await supabase.from("tools").insert(payload);
+      if (restoreToolsError) {
+        logError("LoadOut tools restore failed", restoreToolsError, { rigId: restoredRig.id });
+        throw new Error("Unable to restore rig tools.");
+      }
+    }
+
+    setRigs((prev) => [...prev, restoredRig]);
+    setCurrentRig(restoredRig);
+    setRenameRigName(restoredRig.name);
+    await fetchRigData(restoredRig.id);
+  };
+
+  const undoDeleteRig = async (snapshotOverride = null) => {
+    const snapshot = snapshotOverride || pendingRigDelete?.snapshot;
+    if (!snapshot) return;
+    if (rigDeleteTimeoutRef.current) clearTimeout(rigDeleteTimeoutRef.current);
+    setPendingRigDelete(null);
+    setToast(null);
 
     try {
-      const { error: inventoryError } = await supabase.from("inventory").delete().eq("rig_id", currentRig.id);
-      if (inventoryError) {
-        showToast("Failed to delete rig inventory.", "error");
-        logError("LoadOut rig inventory delete failed", inventoryError, { id: currentRig.id });
-        setLoading(false);
+      await restoreDeletedRig(snapshot);
+      showToast("Rig restored.", "success");
+    } catch (error) {
+      showToast(error.message || "Unable to restore rig.", "error");
+      logError("LoadOut rig undo failed", error, { sourceRigId: snapshot.rig?.id });
+    }
+  };
+
+  const confirmDeleteRig = async () => {
+    if (!currentRig?.id) {
+      setShowRigDeleteConfirm(false);
+      return;
+    }
+
+    const rigToDelete = currentRig;
+    const fallbackRig = rigs.find((v) => v.id !== rigToDelete.id) || null;
+    setShowRigDeleteConfirm(false);
+    setShowSettings(false);
+    vibrate();
+
+    try {
+      const [inventorySnapshot, toolsSnapshot] = await Promise.all([
+        supabase.from("inventory").select("id, user_id, rig_id, name, quantity, min_quantity, color").eq("rig_id", rigToDelete.id),
+        supabase.from("tools").select("id, user_id, rig_id, name, brand, serial_number, status, assigned_to, photo_url").eq("rig_id", rigToDelete.id),
+      ]);
+
+      if (inventorySnapshot.error) {
+        showToast("Unable to prepare rig deletion.", "error");
+        logError("LoadOut rig delete snapshot inventory failed", inventorySnapshot.error, { id: rigToDelete.id });
         return;
       }
-      const { error: toolsError } = await supabase.from("tools").delete().eq("rig_id", currentRig.id);
-      if (toolsError) {
-        showToast("Failed to delete rig tools.", "error");
-        logError("LoadOut rig tools delete failed", toolsError, { id: currentRig.id });
-        setLoading(false);
+      if (toolsSnapshot.error) {
+        showToast("Unable to prepare rig deletion.", "error");
+        logError("LoadOut rig delete snapshot tools failed", toolsSnapshot.error, { id: rigToDelete.id });
         return;
       }
-      const { error: rigError } = await supabase.from("fleet").delete().eq("id", currentRig.id);
-      if (rigError) {
-        showToast("Failed to delete rig.", "error");
-        logError("LoadOut rig delete failed", rigError, { id: currentRig.id });
-        setLoading(false);
+
+      setRigs((prev) => prev.filter((rig) => rig.id !== rigToDelete.id));
+      if (fallbackRig) {
+        setCurrentRig(fallbackRig);
+        setRenameRigName(fallbackRig.name);
+        setItems([]);
+        setTools([]);
+      }
+
+      const deleteResult = await performRigDelete(rigToDelete.id);
+      if (!deleteResult.ok) {
+        showToast(deleteResult.message, "error");
+        setRigs((prev) => [...prev, rigToDelete]);
+        setCurrentRig(rigToDelete);
+        setRenameRigName(rigToDelete.name);
+        await fetchRigData(rigToDelete.id);
         return;
       }
-      window.location.reload();
+
+      if (fallbackRig?.id) {
+        await fetchRigData(fallbackRig.id);
+      }
+
+      const undoWindowMs = 5000;
+      const snapshot = {
+        rig: rigToDelete,
+        inventoryRows: inventorySnapshot.data || [],
+        toolRows: toolsSnapshot.data || [],
+      };
+      setPendingRigDelete({ snapshot });
+
+      if (rigDeleteTimeoutRef.current) clearTimeout(rigDeleteTimeoutRef.current);
+      rigDeleteTimeoutRef.current = setTimeout(() => {
+        setPendingRigDelete(null);
+        setToast(null);
+      }, undoWindowMs);
+
+      showToast(`Rig "${rigToDelete.name}" deleted.`, "info", {
+        durationMs: undoWindowMs,
+        persistent: true,
+        actionLabel: "Undo",
+        onAction: () => undoDeleteRig(snapshot),
+        showProgress: true,
+      });
     } catch (error) {
       showToast("Failed to delete rig.", "error");
       logError("LoadOut rig delete failed", error, { id: currentRig?.id });
-      setLoading(false);
     }
   };
 
@@ -1091,7 +1264,7 @@ export default function LoadOut() {
       </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 pt-2">
+      <div className="max-w-6xl mx-auto px-6 pt-2 relative z-[85]">
         <JobSelector />
       </div>
 
@@ -1106,82 +1279,186 @@ export default function LoadOut() {
       <main className="max-w-6xl mx-auto px-6 pt-2">
         
         {/* TOP BAR - RIG SELECTOR (Z-40 to fix stacking) */}
-        <div className="flex items-center justify-between mb-4 bg-industrial-card border border-industrial-border p-3 rounded-xl relative z-40">
-            <div className="relative w-full">
-                <button onClick={() => { vibrate(); setShowSettings(!showSettings); }} className="w-full flex items-center justify-between font-bold text-lg uppercase tracking-wide">
-                    <div className="flex items-center gap-3">
-                        <Truck className="text-[#FF6700]" size={20} />
-                        <span className="text-foreground">{currentRig ? currentRig.name : "Loading..."}</span>
-                    </div>
-                    <Settings size={20} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`}/>
-                </button>
+        <div className="mb-4 bg-industrial-card border border-industrial-border p-2.5 rounded-xl relative z-40">
+          <div className="relative w-full">
+            <button
+              onClick={() => {
+                vibrate();
+                if (!showSettings) {
+                  window.dispatchEvent(new CustomEvent("fdops:close-popouts", { detail: { source: "loadout-rig-menu" } }));
+                }
+                setShowSettings(!showSettings);
+              }}
+              className="w-full flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-[#FF6700]/10 transition"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Truck className="text-[#FF6700] shrink-0" size={18} />
+                <div className="min-w-0 text-left">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#FF6700]">Current Rig</p>
+                  <p className="text-base font-bold text-[var(--text-main)] truncate">{currentRig ? currentRig.name : "Loading..."}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-[var(--text-sub)] uppercase tracking-wide">{rigs.length} rigs</span>
+                <Settings size={18} className={`text-industrial-muted transition-transform ${showSettings ? "rotate-90 text-foreground" : ""}`} />
+              </div>
+            </button>
 
-                {/* SETTINGS MENU (Z-50) */}
-                {showSettings && (
-                    <div className="absolute top-full left-0 mt-4 w-full md:w-80 max-h-[min(70vh,28rem)] overflow-y-auto hide-scrollbar bg-[#1a1a1a] rounded-xl shadow-2xl z-50 p-4 animate-in fade-in border border-gray-700">
-                        {activeTab === "STOCK" && (
-                            <div className="mb-4 pb-4 border-b border-gray-700">
-                                <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Interface</label>
-                                <button onClick={() => { vibrate(); setIsEditMode(!isEditMode); setShowSettings(false); setSelectedIndices([]); }} className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-white/5 border-gray-600 text-white"}`}>
-                                    <span className="font-bold text-sm flex items-center gap-2">{isEditMode ? <Eye/> : <EyeOff/>} {isEditMode ? "EDITING ON" : "STANDARD"}</span>
-                                </button>
-                            </div>
-                        )}
-                        <div className="mb-4 pb-4 border-b border-gray-700">
-                            <label className="text-xs text-gray-500 font-bold uppercase mb-1">Rig Name</label>
-                            <div className="flex gap-2">
-                                <input
-                                  value={renameRigName}
-                                  onChange={e => {
-                                    setRenameRigName(e.target.value);
-                                    if (formErrors?.rigName?.name) {
-                                      setFormErrors((prev) => ({ ...prev, rigName: { ...prev.rigName, name: "" } }));
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    if (!renameRigName.trim()) {
-                                      setFormErrors((prev) => ({
-                                        ...prev,
-                                        rigName: { name: "Please enter a rig name." },
-                                      }));
-                                    }
-                                  }}
-                                  className={`bg-black/40 border rounded p-2 text-sm flex-1 text-white outline-none ${
-                                    formErrors?.rigName?.name ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-[#FF6700]"
-                                  }`}
-                                />
-                                <button
-                                  onClick={handleRenameRig}
-                                  disabled={savingRig}
-                                  className="bg-[#FF6700] text-black rounded p-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                  <CheckCircle2/>
-                                </button>
-                            </div>
-                            {formErrors?.rigName?.name ? (
-                              <p className="text-xs text-red-500 mt-2">{formErrors.rigName.name}</p>
-                            ) : null}
+            {/* SETTINGS MENU (Z-50) */}
+            {showSettings && (
+              <div className="absolute top-full left-0 mt-3 w-full lg:w-[28rem] max-h-[min(72vh,34rem)] overflow-y-auto hide-scrollbar bg-[#0a0a0a] rounded-xl shadow-2xl z-50 animate-in fade-in border border-[var(--border-color)]">
+                <div className="p-2 border-b border-[var(--border-color)] text-xs text-[var(--text-sub)] uppercase tracking-wider px-3 bg-black/60">
+                  Rig menu
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="pb-4 border-b border-[var(--border-color)] space-y-2">
+                    <label className="text-xs text-[var(--text-sub)] font-bold uppercase">Switch Rig</label>
+                    {rigs.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => switchRig(v.id)}
+                        className={`w-full text-left text-sm p-2.5 rounded transition ${
+                          v.id === currentRig.id
+                            ? "text-[#FF6700] bg-[#FF6700]/10 border border-[#FF6700]/30"
+                            : "text-[var(--text-main)] hover:bg-[#FF6700]/10 border border-transparent"
+                        }`}
+                      >
+                        {v.name}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => {
+                        setShowNewRigForm(true);
+                        if (formErrors?.newRig?.name) {
+                          setFormErrors((prev) => ({ ...prev, newRig: { ...prev.newRig, name: "" } }));
+                        }
+                      }}
+                      className="w-full text-left text-xs font-bold text-[#FF6700] p-2.5 hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={12} /> New Rig
+                    </button>
+                    {showNewRigForm ? (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          value={newRigName}
+                          onChange={(e) => {
+                            setNewRigName(e.target.value);
+                            if (formErrors?.newRig?.name) {
+                              setFormErrors((prev) => ({ ...prev, newRig: { ...prev.newRig, name: "" } }));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              createRig();
+                            }
+                          }}
+                          autoFocus
+                          placeholder="New rig name"
+                          className={`bg-[var(--bg-main)] border rounded p-2.5 text-sm w-full text-[var(--text-main)] outline-none ${
+                            formErrors?.newRig?.name ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                          }`}
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => createRig()}
+                            disabled={savingRig}
+                            className="bg-[#FF6700] text-black rounded px-3 py-2 text-xs font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            Create Rig
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowNewRigForm(false);
+                              setNewRigName("");
+                              setFormErrors((prev) => ({ ...prev, newRig: {} }));
+                            }}
+                            className="text-xs text-[var(--text-sub)] hover:text-[var(--text-main)] px-2 py-1"
+                          >
+                            Cancel
+                          </button>
                         </div>
-                        <div className="mb-4 pb-4 border-b border-gray-700 space-y-2">
-                            <label className="text-xs text-gray-500 font-bold uppercase">Switch Rig</label>
-                            {rigs.map(v => (
-                                <button key={v.id} onClick={() => switchRig(v.id)} className={`w-full text-left text-sm p-2 rounded hover:bg-white/5 ${v.id === currentRig.id ? "text-[#FF6700] bg-[#FF6700]/10" : "text-gray-400"}`}>{v.name}</button>
-                            ))}
-                            <button onClick={createRig} className="w-full text-left text-xs font-bold text-[#FF6700] p-2 hover:underline flex items-center gap-1"><Plus size={12}/> New Rig</button>
-                        </div>
-                        <div className="mb-4 pb-4 border-b border-gray-700">
-                             <button onClick={() => { vibrate(); setShowTeamModal(true); setShowSettings(false); }} className="w-full flex items-center gap-2 text-sm text-white p-2 rounded hover:bg-white/5 border border-gray-700 justify-center font-bold">
-                                <Users size={16}/> MANAGE TEAM
-                             </button>
-                        </div>
-                        <div className="space-y-2 pb-4 border-b border-gray-700">
-                            <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-gray-400 p-2 rounded hover:bg-white/5"><ClipboardList size={16}/> Copy Shopping List</button>
-                            <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2 rounded hover:bg-green-900/20"><RefreshCw size={16}/> Restock All</button>
-                        </div>
-                        <div className="pt-2"><button onClick={handleDeleteRig} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-600 hover:text-red-500 p-2"><Trash2 size={14}/> Delete Rig</button></div>
+                        {formErrors?.newRig?.name ? <p className="text-xs text-red-500">{formErrors.newRig.name}</p> : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="pb-4 border-b border-[var(--border-color)]">
+                    <label className="text-xs text-[var(--text-sub)] font-bold uppercase mb-1 block">Rig Name</label>
+                    <div className="flex gap-2">
+                      <input
+                        value={renameRigName}
+                        onChange={(e) => {
+                          setRenameRigName(e.target.value);
+                          if (formErrors?.rigName?.name) {
+                            setFormErrors((prev) => ({ ...prev, rigName: { ...prev.rigName, name: "" } }));
+                          }
+                        }}
+                        className={`bg-[var(--bg-main)] border rounded p-2.5 text-sm flex-1 text-[var(--text-main)] outline-none ${
+                          formErrors?.rigName?.name ? "border-red-500 focus:border-red-500" : "border-[var(--border-color)] focus:border-[#FF6700]"
+                        }`}
+                      />
+                      <button
+                        onClick={handleRenameRig}
+                        disabled={savingRig}
+                        className="bg-[#FF6700] text-black rounded px-3 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <CheckCircle2 />
+                      </button>
                     </div>
-                )}
-            </div>
+                    {formErrors?.rigName?.name ? <p className="text-xs text-red-500 mt-2">{formErrors.rigName.name}</p> : null}
+                  </div>
+
+                  {activeTab === "STOCK" && (
+                    <div className="pb-4 border-b border-[var(--border-color)]">
+                      <label className="text-xs text-[var(--text-sub)] font-bold uppercase mb-2 block">Interface</label>
+                      <button
+                        onClick={() => {
+                          vibrate();
+                          setIsEditMode(!isEditMode);
+                          setShowSettings(false);
+                          setSelectedIndices([]);
+                        }}
+                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
+                          isEditMode ? "bg-[#FF6700] text-black border-[#FF6700]" : "bg-[var(--bg-main)] border-[var(--border-color)] text-[var(--text-main)]"
+                        }`}
+                      >
+                        <span className="font-bold text-sm flex items-center gap-2">{isEditMode ? <Eye /> : <EyeOff />} {isEditMode ? "EDITING ON" : "STANDARD"}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="pb-4 border-b border-[var(--border-color)]">
+                    <button
+                      onClick={() => {
+                        vibrate();
+                        setShowTeamModal(true);
+                        setShowSettings(false);
+                      }}
+                      className="w-full flex items-center gap-2 text-sm text-[var(--text-main)] p-2.5 rounded hover:bg-[#FF6700]/10 border border-[var(--border-color)] justify-center font-bold transition"
+                    >
+                      <Users size={16} /> MANAGE TEAM
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 pb-4 border-b border-[var(--border-color)]">
+                    <button onClick={copyShoppingList} className="w-full flex items-center gap-2 text-sm text-[var(--text-main)] p-2.5 rounded hover:bg-[#FF6700]/10 transition">
+                      <ClipboardList size={16} /> Copy Shopping List
+                    </button>
+                    <button onClick={restockAll} className="w-full flex items-center gap-2 text-sm text-green-500 p-2.5 rounded hover:bg-green-900/20">
+                      <RefreshCw size={16} /> Restock All
+                    </button>
+                  </div>
+
+                  <div className="pt-1">
+                    <button onClick={handleDeleteRig} className="w-full flex items-center justify-center gap-2 text-xs font-bold text-red-500 hover:text-red-400 p-2.5">
+                      <Trash2 size={14} /> Delete Rig
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* TABS */}
@@ -1239,7 +1516,7 @@ export default function LoadOut() {
                       {massSelectMode ? <X size={24} /> : <Trash2 size={24} />}
                     </button>
                     <button
-                      onClick={() => { vibrate(); setShowAddModal(true); }}
+                      onClick={() => { vibrate(); setShowSettings(false); setShowAddModal(true); }}
                       className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0"
                       aria-label="Add inventory item"
                     >
@@ -1454,7 +1731,7 @@ export default function LoadOut() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-industrial-muted pointer-events-none" size={20} />
                         <input type="text" value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder="Search tools..." className="input-field rounded-xl pl-12 pr-4 w-full h-full bg-industrial-card border-none text-lg shadow-sm" />
                     </div>
-                    <button onClick={() => { vibrate(); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
+                    <button onClick={() => { vibrate(); setShowSettings(false); setShowAddTool(true); }} className="bg-[#FF6700] text-black h-full px-6 rounded-xl font-bold flex items-center justify-center hover:scale-105 transition shadow-lg shrink-0">
                         <Plus size={32} />
                     </button>
                 </div>
@@ -1666,6 +1943,39 @@ export default function LoadOut() {
                   </div>
               </div>
           </div>
+      )}
+
+      {showRigDeleteConfirm && currentRig && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#0a0a0a] shadow-2xl">
+            <div className="p-5 border-b border-[var(--border-color)]">
+              <h3 className="text-lg font-bold text-red-400 flex items-center gap-2">
+                <AlertTriangle size={18} />
+                Delete Rig
+              </h3>
+              <p className="text-sm text-[var(--text-main)] mt-2">
+                You are about to delete <span className="font-semibold">{currentRig.name}</span> and all of its inventory and tools.
+              </p>
+              <p className="text-xs text-[var(--text-sub)] mt-2">
+                After you confirm, the rig is deleted immediately. Undo is only available for 5 seconds.
+              </p>
+            </div>
+            <div className="p-5 flex gap-3">
+              <button
+                onClick={() => setShowRigDeleteConfirm(false)}
+                className="flex-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-main)] px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] hover:border-[#FF6700]/40 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteRig}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500 transition"
+              >
+                Delete Rig
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* --- ADD ITEMS MODAL --- */}

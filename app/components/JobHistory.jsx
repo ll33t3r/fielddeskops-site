@@ -61,6 +61,7 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
       .single();
     setUpdating(false);
     if (!error) {
+      window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "status-change", jobId: selectedJob.id, status } }));
       if (status === "ACTIVE") {
         setSelectedJob(null);
         await loadHistoryJobs();
@@ -90,6 +91,7 @@ export default function JobHistory({ isOpen, onClose, onReopen }) {
     setDeleting(false);
     setShowDeleteConfirm(false);
     if (!error) {
+      window.dispatchEvent(new CustomEvent("fdops:jobs-changed", { detail: { action: "delete", jobId: selectedJob.id } }));
       setSelectedJob(null);
       await loadHistoryJobs();
     }
