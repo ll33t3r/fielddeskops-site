@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient } from '../../../../lib/supabase/server'
+import { createClient } from '../../../lib/supabase/server'
 import SecuritySection from '../SecuritySection'
 
 export const dynamic = 'force-dynamic'
