@@ -9,7 +9,7 @@ import UpgradePrompt from "@/components/UpgradePrompt";
 
 export default function JobSelector() {
   const supabase = useMemo(() => createClient(), []);
-  const { activeJob, setActiveJob, syncActiveJob, clearActiveJob, completeJob } = useActiveJob();
+  const { activeJob, setActiveJob, clearActiveJob, completeJob } = useActiveJob();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -18,6 +18,11 @@ export default function JobSelector() {
   const [error, setError] = useState(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [upgradePromptData, setUpgradePromptData] = useState({ resourceType: 'jobs', currentCount: 0, limit: 0, tier: 'free' });
+  const visibleJobs = useMemo(() => {
+    if (jobs.length > 0) return jobs;
+    if (activeJob?.id) return [activeJob];
+    return [];
+  }, [jobs, activeJob]);
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -55,9 +60,8 @@ export default function JobSelector() {
   }, [supabase]);
 
   useEffect(() => {
-    syncActiveJob();
     loadJobs();
-  }, [loadJobs, syncActiveJob]);
+  }, [loadJobs]);
 
   useEffect(() => {
     const handleClosePopouts = (event) => {
@@ -256,12 +260,18 @@ export default function JobSelector() {
                   </div>
                 </div>
               ) : null}
-              {loading ? (
+              {loading && visibleJobs.length === 0 ? (
                 <div className="px-3 py-4 text-xs text-[var(--text-sub)]">Loading jobs...</div>
-              ) : jobs.length === 0 ? (
+              ) : visibleJobs.length === 0 ? (
                 <div className="px-3 py-4 text-xs text-[var(--text-sub)]">No jobs yet. Create one above.</div>
               ) : (
-                jobs.map((job) => (
+                <>
+                  {loading ? (
+                    <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-sub)] bg-[var(--bg-surface)] border-b border-[var(--border-color)]">
+                      Syncing jobs...
+                    </div>
+                  ) : null}
+                  {visibleJobs.map((job) => (
                   <button
                     key={job.id}
                     onClick={() => handleSelect(job)}
@@ -277,7 +287,8 @@ export default function JobSelector() {
                       {new Date(job.created_at).toLocaleDateString()}
                     </span>
                   </button>
-                ))
+                  ))}
+                </>
               )}
             </div>
           </>

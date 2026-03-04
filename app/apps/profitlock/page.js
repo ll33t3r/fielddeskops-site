@@ -23,7 +23,7 @@ import { track } from "@vercel/analytics";
 
 export default function ProfitLock() {
   const supabase = createClient();
-  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const { activeJob, setActiveJob } = useActiveJob();
   const isOnline = useOnlineStatus();
   
   const [allJobs, setAllJobs] = useState([]);
@@ -119,10 +119,6 @@ export default function ProfitLock() {
       }
       setHasHydrated(true);
   }, []);
-
-  useEffect(() => {
-    syncActiveJob();
-  }, [syncActiveJob]);
 
   useEffect(() => {
     if (activeJob?.customer_id) {

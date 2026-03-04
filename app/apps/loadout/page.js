@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createClient } from "../../../utils/supabase/client";
 import { useActiveJob } from "../../../hooks/useActiveJob";
 import { 
@@ -39,8 +39,8 @@ const colors = [
 ];
 
 export default function LoadOut() {
-  const supabase = createClient();
-  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const supabase = useMemo(() => createClient(), []);
+  const { activeJob, setActiveJob } = useActiveJob();
   const isOnline = useOnlineStatus();
   
   // --- GLOBAL STATE ---
@@ -117,9 +117,6 @@ export default function LoadOut() {
   };
 
   useEffect(() => { initFleet(); }, []);
-  useEffect(() => {
-    syncActiveJob();
-  }, [syncActiveJob]);
   useEffect(() => {
     const saved = localStorage.getItem("loadout-view-mode");
     if (saved) setViewMode(saved);
@@ -1212,17 +1209,30 @@ export default function LoadOut() {
 
 
   // FILTERS
-  const filteredTools = tools.filter(t => {
-      const matchSearch = !toolSearch || t.name.toLowerCase().includes(toolSearch.toLowerCase()) || t.serial_number?.toLowerCase().includes(toolSearch.toLowerCase());
-      const matchFilter = toolFilter === "ALL" || 
-                          (toolFilter === "OUT" && t.status === "CHECKED_OUT") || 
-                          (toolFilter === "BROKEN" && t.status === "BROKEN");
-      return matchSearch && matchFilter;
-  });
+  const normalizedToolSearch = toolSearch.toLowerCase();
+  const normalizedStockSearch = stockSearch.toLowerCase();
 
-  const filteredItems = items.filter(i => {
-      return !stockSearch || i.name.toLowerCase().includes(stockSearch.toLowerCase());
-  });
+  const filteredTools = useMemo(
+    () =>
+      tools.filter((t) => {
+        const matchSearch =
+          !normalizedToolSearch ||
+          t.name.toLowerCase().includes(normalizedToolSearch) ||
+          t.serial_number?.toLowerCase().includes(normalizedToolSearch);
+        const matchFilter =
+          toolFilter === "ALL" ||
+          (toolFilter === "OUT" && t.status === "CHECKED_OUT") ||
+          (toolFilter === "BROKEN" && t.status === "BROKEN");
+        return matchSearch && matchFilter;
+      }),
+    [tools, normalizedToolSearch, toolFilter]
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      items.filter((i) => !normalizedStockSearch || i.name.toLowerCase().includes(normalizedStockSearch)),
+    [items, normalizedStockSearch]
+  );
 
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-[#FF6700]" size={40} /></div>;
 

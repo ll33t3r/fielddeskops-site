@@ -25,7 +25,7 @@ import { track } from "@vercel/analytics";
 
 export default function SignOff() {
   const supabase = createClient();
-  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const { activeJob, setActiveJob } = useActiveJob();
   const isOnline = useOnlineStatus();
   const sigPad = useRef({});
   const fileInputRef = useRef(null);
@@ -120,10 +120,6 @@ export default function SignOff() {
       );
     }
   }, [smartVariables, selectedJob]);
-
-  useEffect(() => {
-    syncActiveJob();
-  }, [syncActiveJob]);
 
   useEffect(() => {
     if (activeJob?.id && activeJob.id !== selectedJob?.id) {

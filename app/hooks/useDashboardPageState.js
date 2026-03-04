@@ -40,19 +40,22 @@ export default function useDashboardPageState({ supabase, router, setActiveJob }
   }, [liveJobs, loadJobs, setJobs, setJobsCount]);
 
   const loadDashboardData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.replace("/welcome");
-      return;
-    }
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace("/welcome");
+        return;
+      }
 
-    await loadMetrics();
-    const loadedJobs = await loadJobs();
-    if (loadedJobs) {
-      setJobsCount(loadedJobs.filter((job) => job.status === "ACTIVE").length);
+      const [, loadedJobs] = await Promise.all([loadMetrics(), loadJobs(), loadResources()]);
+      if (loadedJobs) {
+        setJobsCount(loadedJobs.filter((job) => job.status === "ACTIVE").length);
+      }
+    } finally {
+      setLoading(false);
     }
-    await loadResources();
-    setLoading(false);
   }, [supabase, router, loadMetrics, loadJobs, loadResources, setJobsCount]);
 
   useEffect(() => {

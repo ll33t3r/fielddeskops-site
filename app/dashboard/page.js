@@ -31,25 +31,38 @@ import SubscriptionBanner from "../components/shared/SubscriptionBanner";
 import Toast from "../components/shared/Toast";
 
 export default function Dashboard() {
-  const supabase = createClient();
   const router = useRouter();
+  const [supabase, setSupabase] = useState(null);
+  const [supabaseReady, setSupabaseReady] = useState(false);
 
   useEffect(() => {
+    setSupabase(createClient());
+    setSupabaseReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseReady) return;
     if (!supabase) {
-      router.replace('/auth/login?message=Please sign in again.');
+      router.replace("/auth/login?message=Please sign in again.");
       return;
     }
-  }, [supabase, router]);
+  }, [supabaseReady, supabase, router]);
 
-  if (!supabase) {
+  if (!supabaseReady || !supabase) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--bg-main)]">
         <Loader2 className="h-8 w-8 animate-spin text-[#FF6700]" />
       </div>
     );
   }
+
+  return <DashboardContent supabase={supabase} />;
+}
+
+function DashboardContent({ supabase }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const { activeJob, setActiveJob } = useActiveJob();
 
   const [toast, setToast] = useState(null);
   const [showActiveJobsModal, setShowActiveJobsModal] = useState(false);
@@ -103,10 +116,6 @@ export default function Dashboard() {
       setPrivacyMode(savedPrivacy === "true");
     }
   }, []);
-
-  useEffect(() => {
-    syncActiveJob();
-  }, [syncActiveJob]);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -207,14 +216,6 @@ export default function Dashboard() {
     await refreshDashboardData();
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center">
-        <Loader2 className="animate-spin text-[#FF6700]" size={40} />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen min-h-[100dvh] w-full bg-[var(--bg-main)] text-[var(--text-main)] font-inter overflow-y-auto flex flex-col relative selection:bg-[#FF6700] selection:text-black transition-colors">
       <SubscriptionBanner />
@@ -249,6 +250,7 @@ export default function Dashboard() {
       <div className="px-4 sm:px-6 pb-3 shrink-0">
           <MetricsBar
           metrics={metrics}
+          loading={loading}
           privacyMode={privacyMode}
           formatCurrency={formatCurrency}
           onTogglePrivacyMode={togglePrivacyMode}

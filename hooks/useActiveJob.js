@@ -5,15 +5,26 @@ import { logError } from "../utils/logger";
 
 const ACTIVE_JOB_KEY_PREFIX = "fieldDeskOps_activeJob";
 const LEGACY_ACTIVE_JOB_KEY = "fieldDeskOps_activeJob";
+const ACTIVE_JOB_UI_CACHE_KEY = "fieldDeskOps_activeJob_uiCache";
 
 const isValidJob = (job) => Boolean(job && typeof job === "object" && job.id);
 const getActiveJobKey = (userId) => `${ACTIVE_JOB_KEY_PREFIX}:${userId}`;
 const isActiveJobStorageKey = (key) =>
-  key === LEGACY_ACTIVE_JOB_KEY || key?.startsWith(`${ACTIVE_JOB_KEY_PREFIX}:`);
+  key === LEGACY_ACTIVE_JOB_KEY || key === ACTIVE_JOB_UI_CACHE_KEY || key?.startsWith(`${ACTIVE_JOB_KEY_PREFIX}:`);
 
 // A safe hook that doesn"t require wrapping root layout
 export function useActiveJob() {
-  const [activeJob, setActiveJobState] = useState(null);
+  const [activeJob, setActiveJobState] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = localStorage.getItem(ACTIVE_JOB_UI_CACHE_KEY);
+      if (!cached) return null;
+      const parsed = JSON.parse(cached);
+      return isValidJob(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
 
   const syncActiveJob = useCallback(async () => {
     try {
@@ -24,6 +35,7 @@ export function useActiveJob() {
       } = await supabase.auth.getUser();
 
       if (userError || !user?.id) {
+        localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
         setActiveJobState(null);
         return;
       }
@@ -49,6 +61,7 @@ export function useActiveJob() {
       }
 
       if (!saved) {
+        localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
         setActiveJobState(null);
         return;
       }
@@ -56,6 +69,7 @@ export function useActiveJob() {
       const parsed = JSON.parse(saved);
       if (!isValidJob(parsed) || (parsed.user_id && parsed.user_id !== user.id)) {
         localStorage.removeItem(scopedKey);
+        localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
         setActiveJobState(null);
         return;
       }
@@ -72,27 +86,40 @@ export function useActiveJob() {
       if (jobError || !dbJob) {
         if (jobError) logError("ActiveJob ownership validation failed", jobError, { jobId: parsed.id, userId: user.id });
         localStorage.removeItem(scopedKey);
+        localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
         setActiveJobState(null);
         return;
       }
 
       setActiveJobState(dbJob);
+      localStorage.setItem(ACTIVE_JOB_UI_CACHE_KEY, JSON.stringify(dbJob));
     } catch (e) {
       logError("ActiveJob sync failed", e);
+    }
+  }, []);
+
+  const hydrateFromUICache = useCallback(() => {
+    try {
+      const cached = localStorage.getItem(ACTIVE_JOB_UI_CACHE_KEY);
+      if (!cached) {
+        setActiveJobState(null);
+        return;
+      }
+      const parsed = JSON.parse(cached);
+      setActiveJobState(isValidJob(parsed) ? parsed : null);
+    } catch {
       setActiveJobState(null);
     }
   }, []);
 
   useEffect(() => {
-    void syncActiveJob();
-
     const handleStorageChange = (event) => {
       if (event?.key && !isActiveJobStorageKey(event.key)) return;
-      void syncActiveJob();
+      hydrateFromUICache();
     };
 
     const handleActiveJobUpdate = () => {
-      void syncActiveJob();
+      hydrateFromUICache();
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -102,11 +129,12 @@ export function useActiveJob() {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("active-job-update", handleActiveJobUpdate);
     };
-  }, [syncActiveJob]);
+  }, [hydrateFromUICache]);
 
   const setActiveJob = useCallback(async (job) => {
     if (!isValidJob(job)) {
       setActiveJobState(null);
+      localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
       try {
         const supabase = createClient();
         const {
@@ -122,6 +150,7 @@ export function useActiveJob() {
     }
 
     setActiveJobState(job);
+    localStorage.setItem(ACTIVE_JOB_UI_CACHE_KEY, JSON.stringify(job));
 
     let ownerId = job.user_id || null;
     if (!ownerId) {
@@ -144,6 +173,7 @@ export function useActiveJob() {
 
   const clearActiveJob = useCallback(async () => {
     setActiveJobState(null);
+    localStorage.removeItem(ACTIVE_JOB_UI_CACHE_KEY);
     try {
       const supabase = createClient();
       const {

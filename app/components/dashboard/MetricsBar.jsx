@@ -4,6 +4,7 @@ import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 
 export default function MetricsBar({
   metrics,
+  loading,
   privacyMode,
   formatCurrency,
   onTogglePrivacyMode,
@@ -26,7 +27,9 @@ export default function MetricsBar({
         className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center relative group hover:bg-[var(--bg-surface)] transition active:scale-95 cursor-pointer"
       >
         <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Revenue</p>
-        <p className="text-[#22c55e] font-oswald text-lg tracking-tight">{formatCurrency(metrics.revenue)}</p>
+        <p className="text-[#22c55e] font-oswald text-lg tracking-tight">
+          {loading ? "..." : formatCurrency(metrics.revenue)}
+        </p>
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -43,7 +46,7 @@ export default function MetricsBar({
         className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-center hover:bg-[var(--bg-surface)] transition active:scale-95"
       >
         <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold tracking-wider mb-1">Active Jobs</p>
-        <p className="font-oswald text-lg tracking-tight text-[var(--text-main)]">{metrics.jobs}</p>
+        <p className="font-oswald text-lg tracking-tight text-[var(--text-main)]">{loading ? "..." : metrics.jobs}</p>
       </button>
       <button
         onClick={onOpenAlertsModal}
@@ -56,7 +59,7 @@ export default function MetricsBar({
         <div className="flex items-center justify-center gap-1">
           {metrics.alerts > 0 && <AlertTriangle size={14} className="text-red-500" />}
           <p className={`font-oswald text-lg tracking-tight ${metrics.alerts > 0 ? "text-red-500" : "text-[var(--text-main)]"}`}>
-            {metrics.alerts > 0 ? metrics.alerts : "OK"}
+            {loading ? "..." : metrics.alerts > 0 ? metrics.alerts : "OK"}
           </p>
         </div>
       </button>

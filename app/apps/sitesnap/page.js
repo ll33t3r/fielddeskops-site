@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createClient } from '../../utils/supabase/client';
 import { useActiveJob } from '../../../hooks/useActiveJob';
 import {
@@ -27,13 +27,12 @@ import {
 import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function SiteSnap() {
-  const supabase = createClient();
-  const { activeJob, syncActiveJob } = useActiveJob();
+  const supabase = useMemo(() => createClient(), []);
+  const { activeJob } = useActiveJob();
   const isOnline = useOnlineStatus();
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [jobSyncing, setJobSyncing] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [formErrors, setFormErrors] = useState({});
@@ -122,18 +121,6 @@ export default function SiteSnap() {
   };
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      await syncActiveJob();
-      if (mounted) setJobSyncing(false);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [syncActiveJob]);
-
-  useEffect(() => {
-    if (jobSyncing) return;
     if (activeJob?.id) {
       setLoading(true);
       loadPhotos();
@@ -142,7 +129,7 @@ export default function SiteSnap() {
       setUploadedPhotos([]);
       setLoading(false);
     }
-  }, [activeJob?.id, jobSyncing]);
+  }, [activeJob?.id]);
 
   useEffect(() => {
     if (fullscreenPhoto?.estimate_id && estimates.length > 0) {
@@ -173,18 +160,30 @@ export default function SiteSnap() {
 
       if (error) throw error;
 
-      const photosWithUrls = await Promise.all(
-        (photos || []).map(async (photo) => {
-          try {
-            const { data } = await supabase.storage
-              .from('fielddeskops-photos')
-              .createSignedUrl(photo.storage_path, 3600);
-            return { ...photo, image_url: data?.signedUrl || null };
-          } catch (err) {
-            return { ...photo, image_url: null };
+      const photoList = photos || [];
+      let urlByPath = new Map();
+
+      if (photoList.length > 0) {
+        const paths = photoList.map((photo) => photo.storage_path).filter(Boolean);
+        if (paths.length > 0) {
+          const { data: signedUrls, error: signedUrlsError } = await supabase.storage
+            .from('fielddeskops-photos')
+            .createSignedUrls(paths, 3600);
+
+          if (signedUrlsError) {
+            logError('SiteSnap signed URL batch load failed', signedUrlsError);
+          } else {
+            urlByPath = new Map(
+              paths.map((path, index) => [path, signedUrls?.[index]?.signedUrl || null])
+            );
           }
-        })
-      );
+        }
+      }
+
+      const photosWithUrls = photoList.map((photo) => ({
+        ...photo,
+        image_url: photo.storage_path ? (urlByPath.get(photo.storage_path) || null) : null,
+      }));
 
       setUploadedPhotos(photosWithUrls);
     } catch (error) {
@@ -537,7 +536,7 @@ export default function SiteSnap() {
   const beforePhotos = uploadedPhotos.filter(p => p.photo_type === 'BEFORE');
   const afterPhotos = uploadedPhotos.filter(p => p.photo_type === 'AFTER');
 
-  if (loading || jobSyncing) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-main)]">
         <div className="flex flex-col items-center gap-3">
