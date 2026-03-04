@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase/server'
 import BillingPortalButton from './BillingPortalButton'
+import SecuritySection from './SecuritySection'
 import { signoutForm } from '../auth/signout/actions'
 
 export const dynamic = 'force-dynamic'
@@ -134,6 +135,8 @@ export default async function AccountPage() {
                 )}
               </div>
             </div>
+
+            <SecuritySection userEmail={userEmail} />
           </div>
 
           <div className="space-y-6">
@@ -148,6 +151,12 @@ export default async function AccountPage() {
                     Sign Out
                   </button>
                 </form>
+                <Link
+                  href="/account/security"
+                  className="block w-full text-center py-3 rounded-lg font-bold transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/60"
+                >
+                  Security
+                </Link>
                 <Link
                   href="/legal/terms?from=%2Faccount"
                   className="block w-full text-center py-3 rounded-lg font-bold transition-colors border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[#FF6700]/60"

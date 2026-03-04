@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic'
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Bug } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '../../utils/supabase/client'
 import { logError } from '../../../utils/logger'
+import AuthThemeToggle from '../../components/shared/AuthThemeToggle'
 import FormField from '../../components/shared/FormField'
 import { buildFieldErrors, isEmail, isRequired } from '../../utils/validation'
 
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [formValues, setFormValues] = useState({ email: '', password: '' })
+  const [showPassword, setShowPassword] = useState(false)
   const [touched, setTouched] = useState({})
   const [fieldErrors, setFieldErrors] = useState({})
   const router = useRouter()
@@ -83,21 +85,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
-          FIELD<span className="text-[#FF6700]">DESK</span>OPS
-        </h1>
-        <p className="text-gray-500 text-sm mt-2">Sign in to your account</p>
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] flex flex-col items-center justify-center p-4 font-inter relative overflow-hidden">
+      <div className="absolute top-4 right-4 z-20">
+        <AuthThemeToggle />
       </div>
 
-      <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
-        <div className="flex justify-center mb-6">
-          <div className="p-3 bg-[#1a1a1a] rounded-full border border-[#333]">
-            <Bug className="text-red-500" size={32} />
-          </div>
-        </div>
+      <div className="pointer-events-none absolute inset-0 opacity-20">
+        <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#FF6700] blur-3xl" />
+      </div>
 
+      <div className="mb-8 text-center relative z-10">
+        <h1
+          className="text-4xl font-oswald font-bold tracking-wide text-[#FF6700]"
+          style={{ textShadow: '0 0 10px rgba(255,103,0,0.45), 0 0 22px rgba(255,103,0,0.25)' }}
+        >
+          FIELDDESKOPS
+        </h1>
+      </div>
+
+      <div className="w-full max-w-md industrial-card rounded-xl p-8 border border-[#FF6700]/30 shadow-[0_0_24px_rgba(255,103,0,0.18)] relative z-10">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <FormField
             id="login-email"
@@ -113,7 +119,7 @@ export default function LoginPage() {
               onChange={handleChange('email')}
               onBlur={handleBlur('email')}
               placeholder="user@example.com"
-              className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] text-[var(--input-text)] px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
               aria-invalid={touched.email && fieldErrors.email ? 'true' : 'false'}
             />
           </FormField>
@@ -124,18 +130,34 @@ export default function LoginPage() {
             required
             error={touched.password ? fieldErrors.password : null}
           >
-            <input
-              id="login-password"
-              name="password"
-              type="password"
-              value={formValues.password}
-              onChange={handleChange('password')}
-              onBlur={handleBlur('password')}
-              placeholder="••••••••"
-              className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
-              aria-invalid={touched.password && fieldErrors.password ? 'true' : 'false'}
-            />
+            <div className="relative">
+              <input
+                id="login-password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                value={formValues.password}
+                onChange={handleChange('password')}
+                onBlur={handleBlur('password')}
+                placeholder="••••••••"
+                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] text-[var(--input-text)] px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+                aria-invalid={touched.password && fieldErrors.password ? 'true' : 'false'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 my-auto text-[var(--text-sub)] hover:text-[#FF6700] transition"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </FormField>
+
+          <div className="text-right -mt-2">
+            <Link href="/forgot-password" className="text-sm text-[var(--text-sub)] hover:text-[#FF6700]">
+              Forgot password?
+            </Link>
+          </div>
 
           {errorMessage ? (
             <div className="bg-red-900/30 p-3 rounded text-xs text-red-200 border border-red-500/40">
@@ -146,23 +168,27 @@ export default function LoginPage() {
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all shadow-[0_0_0_rgba(255,103,0,0)] hover:shadow-[0_0_20px_rgba(255,103,0,0.45)] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Log In'}
           </button>
         </form>
 
         <div className="mt-6 text-center">
-          <Link href="/auth/signup" className="text-gray-500 hover:text-white text-sm">
+          <Link href="/auth/signup" className="text-[#FF6700] hover:opacity-90 text-sm font-semibold">
             Create an account
           </Link>
-          <p className="text-gray-500 text-xs mt-3">
-            <Link href="/legal/terms?from=%2Fauth%2Flogin" className="hover:text-white">Terms</Link>
+          <p className="text-[var(--text-sub)] text-xs mt-3">
+            <Link href="/legal/terms?from=%2Fauth%2Flogin" className="hover:text-[var(--text-main)]">Terms</Link>
             {" · "}
-            <Link href="/legal/privacy?from=%2Fauth%2Flogin" className="hover:text-white">Privacy</Link>
+            <Link href="/legal/privacy?from=%2Fauth%2Flogin" className="hover:text-[var(--text-main)]">Privacy</Link>
           </p>
         </div>
       </div>
+      <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-center relative z-10">
+        <span className="text-[var(--text-sub)] opacity-60">Powered by </span>
+        <span className="text-[#FF6700]">FieldDeskOps</span>
+      </p>
     </div>
   )
 }

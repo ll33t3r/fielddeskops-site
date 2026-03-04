@@ -2,6 +2,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import PoweredByFooter from "./components/shared/PoweredByFooter";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -62,12 +63,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className={`${inter.className} bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-200`}>
         <main>{children}</main>
-        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-20 flex justify-center px-4">
-          <p className="text-[9px] font-bold uppercase tracking-widest">
-            <span className="text-[var(--text-sub)] opacity-50">Powered by </span>
-            <span className="text-[#FF6700]">FieldDeskOps</span>
-          </p>
-        </div>
+        <PoweredByFooter />
         <Analytics />
         <SpeedInsights />
       </body>

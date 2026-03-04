@@ -63,7 +63,17 @@ export async function middleware(request) {
   const pathname = request.nextUrl.pathname
 
   // Define public routes (no auth required)
-  const publicRoutes = ['/', '/welcome', '/auth/login', '/auth/signup', '/auth/callback', '/pricing', '/sign']
+  const publicRoutes = [
+    '/',
+    '/welcome',
+    '/auth/login',
+    '/auth/signup',
+    '/auth/callback',
+    '/forgot-password',
+    '/reset-password',
+    '/pricing',
+    '/sign',
+  ]
   const publicApiRoutes = ['/api/stripe/checkout', '/api/stripe/webhook']
 
   // Define protected routes

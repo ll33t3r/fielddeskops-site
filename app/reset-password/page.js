@@ -1,0 +1,205 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { createClient } from '../utils/supabase/client'
+import PasswordStrengthMeter from '../components/shared/PasswordStrengthMeter'
+import { evaluatePasswordStrength } from '../utils/passwordStrength'
+import { logError } from '../../utils/logger'
+
+export const dynamic = 'force-dynamic'
+
+export default function ResetPasswordPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const supabase = createClient()
+
+  const [exchangeStatus, setExchangeStatus] = useState('loading')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordStrength, setPasswordStrength] = useState(() => evaluatePasswordStrength(''))
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function exchangeCode() {
+      if (!supabase) {
+        if (isMounted) setExchangeStatus('invalid')
+        return
+      }
+
+      const code = searchParams.get('code')
+      if (!code) {
+        if (isMounted) setExchangeStatus('invalid')
+        return
+      }
+
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+      if (!isMounted) return
+
+      if (exchangeError) {
+        logError('Reset password code exchange failed', exchangeError)
+        setExchangeStatus('invalid')
+      } else {
+        setExchangeStatus('ready')
+      }
+    }
+
+    exchangeCode().catch((exchangeError) => {
+      logError('Reset password code exchange failed', exchangeError)
+      if (isMounted) setExchangeStatus('invalid')
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [searchParams, supabase])
+
+  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword
+  const canSubmit = passwordStrength.isAllowed && passwordsMatch && !loading
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
+
+    if (!passwordStrength.isAllowed) {
+      setError("Password doesn't meet requirements")
+      return
+    }
+
+    if (!passwordsMatch) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    if (!supabase) {
+      setError('Unable to update password right now. Please try again.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      if (updateError) {
+        setError(updateError.message || 'Unable to update password right now. Please try again.')
+        return
+      }
+      router.push('/dashboard')
+    } catch (updateError) {
+      logError('Reset password update failed', updateError)
+      setError('Unable to update password right now. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (exchangeStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#FF6700]" size={40} />
+      </div>
+    )
+  }
+
+  if (exchangeStatus === 'invalid') {
+    return (
+      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
+        <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl text-center">
+          <p className="text-red-300 mb-4">This link is invalid or has expired.</p>
+          <Link href="/forgot-password" className="text-[#FF6700] hover:underline">
+            Request a new reset link
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
+      <div className="mb-8 text-center">
+        <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
+          FIELD<span className="text-[#FF6700]">DESK</span>OPS
+        </h1>
+        <p className="text-gray-500 text-sm mt-2">Set a new password</p>
+      </div>
+
+      <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <div className="space-y-1">
+            <label htmlFor="new-password" className="text-sm font-medium text-white">
+              New Password <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="new-password"
+                type={showNewPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 my-auto text-gray-400 hover:text-[#FF6700] transition"
+                aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+              >
+                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <PasswordStrengthMeter password={newPassword} onStrengthChange={setPasswordStrength} />
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="confirm-new-password" className="text-sm font-medium text-white">
+              Confirm Password <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="confirm-new-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-3 my-auto text-gray-400 hover:text-[#FF6700] transition"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {confirmPassword && !passwordsMatch ? <p className="text-xs text-red-400">Passwords do not match.</p> : null}
+          </div>
+
+          {error ? (
+            <div className="bg-red-900/30 p-3 rounded text-xs text-red-200 border border-red-500/40">
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : 'Update password'}
+          </button>
+        </form>
+      </div>
+      <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-center relative z-10">
+        <span className="text-gray-400 opacity-60">Powered by </span>
+        <span className="text-[#FF6700]">FieldDeskOps</span>
+      </p>
+    </div>
+  )
+}
