@@ -2,6 +2,16 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
 export async function middleware(request) {
+  const pathname = request.nextUrl.pathname
+
+  // Never run auth/session checks for password recovery entry points.
+  if (pathname === '/reset-password' || pathname.startsWith('/reset-password/')) {
+    return NextResponse.next()
+  }
+  if (pathname === '/forgot-password' || pathname.startsWith('/forgot-password/')) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -60,8 +70,6 @@ export async function middleware(request) {
     user = null
   }
 
-  const pathname = request.nextUrl.pathname
-
   // Define public routes (no auth required)
   const publicRoutes = [
     '/',
@@ -113,8 +121,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-  // Exclude webhook so middleware never touches the request body (Stripe signature verification needs raw body).
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/.*|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!reset-password|forgot-password|_next|favicon|api).*)'],
 }

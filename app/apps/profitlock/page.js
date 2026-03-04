@@ -1741,11 +1741,6 @@ export default function ProfitLock() {
         </div>
       )}
 
-      {/* FOOTER */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-[9px] font-bold text-[var(--text-sub)] uppercase tracking-widest pointer-events-none">
-        POWEREDBY<span className="text-[#FF6700]">FIELDDESKOPS</span>
-      </div>
-
       <Toast toast={toast} onClose={() => setToast(null)} />
 
     </div>

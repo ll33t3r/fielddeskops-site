@@ -28,11 +28,12 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function SiteSnap() {
   const supabase = createClient();
-  const { activeJob, setActiveJob, syncActiveJob } = useActiveJob();
+  const { activeJob, syncActiveJob } = useActiveJob();
   const isOnline = useOnlineStatus();
 
   const [uploadedPhotos, setUploadedPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [jobSyncing, setJobSyncing] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [formErrors, setFormErrors] = useState({});
@@ -121,18 +122,27 @@ export default function SiteSnap() {
   };
 
   useEffect(() => {
-    syncActiveJob();
+    let mounted = true;
+    (async () => {
+      await syncActiveJob();
+      if (mounted) setJobSyncing(false);
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [syncActiveJob]);
 
   useEffect(() => {
+    if (jobSyncing) return;
     if (activeJob?.id) {
+      setLoading(true);
       loadPhotos();
       loadEstimates();
     } else {
       setUploadedPhotos([]);
       setLoading(false);
     }
-  }, [activeJob?.id]);
+  }, [activeJob?.id, jobSyncing]);
 
   useEffect(() => {
     if (fullscreenPhoto?.estimate_id && estimates.length > 0) {
@@ -527,7 +537,7 @@ export default function SiteSnap() {
   const beforePhotos = uploadedPhotos.filter(p => p.photo_type === 'BEFORE');
   const afterPhotos = uploadedPhotos.filter(p => p.photo_type === 'AFTER');
 
-  if (loading) {
+  if (loading || jobSyncing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-main)]">
         <div className="flex flex-col items-center gap-3">
@@ -1001,16 +1011,6 @@ export default function SiteSnap() {
           >
             Cancel
           </button>
-        </div>
-      )}
-
-      {/* FLOATING BRANDING - BEHIND EVERYTHING */}
-      {!fullscreenPhoto && !showEstimateLink && !selectMode && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-          <p className="text-[8px] font-bold uppercase tracking-widest">
-            <span className="text-[var(--text-sub)] opacity-40">POWEREDBY</span>
-            <span className="text-[#FF6700] drop-shadow-[0_0_8px_rgba(255,103,0,0.4)]">FIELDDESKOPS</span>
-          </p>
         </div>
       )}
 

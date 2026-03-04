@@ -1551,18 +1551,6 @@ export default function SignOff() {
         </div>
       </main>
 
-      {/* POWERED BY FIELDDESKOPS FOOTER */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--bg-main)] to-transparent py-4 pointer-events-none z-30">
-        <div className="text-center">
-          <p className="text-[10px] font-bold tracking-wider text-gray-500">
-            POWERED BY <span style={{
-              color: "#FF6700",
-              textShadow: "0 0 8px rgba(255,103,0,0.4)"
-            }}>FIELDDESKOPS</span>
-          </p>
-        </div>
-      </div>
-
       <Toast toast={toastState} onClose={() => setToastState(null)} />
 
       {confirmDialog && (

@@ -1231,7 +1231,7 @@ export default function LoadOut() {
       <SubscriptionBanner />
       
       {/* HEADER */}
-      <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4 backdrop-blur-md">
+      <div className="sticky top-0 z-50 bg-[var(--bg-main)] border-b border-[var(--border-color)] px-6 py-4">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -1264,7 +1264,7 @@ export default function LoadOut() {
       </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 pt-2 relative z-[85]">
+      <div className="max-w-6xl mx-auto px-6 pt-2">
         <JobSelector />
       </div>
 
@@ -1912,12 +1912,6 @@ export default function LoadOut() {
                 </div>
             </div>
         )}
-
-        <div className="mt-12 text-center opacity-40">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-industrial-muted">
-                POWERED BY <span className="text-[#FF6700]">FIELDDESKOPS</span>
-            </p>
-        </div>
 
       </main>
 

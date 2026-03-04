@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { createClient } from '../utils/supabase/client'
+import AuthThemeToggle from '../components/shared/AuthThemeToggle'
 import PasswordStrengthMeter from '../components/shared/PasswordStrengthMeter'
 import { evaluatePasswordStrength } from '../utils/passwordStrength'
 import { logError } from '../../utils/logger'
@@ -14,7 +15,8 @@ export const dynamic = 'force-dynamic'
 export default function ResetPasswordPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
+  const code = searchParams.get('code')
+  const supabase = useMemo(() => createClient(), [])
 
   const [exchangeStatus, setExchangeStatus] = useState('loading')
   const [newPassword, setNewPassword] = useState('')
@@ -24,19 +26,24 @@ export default function ResetPasswordPage() {
   const [passwordStrength, setPasswordStrength] = useState(() => evaluatePasswordStrength(''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
   useEffect(() => {
     let isMounted = true
 
+    const setReady = () => {
+      if (isMounted) setExchangeStatus('ready')
+    }
+    const setInvalid = () => {
+      if (isMounted) setExchangeStatus('invalid')
+    }
+
     async function exchangeCode() {
       if (!supabase) {
-        if (isMounted) setExchangeStatus('invalid')
+        setInvalid()
         return
       }
 
-      const code = searchParams.get('code')
       if (!code) {
-        if (isMounted) setExchangeStatus('invalid')
+        setInvalid()
         return
       }
 
@@ -45,21 +52,21 @@ export default function ResetPasswordPage() {
 
       if (exchangeError) {
         logError('Reset password code exchange failed', exchangeError)
-        setExchangeStatus('invalid')
+        setInvalid()
       } else {
-        setExchangeStatus('ready')
+        setReady()
       }
     }
 
     exchangeCode().catch((exchangeError) => {
       logError('Reset password code exchange failed', exchangeError)
-      if (isMounted) setExchangeStatus('invalid')
+      setInvalid()
     })
 
     return () => {
       isMounted = false
     }
-  }, [searchParams, supabase])
+  }, [code, supabase])
 
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword
   const canSubmit = passwordStrength.isAllowed && passwordsMatch && !loading
@@ -101,7 +108,7 @@ export default function ResetPasswordPage() {
 
   if (exchangeStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-main)] flex items-center justify-center">
         <Loader2 className="animate-spin text-[#FF6700]" size={40} />
       </div>
     )
@@ -109,8 +116,26 @@ export default function ResetPasswordPage() {
 
   if (exchangeStatus === 'invalid') {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
-        <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl text-center">
+      <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] flex flex-col items-center justify-center p-4 font-inter relative overflow-hidden">
+        <div className="absolute top-4 right-4 z-20">
+          <AuthThemeToggle />
+        </div>
+
+        <div className="pointer-events-none absolute inset-0 opacity-20">
+          <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#FF6700] blur-3xl" />
+        </div>
+
+        <div className="mb-8 text-center relative z-10">
+          <h1
+            className="text-4xl font-oswald font-bold tracking-wide text-[#FF6700]"
+            style={{ textShadow: '0 0 10px rgba(255,103,0,0.45), 0 0 22px rgba(255,103,0,0.25)' }}
+          >
+            FIELDDESKOPS
+          </h1>
+          <p className="text-[var(--text-sub)] text-sm mt-2">Password reset</p>
+        </div>
+
+        <div className="w-full max-w-md industrial-card rounded-xl p-8 border border-[#FF6700]/30 shadow-[0_0_24px_rgba(255,103,0,0.18)] relative z-10 text-center">
           <p className="text-red-300 mb-4">This link is invalid or has expired.</p>
           <Link href="/forgot-password" className="text-[#FF6700] hover:underline">
             Request a new reset link
@@ -121,18 +146,29 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center p-4 font-inter">
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-oswald font-bold text-white tracking-wide">
-          FIELD<span className="text-[#FF6700]">DESK</span>OPS
-        </h1>
-        <p className="text-gray-500 text-sm mt-2">Set a new password</p>
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] flex flex-col items-center justify-center p-4 font-inter relative overflow-hidden">
+      <div className="absolute top-4 right-4 z-20">
+        <AuthThemeToggle />
       </div>
 
-      <div className="w-full max-w-md bg-[#262626] border border-[#333] rounded-xl p-8 shadow-2xl">
+      <div className="pointer-events-none absolute inset-0 opacity-20">
+        <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-[#FF6700] blur-3xl" />
+      </div>
+
+      <div className="mb-8 text-center relative z-10">
+        <h1
+          className="text-4xl font-oswald font-bold tracking-wide text-[#FF6700]"
+          style={{ textShadow: '0 0 10px rgba(255,103,0,0.45), 0 0 22px rgba(255,103,0,0.25)' }}
+        >
+          FIELDDESKOPS
+        </h1>
+        <p className="text-[var(--text-sub)] text-sm mt-2">Set a new password</p>
+      </div>
+
+      <div className="w-full max-w-md industrial-card rounded-xl p-8 border border-[#FF6700]/30 shadow-[0_0_24px_rgba(255,103,0,0.18)] relative z-10">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-1">
-            <label htmlFor="new-password" className="text-sm font-medium text-white">
+            <label htmlFor="new-password" className="text-sm font-medium text-[var(--text-main)]">
               New Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -142,12 +178,12 @@ export default function ResetPasswordPage() {
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] text-[var(--input-text)] px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowNewPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-3 my-auto text-gray-400 hover:text-[#FF6700] transition"
+                className="absolute inset-y-0 right-3 my-auto text-[var(--text-sub)] hover:text-[#FF6700] transition"
                 aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
               >
                 {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -157,7 +193,7 @@ export default function ResetPasswordPage() {
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="confirm-new-password" className="text-sm font-medium text-white">
+            <label htmlFor="confirm-new-password" className="text-sm font-medium text-[var(--text-main)]">
               Confirm Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -167,12 +203,12 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#1a1a1a] border border-[#333] text-white px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
+                className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] text-[var(--input-text)] px-4 py-3 pr-12 rounded-lg focus:outline-none focus:border-[#FF6700] transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-3 my-auto text-gray-400 hover:text-[#FF6700] transition"
+                className="absolute inset-y-0 right-3 my-auto text-[var(--text-sub)] hover:text-[#FF6700] transition"
                 aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
               >
                 {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -190,14 +226,14 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full bg-[#FF6700] hover:bg-[#e65c00] text-white font-bold py-3 rounded-lg transition-all shadow-[0_0_0_rgba(255,103,0,0)] hover:shadow-[0_0_20px_rgba(255,103,0,0.45)] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Update password'}
           </button>
         </form>
       </div>
       <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-center relative z-10">
-        <span className="text-gray-400 opacity-60">Powered by </span>
+        <span className="text-[var(--text-sub)] opacity-60">Powered by </span>
         <span className="text-[#FF6700]">FieldDeskOps</span>
       </p>
     </div>

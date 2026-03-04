@@ -1,0 +1,10 @@
+[[redirects]]
+  from = "/reset-password"
+  to = "/reset-password"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
