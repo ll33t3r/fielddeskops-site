@@ -16,6 +16,8 @@ export default function ResetPasswordPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
+  const tokenHash = searchParams.get('token_hash')
+  const linkType = searchParams.get('type')
   const supabase = useMemo(() => createClient(), [])
 
   const [exchangeStatus, setExchangeStatus] = useState('loading')
@@ -42,20 +44,66 @@ export default function ResetPasswordPage() {
         return
       }
 
-      if (!code) {
-        setInvalid()
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (!isMounted) return
+
+        if (exchangeError) {
+          logError('Reset password code exchange failed', exchangeError)
+          setInvalid()
+        } else {
+          setReady()
+        }
         return
       }
 
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-      if (!isMounted) return
+      if (tokenHash) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery',
+        })
+        if (!isMounted) return
 
-      if (exchangeError) {
-        logError('Reset password code exchange failed', exchangeError)
-        setInvalid()
-      } else {
-        setReady()
+        if (verifyError) {
+          logError('Reset password token verification failed', verifyError)
+          setInvalid()
+        } else {
+          setReady()
+        }
+        return
       }
+
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      const hashType = hashParams.get('type')
+
+      if (accessToken && refreshToken && hashType === 'recovery') {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (!isMounted) return
+
+        if (setSessionError) {
+          logError('Reset password hash session setup failed', setSessionError)
+          setInvalid()
+        } else {
+          setReady()
+        }
+        return
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!isMounted) return
+      if (session) {
+        setReady()
+        return
+      }
+
+      setInvalid()
     }
 
     exchangeCode().catch((exchangeError) => {
@@ -66,7 +114,7 @@ export default function ResetPasswordPage() {
     return () => {
       isMounted = false
     }
-  }, [code, supabase])
+  }, [code, linkType, supabase, tokenHash])
 
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword
   const canSubmit = passwordStrength.isAllowed && passwordsMatch && !loading
@@ -140,6 +188,13 @@ export default function ResetPasswordPage() {
           <Link href="/forgot-password" className="text-[#FF6700] hover:underline">
             Request a new reset link
           </Link>
+          <p className="mt-4 text-xs text-[var(--text-sub)]">
+            Need help? Contact support at{' '}
+            <a href="mailto:hello@truffr.com" className="text-[#FF6700] hover:underline">
+              hello@truffr.com
+            </a>
+            .
+          </p>
         </div>
       </div>
     )
@@ -235,6 +290,13 @@ export default function ResetPasswordPage() {
       <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-center relative z-10">
         <span className="text-[var(--text-sub)] opacity-60">Powered by </span>
         <span className="text-[#FF6700]">FieldDeskOps</span>
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-sub)] text-center relative z-10">
+        Trouble resetting your password? Email{' '}
+        <a href="mailto:hello@truffr.com" className="text-[#FF6700] hover:underline">
+          hello@truffr.com
+        </a>
+        .
       </p>
     </div>
   )

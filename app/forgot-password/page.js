@@ -92,7 +92,7 @@ export default function ForgotPasswordPage() {
           </div>
 
           {submitted ? (
-            <div className="bg-green-900/20 p-3 rounded text-sm text-green-200 border border-green-500/40">
+            <div className="bg-green-100 p-3 rounded text-sm text-green-900 border border-green-300 dark:bg-green-900/20 dark:text-green-200 dark:border-green-500/40">
               If that email exists, a reset link has been sent.
             </div>
           ) : null}
@@ -110,6 +110,13 @@ export default function ForgotPasswordPage() {
           <Link href="/auth/login" className="text-[#FF6700] hover:opacity-90 text-sm font-semibold">
             Back to login
           </Link>
+          <p className="mt-3 text-xs text-[var(--text-sub)]">
+            Need help? Email{' '}
+            <a href="mailto:hello@truffr.com" className="text-[#FF6700] hover:underline">
+              hello@truffr.com
+            </a>
+            .
+          </p>
         </div>
       </div>
       <p className="mt-4 text-[9px] font-bold uppercase tracking-widest text-center relative z-10">

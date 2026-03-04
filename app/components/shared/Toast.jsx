@@ -4,15 +4,15 @@ import { CheckCircle2, AlertTriangle, Info } from "lucide-react";
 const typeMap = {
   success: {
     icon: CheckCircle2,
-    className: "bg-green-900/20 border-green-500/40 text-green-100",
+    className: "bg-green-100 border-green-300 text-green-900 dark:bg-green-900/20 dark:border-green-500/40 dark:text-green-100",
   },
   error: {
     icon: AlertTriangle,
-    className: "bg-red-900/20 border-red-500/40 text-red-100",
+    className: "bg-red-100 border-red-300 text-red-900 dark:bg-red-900/20 dark:border-red-500/40 dark:text-red-100",
   },
   info: {
     icon: Info,
-    className: "bg-slate-900/30 border-slate-500/40 text-slate-100",
+    className: "bg-slate-100 border-slate-300 text-slate-900 dark:bg-slate-900/30 dark:border-slate-500/40 dark:text-slate-100",
   },
 };
 
@@ -67,7 +67,7 @@ export default function Toast({ toast, onClose }) {
           ✕
         </button>
         {showProgress ? (
-          <div className="absolute bottom-0 left-0 h-0.5 bg-white/60 transition-[width] duration-75 ease-linear" style={{ width: `${progressPercent}%` }} />
+          <div className="absolute bottom-0 left-0 h-0.5 bg-current/40 transition-[width] duration-75 ease-linear" style={{ width: `${progressPercent}%` }} />
         ) : null}
       </div>
     </div>
