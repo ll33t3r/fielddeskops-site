@@ -4,12 +4,84 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import * as Sentry from '@sentry/nextjs'
 import { logError } from '../../../../utils/logger'
+import { getWhopCheckoutUrl } from '../../../../lib/whopCheckout'
 
 // Prevent static generation
 export const dynamic = 'force-dynamic'
 
+function whopCheckoutResponse() {
+  const whopUrl = getWhopCheckoutUrl()
+  if (whopUrl) {
+    return NextResponse.json({ url: whopUrl })
+  }
+  return NextResponse.json(
+    { error: 'Authentication required. Please log in to subscribe.' },
+    { status: 401 }
+  )
+}
+
 export async function POST(request) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    // Resolve auth early so logged-out Pro Trial can use Whop without Stripe env.
+    let user = null
+    if (supabaseUrl && supabaseAnonKey) {
+      const cookieStore = cookies()
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          get(name) {
+            return cookieStore.get(name)?.value
+          },
+          set(name, value, options) {
+            try {
+              cookieStore.set({ name, value, ...options })
+            } catch {
+              // Ignore if called from route handler
+            }
+          },
+          remove(name, options) {
+            try {
+              cookieStore.set({ name, value: '', ...options })
+            } catch {
+              // Ignore if called from route handler
+            }
+          },
+        },
+      })
+
+      const {
+        data: { user: authUser },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (!authUser || authError) {
+        return whopCheckoutResponse()
+      }
+      user = authUser
+
+      // Ensure profile exists (RLS restricts by auth.uid())
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError && profileError.code === 'PGRST116') {
+        const { error: createError } = await supabase.from('profiles').insert({
+          id: user.id,
+          email: user.email ?? null,
+          subscription_status: 'inactive',
+        })
+        if (createError) {
+          logError('Checkout profile create failed', createError)
+        }
+      }
+    } else {
+      return whopCheckoutResponse()
+    }
+
     // Validate environment variables with better error logging
     const stripeSecretKey = process.env.STRIPE_SECRET_KEY
     if (!stripeSecretKey) {
@@ -55,81 +127,8 @@ export async function POST(request) {
       )
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!supabaseUrl) {
-      logError('Checkout missing NEXT_PUBLIC_SUPABASE_URL')
-      return NextResponse.json(
-        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
-        { status: 500 }
-      )
-    }
-
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!supabaseAnonKey) {
-      logError('Checkout missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
-      return NextResponse.json(
-        { error: 'Upgrade is temporarily unavailable. Please try again later.' },
-        { status: 500 }
-      )
-    }
-
     // Initialize Stripe
     const stripe = new Stripe(stripeSecretKey)
-
-    // Get current user from Supabase
-    const cookieStore = cookies()
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value
-        },
-        set(name, value, options) {
-          try {
-            cookieStore.set({ name, value, ...options })
-          } catch {
-            // Ignore if called from route handler
-          }
-        },
-        remove(name, options) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch {
-            // Ignore if called from route handler
-          }
-        },
-      },
-    })
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    // Block checkout if not authenticated
-    if (!user || authError) {
-      return NextResponse.json(
-        { error: 'Authentication required. Please log in to subscribe.' },
-        { status: 401 }
-      )
-    }
-
-    // Ensure profile exists (RLS restricts by auth.uid())
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError && profileError.code === 'PGRST116') {
-      const { error: createError } = await supabase.from('profiles').insert({
-        id: user.id,
-        email: user.email ?? null,
-        subscription_status: 'inactive',
-      })
-      if (createError) {
-        logError('Checkout profile create failed', createError)
-      }
-    }
 
     // Create dynamic checkout session with user ID for webhook
     const session = await stripe.checkout.sessions.create({
