@@ -1,17 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '../utils/supabase/client'
-import { logError } from '../../utils/logger'
+import { getWhopCheckoutUrl } from '../../lib/whopCheckout'
 import {
   DollarSign,
   Camera,
   FileCheck,
-  Package,
   Wrench,
-  Loader2,
   CheckCircle2,
   ArrowRight,
   Zap,
@@ -19,12 +17,12 @@ import {
   ClipboardCheck,
 } from 'lucide-react'
 
+const WHOP_CHECKOUT_URL = getWhopCheckoutUrl()
+
 export default function WelcomePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const [loading, setLoading] = useState(false)
-  const [checkoutError, setCheckoutError] = useState('')
 
   // Check if user is logged in - redirect to dashboard if they are
   useEffect(() => {
@@ -66,34 +64,6 @@ export default function WelcomePage() {
     return () => document.removeEventListener('click', handleAnchorClick)
   }, [])
 
-  const handleCheckout = async () => {
-    setLoading(true)
-    setCheckoutError('')
-
-    try {
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session')
-      }
-      if (!data?.url || typeof data.url !== 'string') {
-        throw new Error('Checkout URL missing from server response')
-      }
-      window.location.assign(data.url)
-    } catch (error) {
-      logError('Welcome checkout failed', error)
-      setCheckoutError(error.message || 'Failed to start checkout. Please try again.')
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="min-h-screen min-h-[100dvh] overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
       {/* NAVIGATION BAR */}
@@ -131,27 +101,21 @@ export default function WelcomePage() {
             One platform for estimates, photos, contracts, and inventory. Quote with confidence, document every job, get paid faster.
           </p>
           <p className="text-[var(--text-sub)] text-sm mb-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-[#FF6700]" /> No credit card required</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-[#FF6700]" /> Free plan available</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-[#FF6700]" /> Free plan — no card needed</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-[#FF6700]" /> Pro trial — $0 due today</span>
             <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-[#FF6700]" /> Cancel anytime</span>
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link href="/auth/signup" className="w-full sm:w-auto px-8 py-4 bg-[#FF6700] text-black font-black rounded-xl shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.5)] transition-all flex items-center justify-center gap-2 text-lg">
               Create Free Account <ArrowRight size={20} />
             </Link>
-            <button
-              onClick={handleCheckout}
-              disabled={loading}
-              className="w-full sm:w-auto px-8 py-4 border-2 border-[#FF6700] text-[#FF6700] rounded-xl hover:bg-[#FF6700]/10 transition-all font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            <a
+              href={WHOP_CHECKOUT_URL}
+              className="w-full sm:w-auto px-8 py-4 border-2 border-[#FF6700] text-[#FF6700] rounded-xl hover:bg-[#FF6700]/10 transition-all font-bold text-lg flex items-center justify-center gap-2"
             >
-              {loading ? <><Loader2 className="animate-spin" size={20} /> Loading...</> : 'Start 7-Day Pro Trial'}
-            </button>
+              Start 7-Day Pro Trial
+            </a>
           </div>
-          {checkoutError ? (
-            <p className="mt-4 text-sm text-red-400" role="alert">
-              {checkoutError}
-            </p>
-          ) : null}
           <div className="mt-14 h-[420px] sm:h-[500px] bg-gradient-to-br from-[#FF6700]/15 via-[#FF6700]/5 to-transparent rounded-2xl border border-[#FF6700]/20 shadow-[0_0_60px_rgba(255,103,0,0.15)] flex items-center justify-center">
             <div className="text-center px-4">
               <Zap size={48} className="text-[#FF6700] mx-auto mb-4 opacity-90" />
@@ -251,7 +215,7 @@ export default function WelcomePage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-8">
             {[
-              { step: 1, title: 'Sign up free', desc: 'Create your account. No credit card. Start on the free plan or begin a 7-day Pro trial.', icon: ClipboardCheck },
+              { step: 1, title: 'Sign up free', desc: 'Create your free account with no card, or start a 7-day Pro trial ($0 due today).', icon: ClipboardCheck },
               { step: 2, title: 'Add your first job', desc: 'Name the job, assign it to a rig if you use LoadOut. One click and you\'re live.', icon: Zap },
               { step: 3, title: 'Run the job', desc: 'Quote with ProfitLock, snap photos with SiteSnap, get signatures with SignOff. All from one place.', icon: Shield },
               { step: 4, title: 'Get paid & scale', desc: 'Invoices and docs are ready. Add more jobs, more rigs, more team—without the chaos.', icon: DollarSign },
@@ -323,7 +287,7 @@ export default function WelcomePage() {
             </div>
 
             <div className="bg-[#FF6700]/10 border border-[#FF6700]/30 rounded-xl p-4 mb-8">
-              <p className="text-[#FF6700] font-bold">7-Day Free Trial · No Credit Card Required</p>
+              <p className="text-[#FF6700] font-bold">7-Day Free Trial · $0 due today</p>
             </div>
 
             <div className="space-y-4 mb-8 text-left">
@@ -346,19 +310,13 @@ export default function WelcomePage() {
               <Link href="/auth/signup" className="flex-1 px-8 py-4 bg-[#FF6700] text-black font-black rounded-xl shadow-[0_0_20px_rgba(255,103,0,0.4)] hover:shadow-[0_0_30px_rgba(255,103,0,0.5)] transition-all flex items-center justify-center gap-2 text-lg">
                 Sign Up Free <ArrowRight size={20} />
               </Link>
-              <button
-                onClick={handleCheckout}
-                disabled={loading}
-                className="flex-1 px-8 py-4 border-2 border-[#FF6700] text-[#FF6700] font-bold rounded-xl hover:bg-[#FF6700]/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+              <a
+                href={WHOP_CHECKOUT_URL}
+                className="flex-1 px-8 py-4 border-2 border-[#FF6700] text-[#FF6700] font-bold rounded-xl hover:bg-[#FF6700]/10 transition-all flex items-center justify-center gap-2 text-lg"
               >
-                {loading ? <><Loader2 className="animate-spin" size={20} /> Loading...</> : 'Start 7-Day Pro Trial'}
-              </button>
+                Start 7-Day Pro Trial
+              </a>
             </div>
-            {checkoutError ? (
-              <p className="mt-4 text-sm text-red-400" role="alert">
-                {checkoutError}
-              </p>
-            ) : null}
           </div>
         </div>
       </section>
