@@ -5,6 +5,7 @@ const pageDescription =
 export const metadata = {
   title: pageTitle,
   description: pageDescription,
+  robots: { index: true, follow: true },
   openGraph: {
     title: pageTitle,
     description: pageDescription,

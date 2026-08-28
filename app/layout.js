@@ -19,6 +19,7 @@ export const metadata = {
   },
   description: siteDescription,
   applicationName: "FieldDeskOps",
+  robots: { index: true, follow: true },
   keywords: [
     "field service",
     "contractor tools",

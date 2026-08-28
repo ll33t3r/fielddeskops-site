@@ -4,6 +4,7 @@ import { getWhopCheckoutUrl } from '../../lib/whopCheckout'
 export const metadata = {
   title: 'Pricing',
   description: 'Compare FieldDeskOps plans and choose the best fit.',
+  robots: { index: true, follow: true },
   openGraph: {
     title: 'Pricing',
     description: 'Compare FieldDeskOps plans and choose the best fit.',

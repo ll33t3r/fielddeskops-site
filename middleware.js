@@ -92,12 +92,13 @@ export async function middleware(request) {
   )
   const isPublicApiRoute = publicApiRoutes.some((route) => pathname.startsWith(route))
 
-  // Root: send new users to Welcome, logged-in to Dashboard
+  // Root: logged-in users go to Dashboard; guests get Welcome content at /
+  // (rewrite keeps URL as / so the home page stays indexable — no 307 hop).
   if (pathname === '/') {
     if (user) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    return NextResponse.redirect(new URL('/welcome', request.url))
+    return NextResponse.rewrite(new URL('/welcome', request.url))
   }
 
   // Allow public routes and API routes

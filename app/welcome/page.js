@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '../utils/supabase/client'
@@ -19,12 +19,15 @@ import {
 
 const WHOP_CHECKOUT_URL = getWhopCheckoutUrl()
 
-export default function WelcomePage() {
+/**
+ * useSearchParams must sit behind Suspense. Without it, Next.js serves an
+ * empty error shell with <meta name="robots" content="noindex"/> for crawlers.
+ */
+function WelcomeAuthGate() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
 
-  // Check if user is logged in - redirect to dashboard if they are
   useEffect(() => {
     const checkAuth = async () => {
       if (!supabase) return
@@ -37,6 +40,10 @@ export default function WelcomePage() {
     checkAuth()
   }, [router, supabase, searchParams])
 
+  return null
+}
+
+export default function WelcomePage() {
   // Safety reset: if a previous route left body scroll locked, restore it on Welcome.
   useEffect(() => {
     const { body, documentElement } = document
@@ -66,6 +73,9 @@ export default function WelcomePage() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
+      <Suspense fallback={null}>
+        <WelcomeAuthGate />
+      </Suspense>
       {/* NAVIGATION BAR */}
       <nav className="sticky top-0 z-50 bg-[var(--bg-card)]/90 backdrop-blur-xl border-b border-[var(--border-color)]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
