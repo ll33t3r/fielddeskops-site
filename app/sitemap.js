@@ -22,5 +22,11 @@ export default function sitemap() {
       changeFrequency: 'weekly',
       priority: 0.9,
     },
+    {
+      url: `${SITE_URL}/reviews`,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
   ]
 }

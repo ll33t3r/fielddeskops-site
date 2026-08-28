@@ -74,6 +74,7 @@ export async function middleware(request) {
   const publicRoutes = [
     '/',
     '/welcome',
+    '/reviews',
     '/auth/login',
     '/auth/signup',
     '/auth/callback',
