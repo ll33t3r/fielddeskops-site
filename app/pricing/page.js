@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { getWhopCheckoutUrl } from '../../lib/whopCheckout'
 
 export const metadata = {
   title: 'Pricing',
@@ -45,11 +46,11 @@ export default function PricingPage() {
         'Unlimited inventory, rigs & workers',
         'Professional contract templates',
         'Email support · Cancel anytime',
-        '7-day free trial',
+        '7-day free trial · $0 due today',
       ],
       cta: 'Upgrade Now',
       highlighted: true,
-      href: '/welcome?upgrade=true#pricing',
+      href: getWhopCheckoutUrl(),
     },
   ]
 
