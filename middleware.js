@@ -75,6 +75,7 @@ export async function middleware(request) {
     '/',
     '/welcome',
     '/reviews',
+    '/kit',
     '/auth/login',
     '/auth/signup',
     '/auth/callback',
