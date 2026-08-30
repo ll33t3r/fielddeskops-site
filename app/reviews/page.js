@@ -7,13 +7,43 @@ import {
   Smartphone,
 } from 'lucide-react'
 
-/** FieldDeskOps Reviews Whop plan — do not reuse SiteSnap+SignOff checkout. */
+/** FieldDeskOps Reviews Whop plan — do not reuse SiteSnap+SignOff or Kit checkout. */
 const REVIEWS_CHECKOUT_URL = 'https://whop.com/checkout/plan_a9Kkusw3Dp0mh'
 const CTA_LABEL = 'Start 7-day trial · $9.99/mo'
+
+const faq = [
+  {
+    q: 'What is FieldDeskOps Reviews?',
+    a: 'A simple way to send your Google review link after every job. 7-day trial, then $9.99/mo.',
+  },
+  {
+    q: 'Who is it for?',
+    a: 'Painters, HVAC techs, roofers—crews that finish the job and want the 5-stars sitting on Google.',
+  },
+  {
+    q: 'Want pay-once instead?',
+    a: 'The Review Kit is $29 one-time with no monthly. Same ask, different billing.',
+  },
+]
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faq.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}
 
 export default function ReviewsPage() {
   return (
     <div className="min-h-screen min-h-[100dvh] overflow-y-auto hide-scrollbar bg-[var(--bg-main)] text-[var(--text-main)] font-inter">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+
       {/* NAV */}
       <nav className="sticky top-0 z-50 bg-[var(--bg-card)]/90 backdrop-blur-xl border-b border-[var(--border-color)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
@@ -92,6 +122,10 @@ export default function ReviewsPage() {
           </ul>
           <p className="mt-8 text-lg text-[var(--text-main)] font-medium">
             Reviews fixes that. Ask while the job is fresh.
+          </p>
+          <p className="mt-6 text-[var(--text-sub)] max-w-xl mx-auto">
+            Painters after the punch list. HVAC when the unit’s running. Roofers after the tarp comes
+            off. Same move—send the link before you leave.
           </p>
         </div>
       </section>
@@ -190,6 +224,30 @@ export default function ReviewsPage() {
             FieldDeskOps also has jobsite photos and contracts if you need them later—this page is
             just for Reviews.
           </p>
+          <p className="mt-4 text-sm text-[var(--text-sub)] max-w-md mx-auto">
+            Prefer one-time? Get the{' '}
+            <Link href="/kit" className="text-[#FF6700] hover:underline">
+              Review Kit · $29
+            </Link>
+            .
+          </p>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16 px-6 border-b border-[var(--border-color)]">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-2xl md:text-3xl font-oswald font-bold text-center mb-8 uppercase">
+            Quick answers
+          </h2>
+          <dl className="space-y-6">
+            {faq.map(({ q, a }) => (
+              <div key={q}>
+                <dt className="font-oswald font-bold uppercase text-[var(--text-main)] mb-2">{q}</dt>
+                <dd className="text-[var(--text-sub)] text-sm leading-relaxed">{a}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
@@ -248,8 +306,13 @@ export default function ReviewsPage() {
               </Link>
             </div>
           </div>
-          <div className="mt-8 text-center text-[var(--text-sub)] text-sm">
-            © {new Date().getFullYear()} FieldDeskOps. Built for contractors, by contractors.
+          <div className="mt-8 text-center text-[var(--text-sub)] text-sm space-y-2">
+            <p>© {new Date().getFullYear()} FieldDeskOps. Built for contractors, by contractors.</p>
+            <p>
+              <Link href="/affiliates" className="hover:text-[#FF6700] transition-colors">
+                Share this, earn 30%
+              </Link>
+            </p>
           </div>
         </div>
       </footer>

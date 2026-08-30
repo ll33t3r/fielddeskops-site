@@ -76,6 +76,8 @@ export async function middleware(request) {
     '/welcome',
     '/reviews',
     '/kit',
+    '/affiliates',
+    '/affiliate',
     '/auth/login',
     '/auth/signup',
     '/auth/callback',
@@ -83,6 +85,7 @@ export async function middleware(request) {
     '/reset-password',
     '/pricing',
     '/sign',
+    '/legal',
   ]
   const publicApiRoutes = ['/api/stripe/checkout', '/api/stripe/webhook']
 

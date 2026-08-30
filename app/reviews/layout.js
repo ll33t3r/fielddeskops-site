@@ -6,10 +6,11 @@ export const metadata = {
   title: pageTitle,
   description: pageDescription,
   robots: { index: true, follow: true },
+  alternates: { canonical: 'https://fielddeskops.com/reviews' },
   openGraph: {
     title: pageTitle,
     description: pageDescription,
-    url: '/reviews',
+    url: 'https://fielddeskops.com/reviews',
   },
   twitter: {
     title: pageTitle,
